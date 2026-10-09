@@ -103,13 +103,19 @@ namespace integra
             juce::File toOpen;
             for (int i = 0; i < args.size(); ++i)
             {
-                if (args[i] == "--screenshot" || args[i] == "--view")
+                if (args[i] == "--screenshot" || args[i] == "--view" || args[i] == "--select" || args[i] == "--scheme")
                     ++i;    // skip the option's value
                 else if (! args[i].startsWith ("--") && juce::File::isAbsolutePath (args[i].unquoted()))
                     toOpen = juce::File (args[i].unquoted());
             }
 
-            if (toOpen.existsAsFile())
+            if (args.contains ("--demo"))
+            {
+                auto r = context.controller.newDemoProject();
+                if (r.failed())
+                    juce::Logger::writeToLog (r.getErrorMessage());
+            }
+            else if (toOpen.existsAsFile())
             {
                 auto r = context.controller.openProject (toOpen);
                 if (r.failed())
@@ -118,6 +124,34 @@ namespace integra
             else
             {
                 context.controller.newProject();
+            }
+
+            // --select <block or module path>: preselect (used for screenshots)
+            const int selectIndex = args.indexOf ("--select");
+            if (selectIndex >= 0 && selectIndex + 1 < args.size())
+            {
+                auto path = args[selectIndex + 1];
+                auto& p = context.model.get();
+                if (p.findBlock (path) != nullptr)
+                {
+                    context.model.selectedBlock = path;
+                }
+                else if (auto* block = p.findBlock (parentPath (path)))
+                {
+                    context.model.selectedBlock = block->path;
+                    auto data = block->userData;
+                    data.primarySelectedChild = lastElement (path);
+                    context.session.setValue (block->path + ".userData", data.toString());
+                    context.model.rebuild();
+                }
+                context.model.selectedTrack = parentPath (context.model.selectedBlock);
+            }
+
+            const int schemeIndex = args.indexOf ("--scheme");
+            if (schemeIndex >= 0 && schemeIndex + 1 < args.size())
+            {
+                const auto scheme = args[schemeIndex + 1];
+                context.controller.updateProjectUserData ([scheme] (ProjectUserData& d) { d.colorScheme = scheme; });
             }
 
             mainWindow = std::make_unique<MainWindow> (context);

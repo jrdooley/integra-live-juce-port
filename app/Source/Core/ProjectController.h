@@ -34,6 +34,10 @@ namespace integra
         juce::Result openProject (const juce::File&);
         juce::Result saveProject (const juce::File&);
 
+        /** A new project with every block from the block library imported, one per
+            track - a quick tour of the shipped demo blocks. */
+        juce::Result newDemoProject();
+
         const juce::File& getProjectFile() const noexcept   { return projectFile; }
         bool hasUnsavedChanges() const noexcept             { return undoManager.getNumActionsInCurrentTransaction() > 0 || savedTransactionCount != transactionCounter; }
         void markChanged()                                  { ++transactionCounter; }

@@ -73,4 +73,30 @@ namespace integra
         }
         return {};
     }
+
+    /** libIntegra packs string lists as "<length>:<text>" runs (CStringHelper::string_vector_to_string). */
+    inline juce::StringArray unpackStringList (const juce::String& packed)
+    {
+        juce::StringArray result;
+        std::string_view text (packed.toRawUTF8());
+        size_t pos = 0;
+        while (pos < text.size())
+        {
+            const auto colon = text.find (':', pos);
+            if (colon == std::string_view::npos)
+                break;
+            const auto length = (size_t) std::strtoul (std::string (text.substr (pos, colon - pos)).c_str(), nullptr, 10);
+            result.add (juce::String::fromUTF8 (text.data() + colon + 1, (int) juce::jmin (length, text.size() - colon - 1)));
+            pos = colon + 1 + length;
+        }
+        return result;
+    }
+
+    inline juce::String packStringList (const juce::StringArray& strings)
+    {
+        juce::String packed;
+        for (auto& s : strings)
+            packed << (int) s.getNumBytesAsUTF8() << ":" << s;
+        return packed;
+    }
 }

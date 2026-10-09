@@ -150,6 +150,48 @@ namespace integra
         return juce::Result::ok();
     }
 
+    juce::Result ProjectController::newDemoProject()
+    {
+        auto result = newProject();
+        if (result.failed())
+            return result;
+
+        auto files = session.getLocations().blockLibrary.findChildFiles (juce::File::findFiles, false, "*.integra");
+        files.sort();
+
+        // reuse the default track for the first block, replacing its default block
+        auto& p = model.get();
+        if (! p.tracks.empty())
+            for (auto& b : p.tracks.front().blocks)
+                session.deleteNode (b.blockEnvelopePath), session.deleteNode (b.path);
+        model.rebuild();
+
+        bool first = true;
+        for (auto& f : files)
+        {
+            auto track = first && ! model.get().tracks.empty() ? model.get().tracks.front().path : addTrack();
+            first = false;
+            model.rebuild();
+            auto r = importBlock (f, track, 0);
+            if (r.failed())
+                return r;
+            model.rebuild();
+        }
+
+        // clean up connections left by the deleted default block
+        juce::StringArray dangling;
+        for (auto& c : model.get().connections)
+            if (c.targetPath.isNotEmpty() && ! session.nodeExists (parentPath (c.targetPath)))
+                dangling.add (c.path);
+        for (auto& c : dangling)
+            session.deleteNode (c);
+
+        model.rebuild();
+        undoManager.clearUndoHistory();
+        transactionCounter = savedTransactionCount = 0;
+        return juce::Result::ok();
+    }
+
     juce::Result ProjectController::openProject (const juce::File& file)
     {
         if (! file.existsAsFile())
