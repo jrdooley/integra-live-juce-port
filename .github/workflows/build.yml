@@ -97,4 +97,21 @@ jobs:
         run: cmake --build build --config RelWithDebInfo --parallel
 
       - name: Test
+        id: test
         run: ctest --test-dir build -C RelWithDebInfo --output-on-failure -E gui_test
+
+      # A crashing test only reports "SegFault"; rerun one under the Windows debugger
+      # to get a symbolised stack trace in the log.
+      - name: Stack trace of a crashing test
+        if: failure() && steps.test.outcome == 'failure'
+        shell: pwsh
+        working-directory: build/libIntegra/tests/workdir
+        env:
+          INTEGRA_RESOURCES_PATH: ${{ github.workspace }}/libIntegra/data
+        run: |
+          $cdb = "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe"
+          if (-not (Test-Path $cdb)) { Write-Output "cdb not found"; exit 0 }
+          & $cdb -lines -c "sxe av; g; .ecxr; kP 40; q" `
+            "${{ github.workspace }}\build\libIntegra\tests\RelWithDebInfo\integra_host_audio_test.exe" `
+            "${{ github.workspace }}\modules"
+

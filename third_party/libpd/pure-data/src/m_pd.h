@@ -62,7 +62,13 @@ extern "C" {
 
 /* signed and unsigned integer types the size of a pointer:  */
 #if !defined(PD_LONGINTTYPE)
+#if defined(_WIN64)
+/* Integra Live port (as in Pd 0.47+): long is 32 bits on 64-bit Windows,
+   but t_int must hold pointers (DSP chains, A_POINTER arguments) */
+#define PD_LONGINTTYPE long long
+#else
 #define PD_LONGINTTYPE long
+#endif
 #endif
 #if !defined(PD_FLOATTYPE)
 #define PD_FLOATTYPE float
