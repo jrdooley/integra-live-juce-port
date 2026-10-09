@@ -48,40 +48,40 @@ namespace integra
         //==============================================================================
         // Generic
 
-        void setValue (const juce::String& endpointPath, const juce::var& value, bool undoable = true);
-        void bang (const juce::String& endpointPath);
-        juce::Result rename (const juce::String& path, const juce::String& newName);
-        void setInfo (const juce::String& nodePath, const juce::String& markdown);
+        void setValue (juce::String endpointPath, const juce::var& value, bool undoable = true);
+        void bang (juce::String endpointPath);
+        juce::Result rename (juce::String path, juce::String newName);
+        void setInfo (juce::String nodePath, juce::String markdown);
 
         /** Deletes any node, plus everything the GUI conventions tie to it: connections
             referring to it, envelopes targeting it, its block envelope, its userData entries. */
-        void remove (const juce::String& path);
+        void remove (juce::String path);
         void remove (const juce::StringArray& paths);
 
         //==============================================================================
         // Tracks & blocks
 
         juce::String addTrack();
-        void setTrackColour (const juce::String& trackPath, juce::Colour);
-        void setTrackHeight (const juce::String& trackPath, int height);
-        void moveTrack (const juce::String& trackPath, int newIndex);
+        void setTrackColour (juce::String trackPath, juce::Colour);
+        void setTrackHeight (juce::String trackPath, int height);
+        void moveTrack (juce::String trackPath, int newIndex);
 
-        juce::String addBlock (const juce::String& trackPath, int startTick, int endTick, bool withDefaultContents = true);
-        void repositionBlock (const juce::String& blockPath, int startTick, int endTick);
-        juce::String moveBlockToTrack (const juce::String& blockPath, const juce::String& trackPath);
+        juce::String addBlock (juce::String trackPath, int startTick, int endTick, bool withDefaultContents = true);
+        void repositionBlock (juce::String blockPath, int startTick, int endTick);
+        juce::String moveBlockToTrack (juce::String blockPath, juce::String trackPath);
 
         /** Imports a saved block (.integra) into a track at the given time. */
-        juce::Result importBlock (const juce::File&, const juce::String& trackPath, int startTick, juce::String* newBlockPath = nullptr);
-        juce::Result exportNode (const juce::String& path, const juce::File&);
+        juce::Result importBlock (const juce::File&, juce::String trackPath, int startTick, juce::String* newBlockPath = nullptr);
+        juce::Result exportNode (juce::String path, const juce::File&);
 
         //==============================================================================
         // Modules & audio connections (Module View)
 
-        juce::String addModule (const juce::String& blockPath, const GUID& moduleGuid, juce::Point<float> gridPosition);
-        void setModulePositions (const juce::String& blockPath, const std::map<juce::String, juce::Rectangle<float>>& positions);
+        juce::String addModule (juce::String blockPath, const GUID& moduleGuid, juce::Point<float> gridPosition);
+        void setModulePositions (juce::String blockPath, const std::map<juce::String, juce::Rectangle<float>>& positions);
 
         /** Creates a Connection between two absolute endpoint paths inside containerPath. */
-        juce::String connect (const juce::String& containerPath, const juce::String& sourceEndpoint, const juce::String& targetEndpoint);
+        juce::String connect (juce::String containerPath, juce::String sourceEndpoint, juce::String targetEndpoint);
 
         static constexpr float moduleWidth = 7.0f;          // ModuleInstance._standardModuleWidth (grid units)
         static float moduleHeight (const ModuleCatalogue::Entry*);
@@ -89,33 +89,33 @@ namespace integra
         //==============================================================================
         // Control routing (Properties: Routing) - Connection -> Scaler -> Connection
 
-        juce::String addRouting (const juce::String& containerPath, const juce::String& sourceEndpoint, const juce::String& targetEndpoint);
-        void setRoutingSource (const juce::String& scalerPath, const juce::String& sourceEndpoint);
-        void setRoutingTarget (const juce::String& scalerPath, const juce::String& targetEndpoint);
+        juce::String addRouting (juce::String containerPath, juce::String sourceEndpoint, juce::String targetEndpoint);
+        void setRoutingSource (juce::String scalerPath, juce::String sourceEndpoint);
+        void setRoutingTarget (juce::String scalerPath, juce::String targetEndpoint);
 
         /** Sets scaler ranges from the endpoints' constraints, as the Flex GUI did when routing. */
-        void initialiseScalerRanges (const juce::String& scalerPath, const juce::String& sourceEndpoint, const juce::String& targetEndpoint);
+        void initialiseScalerRanges (juce::String scalerPath, juce::String sourceEndpoint, juce::String targetEndpoint);
 
         //==============================================================================
         // MIDI (Properties: MIDI) - MidiControlInput -> Scaler -> target
 
-        juce::String addMidiControl (const juce::String& containerPath, const juce::String& targetEndpoint, bool learn);
+        juce::String addMidiControl (juce::String containerPath, juce::String targetEndpoint, bool learn);
 
         //==============================================================================
         // Envelopes & control points (block automation)
 
-        juce::String addEnvelope (const juce::String& blockPath, const juce::String& targetEndpoint);
-        juce::String addControlPoint (const juce::String& envelopePath, int tick, float value);
-        void moveControlPoint (const juce::String& controlPointPath, int tick, float value);
-        void setControlPointCurvature (const juce::String& controlPointPath, float curvature);
+        juce::String addEnvelope (juce::String blockPath, juce::String targetEndpoint);
+        juce::String addControlPoint (juce::String envelopePath, int tick, float value);
+        void moveControlPoint (juce::String controlPointPath, int tick, float value);
+        void setControlPointCurvature (juce::String controlPointPath, float curvature);
 
         //==============================================================================
         // Scenes & transport
 
         juce::String addScene (int startTick, int length);
-        void setScene (const juce::String& scenePath, int startTick, int length, const juce::String& mode);
-        void setSceneKeybinding (const juce::String& scenePath, const juce::String& key);
-        void activateScene (const juce::String& scenePath);
+        void setScene (juce::String scenePath, int startTick, int length, juce::String mode);
+        void setSceneKeybinding (juce::String scenePath, juce::String key);
+        void activateScene (juce::String scenePath);
         void nextScene();
         void previousScene();
 
@@ -129,25 +129,25 @@ namespace integra
         //==============================================================================
         // Scripts
 
-        juce::String addScript (const juce::String& containerPath);
-        void setScriptText (const juce::String& scriptPath, const juce::String& text);
-        void runScript (const juce::String& scriptPath);
+        juce::String addScript (juce::String containerPath);
+        void setScriptText (juce::String scriptPath, juce::String text);
+        void runScript (juce::String scriptPath);
 
         //==============================================================================
         // GUI state stored in userData (undoable like everything else)
 
-        void updateBlockUserData (const juce::String& blockPath, std::function<void (BlockUserData&)>);
-        void updateTrackUserData (const juce::String& trackPath, std::function<void (TrackUserData&)>);
+        void updateBlockUserData (juce::String blockPath, std::function<void (BlockUserData&)>);
+        void updateTrackUserData (juce::String trackPath, std::function<void (TrackUserData&)>);
         void updateProjectUserData (std::function<void (ProjectUserData&)>, bool undoable = false);
-        void updateSceneUserData (const juce::String& scenePath, std::function<void (SceneUserData&)>);
+        void updateSceneUserData (juce::String scenePath, std::function<void (SceneUserData&)>);
 
         /** Live view control visibility for a module widget. */
-        void setLiveViewControl (const juce::String& modulePath, const juce::String& widgetLabel, bool shown, juce::Rectangle<float> bounds = {});
+        void setLiveViewControl (juce::String modulePath, juce::String widgetLabel, bool shown, juce::Rectangle<float> bounds = {});
 
         //==============================================================================
         /** Runs fn as a single named undo transaction. */
         template <typename Fn>
-        auto transaction (const juce::String& name, Fn&& fn)
+        auto transaction (juce::String name, Fn&& fn)
         {
             undoManager.beginNewTransaction (name);
             lastSetPath = {};
@@ -157,14 +157,14 @@ namespace integra
 
     private:
         bool perform (juce::UndoableAction*);
-        juce::String createNode (const juce::String& moduleName, const juce::String& prefix, const juce::String& parentPath);
-        juce::String createNode (const GUID&, const juce::String& prefix, const juce::String& parentPath);
-        void setValueInTransaction (const juce::String& endpointPath, const juce::var& value);
-        juce::String relativeTo (const juce::String& containerPath, const juce::String& absolutePath) const;
-        void collectDependants (const juce::String& path, juce::StringArray& toDelete) const;
+        juce::String createNode (juce::String moduleName, juce::String prefix, juce::String parentPath);
+        juce::String createNode (const GUID&, juce::String prefix, juce::String parentPath);
+        void setValueInTransaction (juce::String endpointPath, const juce::var& value);
+        juce::String relativeTo (juce::String containerPath, juce::String absolutePath) const;
+        void collectDependants (juce::String path, juce::StringArray& toDelete) const;
         void removeInTransaction (const juce::StringArray& paths);
-        juce::String addConnectionNode (const juce::String& containerPath, const juce::String& source, const juce::String& target);
-        juce::String addBlockEnvelope (const juce::String& trackPath, const juce::String& blockPath, int start, int end);
+        juce::String addConnectionNode (juce::String containerPath, juce::String source, juce::String target);
+        juce::String addBlockEnvelope (juce::String trackPath, juce::String blockPath, int start, int end);
         juce::Colour newTrackColour() const;
 
         IntegraSession& session;

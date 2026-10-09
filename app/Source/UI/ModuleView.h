@@ -66,6 +66,24 @@ namespace integra
 
         void deleteSelection();
 
+        /** Pixel position of an audio pin (endpoint path), for tests. */
+        std::optional<juce::Point<float>> getPinPosition (const juce::String& endpointPath) const
+        {
+            for (auto& m : modules)
+                for (auto& p : m.pins)
+                    if (p.endpoint == endpointPath)
+                        return p.position;
+            return std::nullopt;
+        }
+
+        std::optional<juce::Rectangle<float>> getModuleBounds (const juce::String& modulePath) const
+        {
+            for (auto& m : modules)
+                if (m.path == modulePath)
+                    return m.bounds;
+            return std::nullopt;
+        }
+
     private:
         struct Pin
         {
@@ -133,6 +151,8 @@ namespace integra
         void resized() override;
 
         ModuleGraph& getGraph() noexcept                    { return graph; }
+        ModuleProperties& getProperties() noexcept          { return properties; }
+        ModuleLibrary& getLibrary() noexcept                { return library; }
 
     private:
         AppContext& context;

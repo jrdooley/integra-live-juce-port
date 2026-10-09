@@ -8,6 +8,7 @@
 #include "Core/AppContext.h"
 #include "UI/MainComponent.h"
 #include "UI/IntegraLookAndFeel.h"
+#include "UI/GuiTest.h"
 
 namespace integra
 {
@@ -155,6 +156,25 @@ namespace integra
             }
 
             mainWindow = std::make_unique<MainWindow> (context);
+
+            if (args.contains ("--gui-test"))
+            {
+                // callAsync rather than a timer: the test pumps the message loop itself,
+                // which would re-fire a still-pending one-shot timer
+                juce::MessageManager::callAsync ([this]
+                {
+                    juce::String log;
+                    const int failures = runGuiTest (*mainWindow->getMainComponent(), context, log);
+                    std::cout << (failures == 0 ? "gui test passed" : juce::String (failures) + " gui test failure(s)") << std::endl;
+                    setApplicationReturnValue (failures == 0 ? 0 : 1);
+
+                    // Quit from a fresh dispatch: JUCE's Linux run loop shares one callback
+                    // list between nested loops, so a quit posted from inside this (pumped)
+                    // callback would be consumed without the outer loop noticing.
+                    juce::Timer::callAfterDelay (100, [] { quit(); });
+                });
+                return;
+            }
 
             const int screenshotIndex = args.indexOf ("--screenshot");
             if (screenshotIndex >= 0 && screenshotIndex + 1 < args.size())

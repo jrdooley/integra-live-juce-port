@@ -63,6 +63,7 @@ namespace integra
 
         int getTotalHeight() const;
         void deleteSelection();
+        const TimelineMapping& getMapping() const noexcept  { return mapping; }
 
         int playPosition = 0;
         std::function<void (const juce::String& blockPath)> onOpenBlock;
@@ -127,6 +128,8 @@ namespace integra
         void zoom (double factor, float aroundX);
         void deleteSelection()                          { lanes.deleteSelection(); }
         TrackLanes& getLanes() noexcept                 { return lanes; }
+        TimelineRuler& getRuler() noexcept              { return ruler; }
+        juce::Viewport& getViewport() noexcept          { return viewport; }
 
     private:
         void changeListenerCallback (juce::ChangeBroadcaster*) override;

@@ -222,11 +222,10 @@ namespace integra
             int right = 0, bottom = 0;
             for (auto& spec : WidgetSpec::forModule (context.session, modulePath))
             {
+                // Keep the IID geometry exactly: module designers tiled widgets edge to edge,
+                // so growing one would overlap its neighbours.
                 auto* frame = frames.add (new WidgetFrame (context, modulePath, spec));
-                auto min = IntegraWidget::minimumSize (spec.type);
-                auto bounds = spec.position.toNearestInt();
-                bounds.setSize (juce::jmax (bounds.getWidth(), min.x), juce::jmax (bounds.getHeight(), min.y) + 16);
-                bounds = bounds.translated (8, 8);
+                auto bounds = spec.position.toNearestInt().translated (8, 8);
                 frame->setBounds (bounds);
                 content.addAndMakeVisible (frame);
                 right = juce::jmax (right, bounds.getRight());

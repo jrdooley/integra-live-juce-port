@@ -106,8 +106,14 @@ namespace integra
     {
         auto area = getLocalBounds().reduced (4);
         if (showLabel)
-            area.removeFromBottom (juce::jmin (32, area.getHeight() / 3));
+            area.removeFromBottom (labelHeight());
         return area;
+    }
+
+    int IntegraWidget::labelHeight() const
+    {
+        // two lines (name, value) when there's room, else squeeze
+        return juce::jlimit (16, 30, (getHeight() - 8) * 2 / 5);
     }
 
     juce::String IntegraWidget::getValueText() const
@@ -125,7 +131,7 @@ namespace integra
 
         auto& t = Theme::get();
         auto area = getLocalBounds().reduced (4);
-        auto labelArea = area.removeFromBottom (juce::jmin (32, area.getHeight() / 3));
+        auto labelArea = area.removeFromBottom (labelHeight());
 
         g.setColour (t.text);
         g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
@@ -167,8 +173,9 @@ namespace integra
 
                 if (style == Style::numberBox)
                 {
-                    slider.setTextBoxStyle (juce::Slider::TextBoxAbove, false, 80, 20);
+                    // drag vertically to change; the value is shown in the label strip
                     slider.setSliderSnapsToMousePosition (false);
+                    slider.setSliderStyle (juce::Slider::LinearBar);
                 }
 
                 addAndMakeVisible (slider);

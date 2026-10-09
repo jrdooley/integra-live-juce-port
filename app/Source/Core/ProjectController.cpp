@@ -15,7 +15,7 @@ namespace integra
         const char* const blockInfo   = "A **block** contains modules. Double-click it to edit its modules in the *Module View*.";
 
         /** Range of a numeric endpoint from its constraint, if it has one. */
-        bool getEndpointRange (IntegraSession& session, const juce::String& endpointPath, float& min, float& max, juce::String& scale)
+        bool getEndpointRange (IntegraSession& session, juce::String endpointPath, float& min, float& max, juce::String& scale)
         {
             auto server = session.lock();
             auto* endpoint = server->find_node_endpoint (toPath (endpointPath));
@@ -58,7 +58,7 @@ namespace integra
         return undoManager.perform (action);
     }
 
-    juce::String ProjectController::createNode (const GUID& guid, const juce::String& prefix, const juce::String& parentPath)
+    juce::String ProjectController::createNode (const GUID& guid, juce::String prefix, juce::String parentPath)
     {
         auto name = session.getNewChildName (parentPath, prefix, guid);
         auto* action = new CreateNodeAction (session, guid, name, parentPath);
@@ -66,7 +66,7 @@ namespace integra
         return perform (action) ? path : juce::String();
     }
 
-    juce::String ProjectController::createNode (const juce::String& moduleName, const juce::String& prefix, const juce::String& parentPath)
+    juce::String ProjectController::createNode (juce::String moduleName, juce::String prefix, juce::String parentPath)
     {
         if (auto* entry = session.getCatalogue().findByName (moduleName))
             return createNode (entry->guid, prefix, parentPath);
@@ -75,12 +75,12 @@ namespace integra
         return {};
     }
 
-    void ProjectController::setValueInTransaction (const juce::String& endpointPath, const juce::var& value)
+    void ProjectController::setValueInTransaction (juce::String endpointPath, const juce::var& value)
     {
         perform (new SetValueAction (session, endpointPath, value));
     }
 
-    juce::String ProjectController::relativeTo (const juce::String& containerPath, const juce::String& absolutePath) const
+    juce::String ProjectController::relativeTo (juce::String containerPath, juce::String absolutePath) const
     {
         if (containerPath.isNotEmpty() && absolutePath.startsWith (containerPath + "."))
             return absolutePath.substring (containerPath.length() + 1);
@@ -89,7 +89,7 @@ namespace integra
         return absolutePath;
     }
 
-    juce::String ProjectController::addConnectionNode (const juce::String& containerPath, const juce::String& source, const juce::String& target)
+    juce::String ProjectController::addConnectionNode (juce::String containerPath, juce::String source, juce::String target)
     {
         auto connection = createNode ("Connection", "Connection", containerPath);
         if (connection.isEmpty())
@@ -258,7 +258,7 @@ namespace integra
     }
 
     //==============================================================================
-    void ProjectController::setValue (const juce::String& endpointPath, const juce::var& value, bool undoable)
+    void ProjectController::setValue (juce::String endpointPath, const juce::var& value, bool undoable)
     {
         if (! undoable)
         {
@@ -278,12 +278,12 @@ namespace integra
         perform (new SetValueAction (session, endpointPath, value));
     }
 
-    void ProjectController::bang (const juce::String& endpointPath)
+    void ProjectController::bang (juce::String endpointPath)
     {
         session.bang (endpointPath);
     }
 
-    juce::Result ProjectController::rename (const juce::String& path, const juce::String& newName)
+    juce::Result ProjectController::rename (juce::String path, juce::String newName)
     {
         auto name = newName.trim().retainCharacters ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_");
         if (name.isEmpty() || juce::CharacterFunctions::isDigit (name[0]))
@@ -319,18 +319,18 @@ namespace integra
         });
     }
 
-    void ProjectController::setInfo (const juce::String& nodePath, const juce::String& markdown)
+    void ProjectController::setInfo (juce::String nodePath, juce::String markdown)
     {
         setValue (nodePath + ".info", markdown);
     }
 
     //==============================================================================
-    void ProjectController::collectDependants (const juce::String& path, juce::StringArray& toDelete) const
+    void ProjectController::collectDependants (juce::String path, juce::StringArray& toDelete) const
     {
         auto& p = model.get();
         const auto prefix = path + ".";
 
-        auto refersToDeleted = [&] (const juce::String& endpointPath)
+        auto refersToDeleted = [&] (juce::String endpointPath)
         {
             return endpointPath.startsWith (prefix);
         };
@@ -418,7 +418,7 @@ namespace integra
         model.rebuild();
     }
 
-    void ProjectController::remove (const juce::String& path)
+    void ProjectController::remove (juce::String path)
     {
         remove (juce::StringArray (path));
     }
@@ -470,17 +470,17 @@ namespace integra
         });
     }
 
-    void ProjectController::setTrackColour (const juce::String& trackPath, juce::Colour colour)
+    void ProjectController::setTrackColour (juce::String trackPath, juce::Colour colour)
     {
         updateTrackUserData (trackPath, [colour] (TrackUserData& d) { d.colour = colour.getARGB() & 0xffffff; });
     }
 
-    void ProjectController::setTrackHeight (const juce::String& trackPath, int height)
+    void ProjectController::setTrackHeight (juce::String trackPath, int height)
     {
         updateTrackUserData (trackPath, [height] (TrackUserData& d) { d.arrangeViewHeight = juce::jlimit (24, 600, height); });
     }
 
-    void ProjectController::moveTrack (const juce::String& trackPath, int newIndex)
+    void ProjectController::moveTrack (juce::String trackPath, int newIndex)
     {
         auto tracks = model.get().tracks;
         auto it = std::find_if (tracks.begin(), tracks.end(), [&] (auto& t) { return t.path == trackPath; });
@@ -502,7 +502,7 @@ namespace integra
     }
 
     //==============================================================================
-    juce::String ProjectController::addBlockEnvelope (const juce::String& trackPath, const juce::String& blockPath, int start, int end)
+    juce::String ProjectController::addBlockEnvelope (juce::String trackPath, juce::String blockPath, int start, int end)
     {
         auto& p = model.get();
 
@@ -527,7 +527,7 @@ namespace integra
         return envelope;
     }
 
-    juce::String ProjectController::addBlock (const juce::String& trackPath, int startTick, int endTick, bool withDefaultContents)
+    juce::String ProjectController::addBlock (juce::String trackPath, int startTick, int endTick, bool withDefaultContents)
     {
         if (model.get().findTrack (trackPath) == nullptr || endTick <= startTick)
             return {};
@@ -562,7 +562,7 @@ namespace integra
         });
     }
 
-    void ProjectController::repositionBlock (const juce::String& blockPath, int start, int end)
+    void ProjectController::repositionBlock (juce::String blockPath, int start, int end)
     {
         auto* block = model.get().findBlock (blockPath);
         if (block == nullptr || start < 0 || end <= start || block->blockEnvelopePath.isEmpty())
@@ -620,7 +620,7 @@ namespace integra
         });
     }
 
-    juce::String ProjectController::moveBlockToTrack (const juce::String& blockPath, const juce::String& trackPath)
+    juce::String ProjectController::moveBlockToTrack (juce::String blockPath, juce::String trackPath)
     {
         auto* block = model.get().findBlock (blockPath);
         auto* fromTrack = model.get().findTrackOfBlock (blockPath);
@@ -662,7 +662,7 @@ namespace integra
         });
     }
 
-    juce::Result ProjectController::importBlock (const juce::File& file, const juce::String& trackPath, int startTick, juce::String* newBlockPath)
+    juce::Result ProjectController::importBlock (const juce::File& file, juce::String trackPath, int startTick, juce::String* newBlockPath)
     {
         if (model.get().findTrack (trackPath) == nullptr)
             return juce::Result::fail ("No track selected");
@@ -712,7 +712,7 @@ namespace integra
         });
     }
 
-    juce::Result ProjectController::exportNode (const juce::String& path, const juce::File& file)
+    juce::Result ProjectController::exportNode (juce::String path, const juce::File& file)
     {
         if (session.saveFile (file.withFileExtension ("integra"), path) != CError::SUCCESS)
             return juce::Result::fail ("Couldn't export:\n" + session.getLastError());
@@ -728,7 +728,7 @@ namespace integra
         return juce::jmax (3.0f, (float) juce::jmax (entry->numAudioInputs, entry->numAudioOutputs));
     }
 
-    juce::String ProjectController::addModule (const juce::String& blockPath, const GUID& moduleGuid, juce::Point<float> gridPosition)
+    juce::String ProjectController::addModule (juce::String blockPath, const GUID& moduleGuid, juce::Point<float> gridPosition)
     {
         auto* block = model.get().findBlock (blockPath);
         auto* entry = session.getCatalogue().findByGuid (moduleGuid);
@@ -752,7 +752,7 @@ namespace integra
         });
     }
 
-    void ProjectController::setModulePositions (const juce::String& blockPath, const std::map<juce::String, juce::Rectangle<float>>& positions)
+    void ProjectController::setModulePositions (juce::String blockPath, const std::map<juce::String, juce::Rectangle<float>>& positions)
     {
         updateBlockUserData (blockPath, [&] (BlockUserData& d)
         {
@@ -761,7 +761,7 @@ namespace integra
         });
     }
 
-    juce::String ProjectController::connect (const juce::String& containerPath, const juce::String& sourceEndpoint, const juce::String& targetEndpoint)
+    juce::String ProjectController::connect (juce::String containerPath, juce::String sourceEndpoint, juce::String targetEndpoint)
     {
         if (auto* c = model.get().findContainer (containerPath))
             for (auto& existing : c->connections)
@@ -777,7 +777,7 @@ namespace integra
     }
 
     //==============================================================================
-    void ProjectController::initialiseScalerRanges (const juce::String& scaler, const juce::String& source, const juce::String& target)
+    void ProjectController::initialiseScalerRanges (juce::String scaler, juce::String source, juce::String target)
     {
         float inMin = 0, inMax = 1, outMin = 0, outMax = 1;
         juce::String inScale = "linear", outScale = "linear";
@@ -799,7 +799,7 @@ namespace integra
         setValueInTransaction (scaler + ".outScale", outScale);
     }
 
-    juce::String ProjectController::addRouting (const juce::String& containerPath, const juce::String& sourceEndpoint, const juce::String& targetEndpoint)
+    juce::String ProjectController::addRouting (juce::String containerPath, juce::String sourceEndpoint, juce::String targetEndpoint)
     {
         return transaction ("Add Routing", [&]
         {
@@ -815,7 +815,7 @@ namespace integra
         });
     }
 
-    void ProjectController::setRoutingSource (const juce::String& scalerPath, const juce::String& sourceEndpoint)
+    void ProjectController::setRoutingSource (juce::String scalerPath, juce::String sourceEndpoint)
     {
         auto* container = model.get().findContainer (parentPath (scalerPath));
         if (container == nullptr)
@@ -837,7 +837,7 @@ namespace integra
         }
     }
 
-    void ProjectController::setRoutingTarget (const juce::String& scalerPath, const juce::String& targetEndpoint)
+    void ProjectController::setRoutingTarget (juce::String scalerPath, juce::String targetEndpoint)
     {
         auto* container = model.get().findContainer (parentPath (scalerPath));
         if (container == nullptr)
@@ -860,7 +860,7 @@ namespace integra
     }
 
     //==============================================================================
-    juce::String ProjectController::addMidiControl (const juce::String& containerPath, const juce::String& targetEndpoint, bool learn)
+    juce::String ProjectController::addMidiControl (juce::String containerPath, juce::String targetEndpoint, bool learn)
     {
         return transaction ("Add MIDI Control", [&]
         {
@@ -888,7 +888,7 @@ namespace integra
     }
 
     //==============================================================================
-    juce::String ProjectController::addEnvelope (const juce::String& blockPath, const juce::String& targetEndpoint)
+    juce::String ProjectController::addEnvelope (juce::String blockPath, juce::String targetEndpoint)
     {
         auto* block = model.get().findBlock (blockPath);
         if (block == nullptr || block->findEnvelopeForTarget (targetEndpoint) != nullptr)
@@ -920,7 +920,7 @@ namespace integra
         });
     }
 
-    juce::String ProjectController::addControlPoint (const juce::String& envelopePath, int tick, float value)
+    juce::String ProjectController::addControlPoint (juce::String envelopePath, int tick, float value)
     {
         return transaction ("Add Control Point", [&]
         {
@@ -935,7 +935,7 @@ namespace integra
         });
     }
 
-    void ProjectController::moveControlPoint (const juce::String& controlPointPath, int tick, float value)
+    void ProjectController::moveControlPoint (juce::String controlPointPath, int tick, float value)
     {
         transaction ("Move Control Point", [&]
         {
@@ -944,7 +944,7 @@ namespace integra
         });
     }
 
-    void ProjectController::setControlPointCurvature (const juce::String& controlPointPath, float curvature)
+    void ProjectController::setControlPointCurvature (juce::String controlPointPath, float curvature)
     {
         setValue (controlPointPath + ".curvature", juce::jlimit (-2.0f, 2.0f, curvature));
     }
@@ -990,7 +990,7 @@ namespace integra
         });
     }
 
-    void ProjectController::setScene (const juce::String& scenePath, int startTick, int length, const juce::String& mode)
+    void ProjectController::setScene (juce::String scenePath, int startTick, int length, juce::String mode)
     {
         transaction ("Edit Scene", [&]
         {
@@ -1001,7 +1001,7 @@ namespace integra
         });
     }
 
-    void ProjectController::setSceneKeybinding (const juce::String& scenePath, const juce::String& key)
+    void ProjectController::setSceneKeybinding (juce::String scenePath, juce::String key)
     {
         // a key can only select one scene
         transaction ("Set Scene Key", [&]
@@ -1026,7 +1026,7 @@ namespace integra
         });
     }
 
-    void ProjectController::activateScene (const juce::String& scenePath)
+    void ProjectController::activateScene (juce::String scenePath)
     {
         auto& p = model.get();
         if (p.player.path.isNotEmpty())
@@ -1075,7 +1075,7 @@ namespace integra
     }
 
     //==============================================================================
-    juce::String ProjectController::addScript (const juce::String& containerPath)
+    juce::String ProjectController::addScript (juce::String containerPath)
     {
         return transaction ("Add Script", [&]
         {
@@ -1085,18 +1085,18 @@ namespace integra
         });
     }
 
-    void ProjectController::setScriptText (const juce::String& scriptPath, const juce::String& text)
+    void ProjectController::setScriptText (juce::String scriptPath, juce::String text)
     {
         transaction ("Edit Script", [&] { setValueInTransaction (scriptPath + ".text", text); });
     }
 
-    void ProjectController::runScript (const juce::String& scriptPath)
+    void ProjectController::runScript (juce::String scriptPath)
     {
         session.bang (scriptPath + ".trigger");
     }
 
     //==============================================================================
-    void ProjectController::updateBlockUserData (const juce::String& blockPath, std::function<void (BlockUserData&)> fn)
+    void ProjectController::updateBlockUserData (juce::String blockPath, std::function<void (BlockUserData&)> fn)
     {
         auto* block = model.get().findBlock (blockPath);
         if (block == nullptr)
@@ -1109,7 +1109,7 @@ namespace integra
             transaction ("Edit Block", [&] { setValueInTransaction (blockPath + ".userData", text); model.rebuild(); });
     }
 
-    void ProjectController::updateTrackUserData (const juce::String& trackPath, std::function<void (TrackUserData&)> fn)
+    void ProjectController::updateTrackUserData (juce::String trackPath, std::function<void (TrackUserData&)> fn)
     {
         auto* track = model.get().findTrack (trackPath);
         if (track == nullptr)
@@ -1142,7 +1142,7 @@ namespace integra
         model.rebuild();
     }
 
-    void ProjectController::updateSceneUserData (const juce::String& scenePath, std::function<void (SceneUserData&)> fn)
+    void ProjectController::updateSceneUserData (juce::String scenePath, std::function<void (SceneUserData&)> fn)
     {
         auto* scene = model.get().findScene (scenePath);
         if (scene == nullptr)
@@ -1153,7 +1153,7 @@ namespace integra
         transaction ("Edit Scene", [&] { setValueInTransaction (scenePath + ".userData", data.toString()); model.rebuild(); });
     }
 
-    void ProjectController::setLiveViewControl (const juce::String& modulePath, const juce::String& widgetLabel, bool shown, juce::Rectangle<float> bounds)
+    void ProjectController::setLiveViewControl (juce::String modulePath, juce::String widgetLabel, bool shown, juce::Rectangle<float> bounds)
     {
         const auto moduleName = lastElement (modulePath);
         updateBlockUserData (parentPath (modulePath), [&] (BlockUserData& d)

@@ -46,15 +46,22 @@ namespace integra
         juce::PopupMenu getMenuForIndex (int, const juce::String&) override;
         void menuItemSelected (int, int) override {}
 
-    private:
+        ArrangeView& getArrangeView() noexcept      { return arrange; }
+        ModuleView& getModuleView() noexcept        { return moduleView; }
+        LiveView& getLiveView() noexcept            { return liveView; }
+        PropertiesPanel& getProperties() noexcept   { return properties; }
+        const juce::String& getCurrentView() const noexcept { return currentView; }
+        bool invokeCommand (int commandID)          { return commands.invokeDirectly (commandID, false); }
+
         enum Commands
         {
             cmdNew = 1, cmdOpen, cmdSave, cmdSaveAs, cmdImportBlock, cmdExportBlock,
             cmdUndo, cmdRedo, cmdDelete, cmdAddTrack, cmdAddScene,
             cmdPlayPause, cmdHome, cmdNextScene, cmdPrevScene,
-            cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo
+            cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule
         };
 
+    private:
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
         void updateTitle();
         void applyColourScheme (bool dark, bool storeInProject);

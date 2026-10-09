@@ -261,9 +261,12 @@ namespace integra
 
     bool LiveView::keyPressed (const juce::KeyPress& key)
     {
-        const auto c = juce::String::charToString (key.getTextCharacter()).toLowerCase();
-        if (c.isEmpty())
+        auto character = key.getTextCharacter();
+        if (character == 0 && key.getKeyCode() > 32 && key.getKeyCode() < 127)
+            character = (juce::juce_wchar) key.getKeyCode();   // some platforms deliver only the key code
+        if (character == 0)
             return false;
+        const auto c = juce::String::charToString (character).toLowerCase();
 
         for (auto& s : context.model.get().scenes)
         {

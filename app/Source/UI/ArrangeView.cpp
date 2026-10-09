@@ -704,10 +704,12 @@ namespace integra
 
                 if (! overlaps)
                 {
+                    // the controller rebuilds the model, so don't keep `block` across its calls
+                    const int oldStart = block->start, oldEnd = block->end;
                     juce::String path = blockPath;
                     if (targetTrack != parentPath (blockPath))
                         path = context.controller.moveBlockToTrack (blockPath, targetTrack);
-                    if (range.getStart() != block->start || range.getEnd() != block->end || path != blockPath)
+                    if (range.getStart() != oldStart || range.getEnd() != oldEnd)
                         context.controller.repositionBlock (path, range.getStart(), range.getEnd());
                 }
             }

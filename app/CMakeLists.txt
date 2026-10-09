@@ -26,6 +26,7 @@ target_include_directories(IntegraLive PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Sourc
 target_compile_definitions(IntegraLive PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
+    JUCE_MODAL_LOOPS_PERMITTED=1      # the --gui-test harness pumps the message loop
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:IntegraLive,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:IntegraLive,JUCE_VERSION>"
     INTEGRA_SOURCE_MODULES_DIR="${PROJECT_SOURCE_DIR}/modules"
@@ -59,4 +60,18 @@ add_custom_command(TARGET IntegraLive POST_BUILD
 if(INTEGRA_BUILD_TESTS)
     add_test(NAME IntegraLive_self_test COMMAND IntegraLive --self-test)
     set_tests_properties(IntegraLive_self_test PROPERTIES TIMEOUT 300)
+endif()
+
+# GUI interaction test: drives the real components with synthesized events.
+# Needs a display; on headless machines it runs under xvfb-run when available.
+if(INTEGRA_BUILD_TESTS)
+    find_program(XVFB_RUN xvfb-run)
+    if(XVFB_RUN)
+        add_test(NAME IntegraLive_gui_test COMMAND ${XVFB_RUN} -a $<TARGET_FILE:IntegraLive> --quiet --gui-test)
+    elseif(APPLE OR WIN32)
+        add_test(NAME IntegraLive_gui_test COMMAND IntegraLive --quiet --gui-test)
+    endif()
+    if(TEST IntegraLive_gui_test)
+        set_tests_properties(IntegraLive_gui_test PROPERTIES TIMEOUT 300)
+    endif()
 endif()

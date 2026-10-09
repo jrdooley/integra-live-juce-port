@@ -60,6 +60,7 @@ namespace integra
         virtual void valuesChanged() = 0;
         /** Area for the control itself (everything except the label strip). */
         juce::Rectangle<int> getControlArea() const;
+        int labelHeight() const;
         virtual juce::String getValueText() const;
 
         AppContext& context;

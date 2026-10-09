@@ -256,7 +256,7 @@ namespace integra
         ids.addArray ({ cmdNew, cmdOpen, cmdSave, cmdSaveAs, cmdImportBlock, cmdExportBlock,
                         cmdUndo, cmdRedo, cmdDelete, cmdAddTrack, cmdAddScene,
                         cmdPlayPause, cmdHome, cmdNextScene, cmdPrevScene,
-                        cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo });
+                        cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule });
     }
 
     void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo& info)
@@ -296,6 +296,7 @@ namespace integra
             case cmdPreferences:  info.setInfo ("Settings...", "", "View", 0);              info.addDefaultKeypress (',', cmd); break;
             case cmdAbout:        info.setInfo ("About Integra Live", "", "Help", 0); break;
             case cmdDemo:         info.setInfo ("Open Demo Project", "", "Help", 0); break;
+            case cmdInstallModule: info.setInfo ("Install Third-Party Module...", "", "File", 0); break;
             default: break;
         }
     }
@@ -402,6 +403,33 @@ namespace integra
                 PreferencesPanel::show (context, [this] (bool dark) { applyColourScheme (dark, true); });
                 return true;
 
+            case cmdInstallModule:
+                chooser = std::make_unique<juce::FileChooser> ("Install module", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory), "*.module");
+                chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
+                {
+                    if (fc.getResult() == juce::File())
+                        return;
+
+                    CModuleInstallResult result;
+                    CError error;
+                    {
+                        auto server = context.session.lock();
+                        error = server->get_module_manager().install_module (toStd (fc.getResult().getFullPathName()), result);
+                    }
+
+                    if (error != CError::SUCCESS)
+                    {
+                        showError ("Install module", juce::Result::fail (toString (error.get_text())));
+                        return;
+                    }
+
+                    context.session.refreshCatalogue();
+                    moduleView.getLibrary().refresh();
+                    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Install module",
+                                                            fc.getResult().getFileNameWithoutExtension() + " is installed and available in the module library.");
+                });
+                return true;
+
             case cmdDemo:
                 withUnsavedChangesCheck ([this]
                 {
@@ -446,6 +474,8 @@ namespace integra
                 menu.addSeparator();
                 menu.addCommandItem (&commands, cmdImportBlock);
                 menu.addCommandItem (&commands, cmdExportBlock);
+                menu.addSeparator();
+                menu.addCommandItem (&commands, cmdInstallModule);
                #if ! JUCE_MAC
                 menu.addSeparator();
                 menu.addItem ("Quit", [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
