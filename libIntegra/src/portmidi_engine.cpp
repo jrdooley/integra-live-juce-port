@@ -36,8 +36,6 @@ namespace integra_internal
 	{
 		m_input_event_buffer = new PmEvent[ CMidiInputBuffer::input_buffer_size ];
 
-		pthread_mutex_init( &m_input_mutex, NULL );
-		pthread_mutex_init( &m_output_mutex, NULL );
 
 		PmError error = Pm_Initialize();
 
@@ -75,8 +73,6 @@ namespace integra_internal
 			INTEGRA_TRACE_ERROR << "Failed to terminate PortMidi: " << Pm_GetErrorText( error );
 		}
 
-		pthread_mutex_destroy( &m_input_mutex );
-		pthread_mutex_destroy( &m_output_mutex );
 
 		INTEGRA_TRACE_PROGRESS << "Destroyed PortAudio engine";
 	}
@@ -263,7 +259,7 @@ namespace integra_internal
 
 	void CPortMidiEngine::close_input_devices()
 	{
-		pthread_mutex_lock( &m_input_mutex );
+		m_input_mutex.lock();
 
 		for( device_vector::const_iterator i = m_active_input_devices.begin(); i != m_active_input_devices.end(); i++ )
 		{
@@ -276,13 +272,13 @@ namespace integra_internal
 
 		m_active_input_devices.clear();
 
-		pthread_mutex_unlock( &m_input_mutex );
+		m_input_mutex.unlock();
 	}
 
 
 	void CPortMidiEngine::close_output_devices()
 	{
-		pthread_mutex_lock( &m_output_mutex );
+		m_output_mutex.lock();
 
 		for( device_vector::const_iterator i = m_active_output_devices.begin(); i != m_active_output_devices.end(); i++ )
 		{
@@ -301,7 +297,7 @@ namespace integra_internal
 
 		m_active_output_devices.clear();
 
-		pthread_mutex_unlock( &m_output_mutex );
+		m_output_mutex.unlock();
 	}
 
 
@@ -321,7 +317,7 @@ namespace integra_internal
 
 		CError error( CError::SUCCESS );
 
-		pthread_mutex_lock( &m_input_mutex );
+		m_input_mutex.lock();
 
 		CMidiDevice device;
 		device.id = device_id;
@@ -343,7 +339,7 @@ namespace integra_internal
 			error = CError::FAILED;
 		}
 
-		pthread_mutex_unlock( &m_input_mutex );
+		m_input_mutex.unlock();
 
 		return error;
 	}
@@ -365,7 +361,7 @@ namespace integra_internal
 
 		CError error( CError::SUCCESS );
 
-		pthread_mutex_lock( &m_output_mutex );
+		m_output_mutex.lock();
 
 		CMidiDevice device;
 		device.id = device_id;
@@ -384,7 +380,7 @@ namespace integra_internal
 			error = CError::FAILED;
 		}
 
-		pthread_mutex_unlock( &m_output_mutex );
+		m_output_mutex.unlock();
 
 		return error;
 	}
@@ -422,7 +418,7 @@ namespace integra_internal
 	{
 		CError result = CError::SUCCESS;
 
-		pthread_mutex_lock( &m_input_mutex );
+		m_input_mutex.lock();
 
 		input_buffers.resize( m_active_input_devices.size() );
 
@@ -466,7 +462,7 @@ namespace integra_internal
 			}
 		}
 
-		pthread_mutex_unlock( &m_input_mutex );
+		m_input_mutex.unlock();
 
 		return result;
 	}
@@ -476,7 +472,7 @@ namespace integra_internal
 	{
 		CError result( CError::SUCCESS );
 
-		pthread_mutex_lock( &m_output_mutex );
+		m_output_mutex.lock();
 
 		bool found = false;
 
@@ -506,7 +502,7 @@ namespace integra_internal
 			result = CError::INPUT_ERROR;
 		}
 
-		pthread_mutex_unlock( &m_output_mutex );
+		m_output_mutex.unlock();
 
 		return result;
 	}
@@ -516,7 +512,7 @@ namespace integra_internal
 	{
 		CError result( CError::SUCCESS );
 
-		pthread_mutex_lock( &m_output_mutex );
+		m_output_mutex.lock();
 
 		if( device_index >= 0 && device_index < m_active_output_devices.size() )
 		{
@@ -536,7 +532,7 @@ namespace integra_internal
 			result = CError::INPUT_ERROR;
 		}
 
-		pthread_mutex_unlock( &m_output_mutex );
+		m_output_mutex.unlock();
 
 		return result;
 	}

@@ -30,34 +30,32 @@ namespace integra_api
 {
 	CPollingNotificationSink::CPollingNotificationSink()
 	{
-		pthread_mutex_init( &m_mutex, NULL );
 	}
 
 
 	CPollingNotificationSink::~CPollingNotificationSink()
 	{
-		pthread_mutex_destroy( &m_mutex );
 	}
 
 
 	void CPollingNotificationSink::get_changed_endpoints( changed_endpoint_map &changed_endpoints )
 	{
-	    pthread_mutex_lock( &m_mutex );
+	    m_mutex.lock();
 
 		changed_endpoints = m_changed_endpoints;
 		
 		m_changed_endpoints.clear();
 
-	    pthread_mutex_unlock( &m_mutex );
+	    m_mutex.unlock();
 	}
 
 
 	void CPollingNotificationSink::on_set_command( const IServer &server, const CPath &endpoint_path, const CCommandSource &source )
 	{
-	    pthread_mutex_lock( &m_mutex );
+	    m_mutex.lock();
 
 		m_changed_endpoints[ endpoint_path.get_string() ] = source;
 
-	    pthread_mutex_unlock( &m_mutex );
+	    m_mutex.unlock();
 	}
 }

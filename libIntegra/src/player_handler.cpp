@@ -30,13 +30,7 @@
 #include "api/trace.h"
 
 #include <assert.h>
-#include <unistd.h>
-
-#ifdef _WIN32
-#include <windows.h>	/*for Sleep function */
-#else
-#include <sys/time.h> /* for gettimeofday() */
-#endif
+#include <chrono>
 
 
 namespace integra_internal
@@ -57,16 +51,7 @@ namespace integra_internal
 	CPlayerHandler::CPlayerHandler( CServer &server )
 		:	m_server( server )
 	{
-		pthread_mutex_init( &m_mutex, NULL);
-
-		#ifdef __APPLE__
-			m_thread_shutdown_semaphore= sem_open( "sem_player_thread_shutdown" , O_CREAT, 0777, 0 );
-		#else
-			m_thread_shutdown_semaphore = new sem_t;
-			sem_init( m_thread_shutdown_semaphore, 0, 0 );
-		#endif
-
-		pthread_create( &m_thread, NULL, player_handler_thread_function, this );
+		m_thread = std::thread( [ this ] { thread_function(); } );
 	}
 
 
@@ -74,28 +59,20 @@ namespace integra_internal
 	{
 		INTEGRA_TRACE_PROGRESS << "stopping player thread";
 
-		sem_post( m_thread_shutdown_semaphore );
-		pthread_join( m_thread, NULL);
-
-		#ifdef __APPLE__
-			sem_close( m_thread_shutdown_semaphore );
-		#else
-			sem_destroy( m_thread_shutdown_semaphore );
-			delete m_thread_shutdown_semaphore;
-		#endif
+		m_thread_shutdown_semaphore.post();
+		m_thread.join();
 
 		INTEGRA_TRACE_PROGRESS << "freeing player states";
 
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		for( player_state_map::iterator i = m_player_states.begin(); i != m_player_states.end(); i++ )
 		{
 			delete i->second;
 		}
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 
-		pthread_mutex_destroy( &m_mutex );
 	}
 
 
@@ -125,7 +102,7 @@ namespace integra_internal
 
 		assert( rate_endpoint && loop_endpoint && start_endpoint && end_endpoint );
 
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		/*
 		see if the player is already playing
@@ -169,13 +146,13 @@ namespace integra_internal
 		player_state->m_loop_start_ticks = *start_endpoint->get_value();
 		player_state->m_loop_end_ticks = *end_endpoint->get_value();
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 	}
 
 
 	void CPlayerHandler::handle_path_change( const CNode &player_node )
 	{
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		player_state_map::iterator lookup = m_player_states.find( player_node.get_id() );
 		if( lookup != m_player_states.end() )
@@ -189,7 +166,7 @@ namespace integra_internal
 			player_state->m_play_path.append_element( CPlayerLogic::endpoint_play );
 		}
 
-		pthread_mutex_unlock( &m_mutex );	
+		m_mutex.unlock();	
 	}
 
 
@@ -201,7 +178,7 @@ namespace integra_internal
 
 	void CPlayerHandler::stop_player( internal_id player_id )
 	{
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		player_state_map::iterator lookup = m_player_states.find( player_id );
 		if( lookup != m_player_states.end() )
@@ -213,43 +190,26 @@ namespace integra_internal
 			m_player_states.erase( player_id );
 		}
 
-		pthread_mutex_unlock( &m_mutex );	
+		m_mutex.unlock();	
 	}
 
 
 	int64_t CPlayerHandler::get_current_msecs() const
 	{
-		#ifdef _WIN32
-
-			assert( CLOCKS_PER_SEC == 1000 );
-			return clock();
-
-		#else
-
-			struct timeval time_data;
-	
-			gettimeofday( &time_data, NULL );
-
-			int64_t result = time_data.tv_sec;
-			result *= 1000;
-	
-			result += ( time_data.tv_usec / 1000 );
-	
-			return result;
-
-		#endif	
+		/* a monotonic clock: unaffected by the user changing the system time */
+		return std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now().time_since_epoch() ).count();
 	}
 
 
 	void CPlayerHandler::thread_function()
 	{
-		while( sem_trywait( m_thread_shutdown_semaphore ) < 0 ) 
+		while( !m_thread_shutdown_semaphore.try_wait() ) 
 		{
-			usleep( CPlayerHandler::player_update_microseconds );
+			std::this_thread::sleep_for( std::chrono::microseconds( CPlayerHandler::player_update_microseconds ) );
 
 			std::list<ISetCommand *> commands;
 
-			pthread_mutex_lock( &m_mutex );
+			m_mutex.lock();
 
 			int64_t current_msecs = get_current_msecs();
 
@@ -297,7 +257,7 @@ namespace integra_internal
 				}
 			}
 
-			pthread_mutex_unlock( &m_mutex );
+			m_mutex.unlock();
 
 			if( !commands.empty() )
 			{
@@ -329,11 +289,4 @@ namespace integra_internal
 	}
 
 
-	void *player_handler_thread_function( void *context )
-	{
-		CPlayerHandler *player_handler = static_cast< CPlayerHandler * > ( context );
-		player_handler->thread_function();
-
-		return NULL;
-	}
 }

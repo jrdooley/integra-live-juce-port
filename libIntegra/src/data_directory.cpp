@@ -23,14 +23,6 @@
 #include "platform_specifics.h"
 
 #include <assert.h>
-#ifdef _WIN32
-#include <direct.h>
-#else
-#include <sys/stat.h>
-#define _S_IFMT S_IFMT
-#define mkdir(x) mkdir(x, 0777)
-#endif
-#include <dirent.h>
 #include <math.h>
 
 #include <limits>
@@ -64,7 +56,7 @@ namespace integra_internal
 
 		string node_directory_name = stream.str();
 
-		mkdir( node_directory_name.c_str() );
+		CFileHelper::make_directory( node_directory_name );
 
 		return node_directory_name;
 	}
@@ -74,7 +66,7 @@ namespace integra_internal
 	{
 		CFileHelper::delete_directory( old_directory );
 
-		mkdir( new_directory.c_str() );
+		CFileHelper::make_directory( new_directory );
 	}
 
 
@@ -376,55 +368,24 @@ namespace integra_internal
 
 	void CDataDirectory::copy_directory_contents_to_zip( zipFile zip_file, const string &target_path, const string &source_path )
 	{
-		DIR *directory_stream = opendir( source_path.c_str() );
-		if( !directory_stream )
+		for( const auto &entry : CFileHelper::list_directory( source_path ) )
 		{
-			INTEGRA_TRACE_ERROR << "unable to open directory " << source_path;
-			return;
-		}
-
-		struct dirent *directory_entry = NULL;
-
-		while( true )
-		{
-			directory_entry = readdir( directory_stream );
-			if( !directory_entry )
-			{
-				break;
-			}
-
-			string file_name = directory_entry->d_name;
-
-			if( file_name == ".." || file_name == "." )
-			{
-				continue;
-			}
-
+			const string &file_name = entry.name;
 			string full_source_path = source_path + file_name;
-
-			struct stat entry_data;
-			if( stat( full_source_path.c_str(), &entry_data ) != 0 )
-			{
-				INTEGRA_TRACE_ERROR << "couldn't read directory entry data: " << strerror( errno );
-				continue;
-			}
 
 			ostringstream full_target_path;
 			full_target_path << CFileIO::data_directory_name << target_path << CFileIO::path_separator << file_name;
 
-			switch( entry_data.st_mode & _S_IFMT )
+			if( entry.is_directory )
 			{
-				case S_IFDIR:	/* directory */
-					full_source_path += CFileIO::path_separator;
-					copy_directory_contents_to_zip( zip_file, full_target_path.str(), full_source_path );
-					break;
-
-				default:
-					CFileIO::copy_file_to_zip( zip_file, full_target_path.str(), full_source_path );
-					break;
+				full_source_path += CFileIO::path_separator;
+				copy_directory_contents_to_zip( zip_file, full_target_path.str(), full_source_path );
+			}
+			else
+			{
+				CFileIO::copy_file_to_zip( zip_file, full_target_path.str(), full_source_path );
 			}
 		}
-		while( directory_entry != NULL );
 	}
 
 

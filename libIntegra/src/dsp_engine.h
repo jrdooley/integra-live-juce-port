@@ -28,7 +28,7 @@
 #include "midi_engine.h"
 #include "threaded_queue.h"
 
-#include <pthread.h>
+#include <mutex>
 
 
 extern "C"	//setup functions for externals
@@ -140,7 +140,7 @@ namespace integra_internal
 			int m_output_channels;
 			int m_sample_rate;
 
-			pthread_mutex_t m_mutex;
+			std::mutex m_mutex;
 
 			int m_next_module_y_slot;
 

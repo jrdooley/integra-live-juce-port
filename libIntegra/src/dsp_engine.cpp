@@ -67,7 +67,6 @@ namespace integra_internal
 	CDspEngine::CDspEngine( CServer &server )
 		:	m_server( server )
 	{
-		pthread_mutex_init( &m_mutex, NULL );
 
 		m_input_channels = 2;
 		m_output_channels = 2;
@@ -103,7 +102,7 @@ namespace integra_internal
 
 	CDspEngine::~CDspEngine()
 	{
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		m_pd->clear();
 		delete m_pd;
@@ -119,9 +118,8 @@ namespace integra_internal
 
 		delete_host_patch();
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 
-		pthread_mutex_destroy( &m_mutex );
 	}
 
 
@@ -236,20 +234,20 @@ namespace integra_internal
 		string filename = CFileHelper::extract_filename_from_path( path );
 		string directory = CFileHelper::extract_directory_from_path( path );
 
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
         m_pd->startMessage();
         m_pd->addSymbol( filename );
         m_pd->addSymbol( directory );
         m_pd->finishMessage( "pd-" + patch_file_name, "savetofile" );
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 	}
 
 
 	void CDspEngine::ping_all_modules()
 	{
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		m_unanswered_pings = 0;
 
@@ -266,7 +264,7 @@ namespace integra_internal
 			INTEGRA_TRACE_ERROR << "Pinged " << modules_pinged << " modules.  " << m_unanswered_pings << " failed to respond.";
 		}
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 	}
 
 
@@ -325,7 +323,7 @@ namespace integra_internal
 	{
 		INTEGRA_TRACE_VERBOSE << "add module id " << id << " as " << patch_path;
 
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
         m_pd->startMessage();
 		m_pd->addFloat( module_x_margin );
@@ -347,7 +345,7 @@ namespace integra_internal
 		m_pd->addSymbol( bang );
         m_pd->finishList( broadcast_symbol );
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 
 		return CError::SUCCESS;
 	}
@@ -359,7 +357,7 @@ namespace integra_internal
         
         CError result = CError::SUCCESS;
 		
-        pthread_mutex_lock( &m_mutex );
+        m_mutex.lock();
 
 		//send 'fini' message
 		m_pd->startMessage();
@@ -404,7 +402,7 @@ namespace integra_internal
 
 		test_map_sanity();
     EXIT:
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 
 		return result;
 	}
@@ -456,7 +454,7 @@ namespace integra_internal
         internal_id source_patch_id, target_patch_id;
         int source_connection_index, target_connection_index;
         
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
         try
         {
@@ -492,7 +490,7 @@ namespace integra_internal
             result = CError::SUCCESS;
         }
     EXIT:
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 
 		return result;
 	}
@@ -502,7 +500,7 @@ namespace integra_internal
 	{
 		INTEGRA_TRACE_VERBOSE << "send value to " << target.get_path().get_string();
 
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		const CNode &node = CNode::downcast( target.get_node() );
 		const CValue *value = target.get_value();
@@ -539,7 +537,7 @@ namespace integra_internal
 
 		m_pd->finishList( broadcast_symbol );
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 
 		return CError::SUCCESS;
 	}
@@ -577,7 +575,7 @@ namespace integra_internal
 			}
 		}*/
 
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		if( has_configuration_changed( input_channels, output_channels, sample_rate ) )
 		{
@@ -600,7 +598,7 @@ namespace integra_internal
 
 		poll_for_messages();
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 	}
 
 

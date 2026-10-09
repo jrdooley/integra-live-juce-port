@@ -22,18 +22,13 @@
 #include "platform_specifics.h"
 
 #include <assert.h>
-#ifdef _WIN32
-#include <direct.h>
-#else
-#include <sys/stat.h>
-#include <dlfcn.h>
-#define _S_IFMT S_IFMT
-#define mkdir(x) mkdir(x, 0777)
-#endif
-#include <dirent.h>
+#include <filesystem>
+#include <system_error>
 #include <stdlib.h>
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <dlfcn.h>
 #endif
 
 #include "file_helper.h"
@@ -122,66 +117,61 @@ namespace integra_internal
 	}
 
 
+	namespace
+	{
+		/* libIntegra's strings are UTF-8 on every platform */
+		std::filesystem::path to_fs_path( const string &path )
+		{
+			return std::filesystem::u8path( path );
+		}
+	}
+
+
 	bool CFileHelper::is_directory( const string &directory_name )
 	{
-		struct stat status_info;
-		return ( stat( directory_name.c_str(), &status_info) == 0 && S_ISDIR( status_info.st_mode ) );
+		std::error_code error;
+		return std::filesystem::is_directory( to_fs_path( directory_name ), error );
 	}
 
 
 	void CFileHelper::delete_directory( const string &directory_name )
 	{
-		DIR *directory_stream = opendir( directory_name.c_str() );
-		if( !directory_stream )
+		std::error_code error;
+		std::filesystem::remove_all( to_fs_path( directory_name ), error );
+		if( error )
 		{
-			INTEGRA_TRACE_ERROR << "unable to open directory " << directory_name;
-			return;
+			INTEGRA_TRACE_ERROR << "Failed to remove directory " << directory_name << ": " << error.message();
+		}
+	}
+
+
+	bool CFileHelper::make_directory( const string &directory_name )
+	{
+		std::error_code error;
+		std::filesystem::create_directory( to_fs_path( directory_name ), error );
+		return is_directory( directory_name );
+	}
+
+
+	std::vector<CFileHelper::directory_entry> CFileHelper::list_directory( const string &directory_name )
+	{
+		std::vector<directory_entry> entries;
+
+		std::error_code error;
+		std::filesystem::directory_iterator iterator( to_fs_path( directory_name ), error );
+		if( error )
+		{
+			INTEGRA_TRACE_ERROR << "unable to open directory " << directory_name << ": " << error.message();
+			return entries;
 		}
 
-		struct dirent *directory_entry = NULL;
-		while( true )
+		for( const auto &entry : iterator )
 		{
-			directory_entry = readdir( directory_stream );
-			if( !directory_entry )
-			{
-				break;
-			}
-
-			const char *name = directory_entry->d_name;
-
-			if( strcmp( name, ".." ) == 0 || strcmp( name, "." ) == 0 )
-			{
-				continue;
-			}
-
-			string full_path = directory_name + CFileIO::path_separator + name;
-
-			struct stat entry_data;
-			if( stat( full_path.c_str(), &entry_data ) != 0 )
-			{
-				INTEGRA_TRACE_ERROR << "couldn't read directory entry data: " << strerror( errno );
-				continue;
-			}
-
-			switch( entry_data.st_mode & _S_IFMT )
-			{
-				case S_IFDIR:	/* directory */
-					delete_directory( full_path  );
-					break;
-
-				default:
-					delete_file( full_path );
-					break;
-			}
+			std::error_code type_error;
+			entries.push_back( { entry.path().filename().u8string(), entry.is_directory( type_error ) } );
 		}
-		while( directory_entry != NULL );
 
-		closedir( directory_stream );
-
-		if( rmdir( directory_name.c_str() ) != 0 )
-		{
-			INTEGRA_TRACE_ERROR << "Failed to remove directory " << directory_name;
-		}
+		return entries;
 	}
 
 
@@ -271,7 +261,7 @@ namespace integra_internal
 
 		string root_and_subdirectory = root_directory + subdirectory + CFileIO::path_separator;
 
-		mkdir( root_and_subdirectory.c_str() );
+		make_directory( root_and_subdirectory );
 
 		construct_subdirectories( root_and_subdirectory, relative_file_path.substr( subdirectory.length() + 1 ) );
 	}

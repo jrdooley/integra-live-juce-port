@@ -31,7 +31,9 @@
 #include "api/command_source.h"
 
 #include <semaphore.h>
-#include <pthread.h>
+#include <atomic>
+#include <mutex>
+#include <thread>
 
 
 namespace integra_api
@@ -129,10 +131,10 @@ namespace integra_internal
 
 			void dump_state( const node_map &nodes, int indentation ) const;
 
-			pthread_mutex_t m_mutex;
-			pthread_t m_mutex_owner;
+			std::mutex m_mutex;
+			std::atomic<std::thread::id> m_mutex_owner;
 
-			pthread_mutex_t m_shutdown_mutex;
+			std::mutex m_shutdown_mutex;
 
 			node_map m_nodes;
 			CStateTable m_state_table; 

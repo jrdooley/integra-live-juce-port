@@ -29,14 +29,6 @@
 
 
 #include <assert.h>
-#ifdef _WIN32
-#include <direct.h>
-#else
-#include <sys/stat.h>
-#define _S_IFMT S_IFMT
-#define mkdir(x) mkdir(x, 0777)
-#endif
-#include <dirent.h>
 
 
 namespace integra_internal
@@ -94,7 +86,7 @@ namespace integra_internal
 
 			m_scratch_directory += CFileIO::path_separator;
 
-			mkdir( m_scratch_directory.c_str() );
+			CFileHelper::make_directory( m_scratch_directory );
 	}
 
 

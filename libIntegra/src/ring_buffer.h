@@ -22,7 +22,7 @@
 #ifndef INTEGRA_RING_BUFFER_H
 #define INTEGRA_RING_BUFFER_H
 
-#include <pthread.h>
+#include <mutex>
 
 
 namespace integra_internal
@@ -53,7 +53,7 @@ namespace integra_internal
 			unsigned int m_read_pos;
 			unsigned int m_frames_used;
 
-			pthread_mutex_t m_mutex;
+			std::mutex m_mutex;
 	};
 }
 

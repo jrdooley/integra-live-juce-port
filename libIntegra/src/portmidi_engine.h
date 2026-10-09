@@ -25,7 +25,7 @@
 #include "midi_engine.h"
 #include "portmidi.h"
 
-#include <pthread.h>
+#include <mutex>
 
 #include <map>
 
@@ -95,8 +95,8 @@ namespace integra_internal
 			device_vector m_active_input_devices;
 			device_vector m_active_output_devices;
 
-			pthread_mutex_t m_input_mutex;
-			pthread_mutex_t m_output_mutex;
+			std::mutex m_input_mutex;
+			std::mutex m_output_mutex;
 
 			PmEvent *m_input_event_buffer;
 	};

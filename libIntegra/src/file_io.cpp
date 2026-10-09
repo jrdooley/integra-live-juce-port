@@ -38,10 +38,6 @@
 #include <algorithm>
 #include <limits>
 
-#ifndef _WIN32
-#define _S_IFMT S_IFMT
-#endif
-
 
 namespace integra_internal
 {

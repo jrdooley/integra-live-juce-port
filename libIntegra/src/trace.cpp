@@ -23,7 +23,7 @@
 
 #include "api/trace.h"
 
-#include <pthread.h>
+#include <thread>
 #include <iostream>
 
 
@@ -112,15 +112,7 @@ namespace integra_api
 
 		if( s_trace_thread )
 		{
-			pthread_t thread_id = pthread_self();
-			const unsigned char *thread_id_bytes = (const unsigned char *) ( &thread_id );
-
-			s_trace_stream << " threadID: 0x" << std::hex;
-
-			for( int i = 0; i < sizeof( thread_id ); i++ )
-			{
-				s_trace_stream << ( int ) ( thread_id_bytes[ i ] );
-			}
+			s_trace_stream << " threadID: 0x" << std::hex << std::this_thread::get_id();
 
 			s_trace_stream << std::dec;
 		}

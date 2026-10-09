@@ -40,22 +40,20 @@ namespace integra_internal
 		m_read_pos = 0;
 		m_frames_used = 0;
 
-		pthread_mutex_init( &m_mutex, NULL );
 	}
 
 
 	CRingBuffer::~CRingBuffer()
 	{
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		if( m_buffer )
 		{
 			delete [] m_buffer;
 		}
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 
-		pthread_mutex_destroy( &m_mutex );
 	}
 
 
@@ -83,7 +81,7 @@ namespace integra_internal
 
 	void CRingBuffer::set_number_of_channels( unsigned int number_of_channels )
 	{
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		if( number_of_channels != m_number_of_channels )
 		{
@@ -92,13 +90,13 @@ namespace integra_internal
 			recreate_buffer();
 		}
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 	}
 
 
 	void CRingBuffer::set_buffer_length( unsigned int buffer_frames )
 	{
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		if( buffer_frames != m_buffer_frames )
 		{
@@ -107,13 +105,13 @@ namespace integra_internal
 			recreate_buffer();
 		}
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 	}
 
 
 	void CRingBuffer::clear()
 	{
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		if( m_buffer )
 		{
@@ -122,13 +120,13 @@ namespace integra_internal
 			m_frames_used = 0;
 		}
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 	}
 
 
 	void CRingBuffer::write( const float *buffer, unsigned int sample_frames )
 	{
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		if( m_buffer )
 		{
@@ -165,13 +163,13 @@ namespace integra_internal
 			INTEGRA_TRACE_ERROR << "Can't write to buffer - not initialised";
 		}
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 	}
 
 
 	void CRingBuffer::read( float *buffer, unsigned int sample_frames )
 	{
-		pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 
 		if( buffer )
 		{
@@ -210,7 +208,7 @@ namespace integra_internal
 			INTEGRA_TRACE_ERROR << "Can't read from buffer - not initialised";
 		}
 
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex.unlock();
 	}
 }
 

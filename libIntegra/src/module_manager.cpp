@@ -24,15 +24,7 @@
 
 #include <assert.h>
 #include <limits>
-#include <dirent.h>
 
-#ifdef _WIN32
-#include <direct.h>
-#else
-#include <sys/stat.h>
-#define _S_IFMT S_IFMT
-#define mkdir(x) mkdir(x, 0777)
-#endif
 
 #include "tmpfileplus.h"
 
@@ -52,10 +44,6 @@
 using namespace integra_api;
 
 
-#ifndef _WIN32
-#include <sys/stat.h>
-#define _S_IFMT S_IFMT
-#endif
 
 
 namespace integra_internal
@@ -85,14 +73,14 @@ namespace integra_internal
 
 		if( !CFileHelper::is_directory( m_implementation_directory_root.c_str() ) )
 		{
-			mkdir( m_implementation_directory_root.c_str() );
+			CFileHelper::make_directory( m_implementation_directory_root );
 		}
 
 		m_embedded_module_directory = scratch_directory_root + embedded_module_directory_name;
 
 		if( !CFileHelper::is_directory( m_embedded_module_directory.c_str() ) )
 		{
-			mkdir( m_embedded_module_directory.c_str() );
+			CFileHelper::make_directory( m_embedded_module_directory );
 		}
 
 		load_modules_from_directory( system_module_directory, CInterfaceDefinition::MODULE_SHIPPED_WITH_INTEGRA );
@@ -563,46 +551,22 @@ namespace integra_internal
 
 	void CModuleManager::load_modules_from_directory( const string &module_directory, CInterfaceDefinition::module_source source )
 	{
-		DIR *directory_stream;
-		struct dirent *directory_entry;
-		const char *name;
-		struct stat entry_data;
 		GUID module_guid;
 
-		directory_stream = opendir( module_directory.c_str() );
-		if( !directory_stream )
+		if( !CFileHelper::is_directory( module_directory ) )
 		{
 			INTEGRA_TRACE_ERROR << "unable to open directory: " << module_directory;
 			return;
 		}
 
-		while( true )
+		for( const auto &entry : CFileHelper::list_directory( module_directory ) )
 		{
-			directory_entry = readdir( directory_stream );
-			if( !directory_entry )
+			if( entry.is_directory )
 			{
-				break;
-			}
-
-			name = directory_entry->d_name;
-
-			string full_path = module_directory + CFileIO::path_separator + name;
-
-			if( stat( full_path.c_str(), &entry_data ) != 0 )
-			{
-				INTEGRA_TRACE_ERROR << "couldn't read directory entry data: " << strerror( errno );
 				continue;
 			}
 
-			switch( entry_data.st_mode & _S_IFMT )
-			{
-				case S_IFDIR:	/* directory */
-					continue;
-
-				default:
-					load_module( full_path, source, module_guid );
-					break;
-			}
+			load_module( module_directory + CFileIO::path_separator + entry.name, source, module_guid );
 		}
 	}
 
@@ -839,7 +803,7 @@ namespace integra_internal
 			return CError::FAILED;
 		}
 
-		mkdir( implementation_directory.c_str() );
+		CFileHelper::make_directory( implementation_directory );
 
 		if( unzGoToFirstFile( unzip_file ) != UNZ_OK )
 		{

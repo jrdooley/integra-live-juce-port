@@ -65,10 +65,6 @@ namespace integra_internal
 	{
 		INTEGRA_TRACE_PROGRESS << "libIntegra version " << get_libintegra_version();
 
-		pthread_mutex_init( &m_mutex, NULL );
-		memset( &m_mutex_owner, 0, sizeof( pthread_t ) );
-
-		pthread_mutex_init( &m_shutdown_mutex, NULL );
 
 		#ifdef _WIN32
 			_set_invalid_parameter_handler( invalid_parameter_handler );
@@ -106,7 +102,7 @@ namespace integra_internal
 
 		INTEGRA_TRACE_PROGRESS << "setting terminate flag";
 
-		pthread_mutex_lock( &m_shutdown_mutex );
+		m_shutdown_mutex.lock();
 
 		unlock();
 
@@ -141,10 +137,7 @@ namespace integra_internal
 
 		INTEGRA_TRACE_PROGRESS << "done!";
 
-		pthread_mutex_unlock( &m_shutdown_mutex );
-
-		pthread_mutex_destroy( &m_mutex );
-		pthread_mutex_destroy( &m_shutdown_mutex );
+		m_shutdown_mutex.unlock();
 
 		INTEGRA_TRACE_PROGRESS << "server destruction complete";
 	}
@@ -152,19 +145,19 @@ namespace integra_internal
 
 	bool CServer::lock()
 	{
-		pthread_t current_thread = pthread_self();
-		if( memcmp( &current_thread, &m_mutex_owner, sizeof( pthread_t ) ) == 0 )
+		const std::thread::id current_thread = std::this_thread::get_id();
+		if( m_mutex_owner.load() == current_thread )
 		{
 			INTEGRA_TRACE_ERROR << "Attempt to lock server in thread which has already locked it!  Deadlock!";
 			assert( false );
 		}
 
-	    pthread_mutex_lock( &m_mutex );
+		m_mutex.lock();
 		m_mutex_owner = current_thread;
 
-		if( pthread_mutex_trylock( &m_shutdown_mutex ) == 0 )
+		if( m_shutdown_mutex.try_lock() )
 		{
-			pthread_mutex_unlock( &m_shutdown_mutex );
+			m_shutdown_mutex.unlock();
 			return true;
 		}
 		else
@@ -177,8 +170,8 @@ namespace integra_internal
 
 	void CServer::unlock()
 	{
-		memset( &m_mutex_owner, 0, sizeof( pthread_t ) );
-		pthread_mutex_unlock( &m_mutex );
+		m_mutex_owner = std::thread::id();
+		m_mutex.unlock();
 	}
 
 

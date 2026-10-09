@@ -24,14 +24,10 @@
 #define INTEGRA_THREADED_QUEUE_PRIVATE
 
 
-#include <pthread.h>
+#include "semaphore.h"
 
-#ifdef __APPLE__
-#include <dispatch/dispatch.h>
-#else
-#include <semaphore.h>
-#endif
-
+#include <mutex>
+#include <thread>
 #include <list>
 
 namespace integra_internal
@@ -44,8 +40,6 @@ namespace integra_internal
 	};
 
 
-	template <class T> void *threaded_queue_thread_function( void *context );
-
 
 	template<class T> class CThreadedQueue
 	{
@@ -57,8 +51,6 @@ namespace integra_internal
 			void push( const T&item );
 			void push( const std::list<T> &items );
 
-			friend void *threaded_queue_thread_function<T>( void *context );
-
 		private:
 
 			void send_signal_to_output_thread();
@@ -69,14 +61,9 @@ namespace integra_internal
 
 			std::list<T> *m_content;
 
-			pthread_mutex_t m_queue_mutex;
-#ifdef __APPLE__
-            dispatch_semaphore_t m_semaphore;
-#else
-			sem_t *m_semaphore;
-#endif
-
-			pthread_t m_output_thread;
+			std::mutex m_queue_mutex;
+			CSemaphore m_semaphore;
+			std::thread m_output_thread;
 
 			bool m_finished;
 	};

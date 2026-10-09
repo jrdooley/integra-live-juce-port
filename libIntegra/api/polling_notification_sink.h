@@ -31,7 +31,7 @@
 #include "notification_sink.h"
 #include "command_source.h"
 
-#include <pthread.h>
+#include <mutex>
 
 namespace integra_api
 {
@@ -72,7 +72,7 @@ namespace integra_api
 
 			changed_endpoint_map m_changed_endpoints;
 
-			pthread_mutex_t m_mutex;
+			std::mutex m_mutex;
 	};
 }
 

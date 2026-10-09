@@ -24,9 +24,10 @@
 
 #include "api/common_typedefs.h"
 
-#include <pthread.h>
-#include <semaphore.h>
-#include <unistd.h>
+#include <mutex>
+#include <thread>
+
+#include "semaphore.h"
 
 #include "api/path.h"
 #include "node.h"
@@ -52,7 +53,6 @@ namespace integra_internal
 
 		private:
 
-			friend void *player_handler_thread_function( void *context );
 
 			void thread_function();
 
@@ -82,10 +82,10 @@ namespace integra_internal
 
 			player_state_map m_player_states;
 
-			pthread_t m_thread;
-			pthread_mutex_t m_mutex;
+			std::thread m_thread;
+			std::mutex m_mutex;
 
-			sem_t *m_thread_shutdown_semaphore;
+			CSemaphore m_thread_shutdown_semaphore;
 
 			CServer &m_server;
 
@@ -93,7 +93,6 @@ namespace integra_internal
 			static const int player_sanity_check_seconds;
 	};
     
-    void *player_handler_thread_function( void *context );
 
 }
 

@@ -46,6 +46,17 @@ namespace integra_internal
 			static bool is_directory( const string &directory_name );
 			static void delete_directory( const string &directory_name );
 
+			/* creates a directory (not its parents); returns true if it exists afterwards */
+			static bool make_directory( const string &directory_name );
+
+			/* names of the entries in a directory, with a flag saying which are directories */
+			struct directory_entry
+			{
+				string name;
+				bool is_directory;
+			};
+			static std::vector<directory_entry> list_directory( const string &directory_name );
+
 			static bool file_exists( const string &file_name );
 			static CError copy_file( const string &source_path, const string &target_path );
 			static CError delete_file( const string &file_name );
