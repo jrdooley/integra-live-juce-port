@@ -35,7 +35,7 @@ namespace lockfree
     using std::size_t;
 
     template <class T>
-    class atomic_ptr
+    class alignas(2 * sizeof(void *)) atomic_ptr   // double-width CAS needs natural alignment
     {
     public:
         atomic_ptr() {}

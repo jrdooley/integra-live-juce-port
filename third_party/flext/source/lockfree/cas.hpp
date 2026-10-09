@@ -27,6 +27,11 @@
 
 #include "prefix.hpp"
 
+#ifdef _MSC_VER
+#   include <intrin.h>
+#   include <cstring>
+#endif
+
 #ifndef _WIN32
 // pthreads are not available under Windows by default and we should not need them there
 #   include <pthread.h>
@@ -57,8 +62,23 @@ namespace lockfree
 #if defined(__GNUC__) && ( (__GNUC__ > 4) || ((__GNUC__ >= 4) && (__GNUC_MINOR__ >= 1)) )
         return __sync_bool_compare_and_swap(addr, old, nw);
 #elif defined(_MSC_VER)
-        assert((size_t(addr)&3) == 0);  // a runtime check only for debug mode is somehow insufficient....
-        return _InterlockedCompareExchange(addr,nw,old) == old;
+        // Integra Live port: word-sized CAS for 32- and 64-bit MSVC (the original only
+        // handled 32-bit values, which breaks for pointers on x64)
+        static_assert(sizeof(C) == sizeof(D) && (sizeof(D) == 4 || sizeof(D) == 8), "CAS: unsupported operand size");
+        if(sizeof(D) == 8)
+        {
+            __int64 o, n;
+            std::memcpy(&o, &old, 8);
+            std::memcpy(&n, &nw, 8);
+            return _InterlockedCompareExchange64(reinterpret_cast<volatile __int64 *>(addr), n, o) == o;
+        }
+        else
+        {
+            long o, n;
+            std::memcpy(&o, &old, 4);
+            std::memcpy(&n, &nw, 4);
+            return _InterlockedCompareExchange(reinterpret_cast<volatile long *>(addr), n, o) == o;
+        }
 #elif defined(_WIN32) || defined(_WIN64)
         assert((size_t(addr)&3) == 0);  // a runtime check only for debug mode is somehow insufficient....
         return InterlockedCompareExchange(addr,nw,old) == old;
@@ -153,27 +173,24 @@ namespace lockfree
         return __sync_bool_compare_and_swap_16(reinterpret_cast<volatile long long*>(addr),
             old.l,
             nw.l);
+#elif defined(_MSC_VER) && defined(_WIN64)
+        // Integra Live port: MSVC has no inline assembler on x64; use the intrinsic.
+        // addr must be 16-byte aligned (atomic_ptr is declared alignas(2 * sizeof(void *))).
+        static_assert(sizeof(D) == 8 && sizeof(E) == 8, "CAS2: unsupported operand size");
+        __int64 comparand[2], low, high;
+        std::memcpy(&comparand[0], &old1, 8);
+        std::memcpy(&comparand[1], &old2, 8);
+        std::memcpy(&low, &new1, 8);
+        std::memcpy(&high, &new2, 8);
+        return _InterlockedCompareExchange128(reinterpret_cast<volatile __int64 *>(addr), high, low, comparand) != 0;
 #elif defined(_MSC_VER)
-        bool ok;
-        __asm {
-#   ifdef _WIN32
-            mov eax,[old1]
-            mov edx,[old2]
-            mov ebx,[new1]
-            mov ecx,[new2]
-            mov edi,[addr]
-            lock cmpxchg8b [edi]
-#   else
-            mov rax,[old1]
-            mov rdx,[old2]
-            mov rbx,[new1]
-            mov rcx,[new2]
-            mov rdi,[addr]
-            lock cmpxchg16b [rdi]
-#   endif
-            setz [ok]
-        }
-        return ok;
+        static_assert(sizeof(D) == 4 && sizeof(E) == 4, "CAS2: unsupported operand size");
+        __int64 o, n;
+        std::memcpy(reinterpret_cast<char *>(&o), &old1, 4);
+        std::memcpy(reinterpret_cast<char *>(&o) + 4, &old2, 4);
+        std::memcpy(reinterpret_cast<char *>(&n), &new1, 4);
+        std::memcpy(reinterpret_cast<char *>(&n) + 4, &new2, 4);
+        return _InterlockedCompareExchange64(reinterpret_cast<volatile __int64 *>(addr), n, o) == o;
 #elif defined(__GNUC__) && (defined(__i386__) || defined(__i686__) || defined(__x86_64__))
         char result;
         if(sizeof(D) == 4 && sizeof(E) == 4) {

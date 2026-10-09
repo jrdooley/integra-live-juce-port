@@ -240,12 +240,23 @@ EXTERN t_gotfn getfn(t_pd *x, t_symbol *s);
 EXTERN t_gotfn zgetfn(t_pd *x, t_symbol *s);
 EXTERN void nullfn(void);
 EXTERN void pd_vmess(t_pd *x, t_symbol *s, char *fmt, ...);
-#define mess0(x, s) ((*getfn((x), (s)))((x)))
-#define mess1(x, s, a) ((*getfn((x), (s)))((x), (a)))
-#define mess2(x, s, a,b) ((*getfn((x), (s)))((x), (a),(b)))
-#define mess3(x, s, a,b,c) ((*getfn((x), (s)))((x), (a),(b),(c)))
-#define mess4(x, s, a,b,c,d) ((*getfn((x), (s)))((x), (a),(b),(c),(d)))
-#define mess5(x, s, a,b,c,d,e) ((*getfn((x), (s)))((x), (a),(b),(c),(d),(e)))
+/* Integra Live port (backported from Pd 0.51): call methods through fixed-arity
+   function types.  Calling a non-variadic method through the variadic t_gotfn
+   passes the arguments in the wrong place on Apple arm64 (variadic arguments go
+   on the stack there), which crashed the "dsp" message.  All arguments sent
+   through these macros are pointers. */
+typedef void (*t_gotfn0)(void *x);
+typedef void (*t_gotfn1)(void *x, void *a);
+typedef void (*t_gotfn2)(void *x, void *a, void *b);
+typedef void (*t_gotfn3)(void *x, void *a, void *b, void *c);
+typedef void (*t_gotfn4)(void *x, void *a, void *b, void *c, void *d);
+typedef void (*t_gotfn5)(void *x, void *a, void *b, void *c, void *d, void *e);
+#define mess0(x, s) ((*(t_gotfn0)getfn((x), (s)))((x)))
+#define mess1(x, s, a) ((*(t_gotfn1)getfn((x), (s)))((x), (a)))
+#define mess2(x, s, a,b) ((*(t_gotfn2)getfn((x), (s)))((x), (a),(b)))
+#define mess3(x, s, a,b,c) ((*(t_gotfn3)getfn((x), (s)))((x), (a),(b),(c)))
+#define mess4(x, s, a,b,c,d) ((*(t_gotfn4)getfn((x), (s)))((x), (a),(b),(c),(d)))
+#define mess5(x, s, a,b,c,d,e) ((*(t_gotfn5)getfn((x), (s)))((x), (a),(b),(c),(d),(e)))
 EXTERN void obj_list(t_object *x, t_symbol *s, int argc, t_atom *argv);
 EXTERN t_pd *pd_newest(void);
 
