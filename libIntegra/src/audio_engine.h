@@ -40,7 +40,7 @@ namespace integra_internal
 
 		public:
 
-			static IAudioEngine *create_audio_engine( CDspEngine &dsp_engine );
+			static IAudioEngine *create_audio_engine( CDspEngine &dsp_engine, bool host_driven );
 			virtual ~IAudioEngine() {}
 
 			virtual CError set_driver( const string &driver ) = 0;

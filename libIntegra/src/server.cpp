@@ -90,7 +90,7 @@ namespace integra_internal
 
 		m_dsp_engine = new CDspEngine( *this );
 
-		m_audio_engine = IAudioEngine::create_audio_engine( *m_dsp_engine );
+		m_audio_engine = IAudioEngine::create_audio_engine( *m_dsp_engine, startup_info.host_driven_audio );
 
 		m_notification_sink = startup_info.notification_sink;
 

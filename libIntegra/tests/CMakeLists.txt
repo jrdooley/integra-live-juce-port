@@ -35,3 +35,10 @@ add_test(NAME integra_smoke
     COMMAND integra_smoke ${PROJECT_SOURCE_DIR}/modules ${PROJECT_SOURCE_DIR}/blocks
     WORKING_DIRECTORY ${_test_workdir})
 set_tests_properties(integra_smoke PROPERTIES ENVIRONMENT "INTEGRA_RESOURCES_PATH=${PROJECT_SOURCE_DIR}/libIntegra/data")
+
+add_executable(integra_host_audio_test host_audio_test.cpp)
+target_link_libraries(integra_host_audio_test PRIVATE Integra)
+add_test(NAME integra_host_audio_test
+    COMMAND integra_host_audio_test ${PROJECT_SOURCE_DIR}/modules
+    WORKING_DIRECTORY ${_test_workdir})
+set_tests_properties(integra_host_audio_test PROPERTIES ENVIRONMENT "INTEGRA_RESOURCES_PATH=${PROJECT_SOURCE_DIR}/libIntegra/data")

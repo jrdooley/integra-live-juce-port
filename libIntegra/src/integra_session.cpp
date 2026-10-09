@@ -25,6 +25,8 @@
 #include "api/trace.h"
 #include "api/server_startup_info.h"
 #include "server.h"
+#include "dsp_engine.h"
+#include "host_audio_engine.h"
 
 #include <assert.h>
 
@@ -95,6 +97,23 @@ namespace integra_api
 
 		return CServerLock( m_server );
 	}
+
+
+	int CIntegraSession::get_audio_block_size()
+	{
+		return CDspEngine::samples_per_buffer;
+	}
+
+
+	CError CIntegraSession::process_audio( const float *input, float *output, int input_channels, int output_channels, int sample_rate )
+	{
+		CServer *server = dynamic_cast<CServer *>( m_server );
+		if( !server ) return CError::FAILED;
+
+		CHostAudioEngine *host_audio_engine = dynamic_cast<CHostAudioEngine *>( &server->get_audio_engine() );
+		if( !host_audio_engine ) return CError::FAILED;
+
+		host_audio_engine->process( input, output, input_channels, output_channels, sample_rate );
+		return CError::SUCCESS;
+	}
 }
-
-

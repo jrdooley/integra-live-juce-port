@@ -24,24 +24,29 @@
 
 #include "audio_engine.h"
 #include "portaudio_engine.h"
+#include "host_audio_engine.h"
 
 
 namespace integra_internal
 {
-	IAudioEngine *IAudioEngine::create_audio_engine( CDspEngine &dsp_engine )
+	IAudioEngine *IAudioEngine::create_audio_engine( CDspEngine &dsp_engine, bool host_driven )
 	{
 		/*
-		 at such a time as we implement other audio engines (eg for iOS), we'd use 
-		 preprocessor switches to instantiate the required engine implementation here
+		 host_driven: the embedding application owns the audio device and calls
+		 CIntegraSession::process_audio (see CServerStartupInfo::host_driven_audio).
+		 Otherwise libIntegra opens devices itself via PortAudio.
 		*/
 
-		#if 1
-			IAudioEngine *engine = new CPortAudioEngine;
-		#else
-			IAudioEngine *engine = new CSomeOtherAudioEngine;
-		#endif
+		IAudioEngine *engine = NULL;
+		if( host_driven )
+		{
+			engine = new CHostAudioEngine;
+		}
+		else
+		{
+			engine = new CPortAudioEngine;
+		}
 
-		
 		engine->m_dsp_engine = &dsp_engine;
 		return engine;
 	}

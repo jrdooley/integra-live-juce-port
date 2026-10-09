@@ -82,6 +82,21 @@ namespace integra_api
 			*/
 			CServerLock get_server();
 
+			/** \brief Size, in sample frames, of the blocks processed by process_audio() */
+			static int get_audio_block_size();
+
+			/** \brief Process one block of audio when the session was started with host_driven_audio
+			 *
+			 * Call this from the host application's real-time audio callback.  Each call processes exactly
+			 * get_audio_block_size() frames.  Buffers are interleaved: input holds
+			 * get_audio_block_size() * input_channels samples and output receives
+			 * get_audio_block_size() * output_channels samples.
+			 *
+			 * The host must stop calling process_audio() before calling end_session().
+			 * \return CError::SUCCESS, or CError::FAILED if the session is not running or was not started in host_driven_audio mode
+			 */
+			CError process_audio( const float *input, float *output, int input_channels, int output_channels, int sample_rate );
+
 		private:	
 
 			IServer *m_server;

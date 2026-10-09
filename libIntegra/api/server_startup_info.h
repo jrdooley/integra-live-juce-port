@@ -48,6 +48,8 @@ namespace integra_api
 				third_party_module_directory = "";
 		
 				notification_sink = NULL;
+
+				host_driven_audio = false;
 			}
 
 			/** \brief Disk location of the shipped-with-libIntegra modules.
@@ -69,6 +71,17 @@ namespace integra_api
 			 * \note notification_sink is not required.  Leave it as NULL if you don't need notifications.
 			 */
 			INotificationSink *notification_sink;
+
+			/** \brief Let the embedding application drive audio processing
+			 *
+			 * When false (the default) libIntegra opens audio devices itself using PortAudio, configured
+			 * through the AudioSettings module.
+			 * When true libIntegra opens no audio devices.  Instead the application must call
+			 * CIntegraSession::process_audio() from its own audio callback (for example a JUCE
+			 * AudioIODeviceCallback).  The AudioSettings module then just reports the configuration
+			 * the host is processing with.
+			 */
+			bool host_driven_audio;
 	};
 }
 
