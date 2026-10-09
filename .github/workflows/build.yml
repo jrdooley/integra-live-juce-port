@@ -104,7 +104,8 @@ jobs:
           lipo -info "$exe"
           lipo "$exe" -verify_arch arm64 x86_64
           otool -L "$exe"
-          if otool -L "$exe" | tail -n +2 | grep -v -E '^\s+(/System/Library/|/usr/lib/)'; then
+          # library lines are indented; the others are per-architecture headers
+          if otool -L "$exe" | grep -E '^\s' | grep -v -E '^\s+(/System/Library/|/usr/lib/)'; then
             echo "::error::the app links libraries outside the OS"; exit 1
           fi
 
