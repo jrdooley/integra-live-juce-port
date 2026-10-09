@@ -159,7 +159,7 @@ namespace integra
         const auto delayPath = block1 + ".TapDelay1";
         auto* b1 = p.findBlock (block1);
         t.check (b1 != nullptr && b1->findModule ("TapDelay1") != nullptr
-                    && b1->findModule ("TapDelay1")->position.getPosition() == juce::Point<float> (15.0f, 11.0f),
+                    && b1->findModule ("TapDelay1")->position.getPosition().toInt() == juce::Point<int> (15, 11),
                  "dropping TapDelay adds it at the drop position (grid 15, 11)");
         graph.refreshLayout();
 
@@ -186,7 +186,7 @@ namespace integra
             pump();
             b1 = p.findBlock (block1);
             t.check (b1 != nullptr && b1->findModule ("TapDelay1") != nullptr
-                        && b1->findModule ("TapDelay1")->position.getPosition() == juce::Point<float> (19.0f, 13.0f),
+                        && b1->findModule ("TapDelay1")->position.getPosition().toInt() == juce::Point<int> (19, 13),
                      "dragging a module stores its new grid position in userData");
         }
 

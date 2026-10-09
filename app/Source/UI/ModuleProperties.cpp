@@ -9,7 +9,7 @@ namespace integra
         class StripButton  : public juce::Button
         {
         public:
-            StripButton (const juce::String& text, const juce::String& tip) : juce::Button (text)
+            StripButton (const juce::String& name, const juce::String& tip) : juce::Button (name)
             {
                 setTooltip (tip);
                 setClickingTogglesState (false);
@@ -24,8 +24,8 @@ namespace integra
                 g.setColour (getToggleState() ? t.accentText : t.textDim);
                 g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
                 // narrow widgets only have room for the initial
-                auto text = getWidth() < 28 ? getButtonText().substring (0, 1) : getButtonText();
-                g.drawText (text, area, juce::Justification::centred);
+                auto caption = getWidth() < 28 ? getButtonText().substring (0, 1) : getButtonText();
+                g.drawText (caption, area, juce::Justification::centred);
             }
         };
     }

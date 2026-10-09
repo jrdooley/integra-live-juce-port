@@ -489,9 +489,9 @@ namespace integra
             {
                 const juce::String patterns = saving ? "*.wav;*.aif;*.aiff" : "*.wav;*.aif;*.aiff;*.flac;*.ogg";
                 chooser = std::make_unique<juce::FileChooser> (spec.label, juce::File::getSpecialLocation (juce::File::userMusicDirectory), patterns);
-                const int flags = saving ? (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting)
-                                         : juce::FileBrowserComponent::openMode;
-                chooser->launchAsync (flags | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
+                const int chooserFlags = saving ? (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting)
+                                                : juce::FileBrowserComponent::openMode;
+                chooser->launchAsync (chooserFlags | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
                 {
                     auto f = fc.getResult();
                     if (f != juce::File())

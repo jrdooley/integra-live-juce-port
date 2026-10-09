@@ -54,8 +54,8 @@ namespace integra
                 info.allowedStates.sort (true);
         }
 
-        for (auto& label : state->get_state_labels())
-            info.stateLabels.emplace_back (toString (label.first), toVar (label.second));
+        for (auto& stateLabel : state->get_state_labels())
+            info.stateLabels.emplace_back (toString (stateLabel.first), toVar (stateLabel.second));
 
         if (auto* scale = state->get_value_scale())
         {
@@ -63,7 +63,7 @@ namespace integra
             {
                 case IValueScale::EXPONENTIAL: info.scale = Scale::exponential; break;
                 case IValueScale::DECIBEL:     info.scale = Scale::decibel; break;
-                default:                       info.scale = Scale::linear; break;
+                case IValueScale::LINEAR:      info.scale = Scale::linear; break;
             }
         }
 
@@ -151,9 +151,9 @@ namespace integra
 
     juce::String EndpointInfo::format (const juce::var& value) const
     {
-        for (auto& [label, v] : stateLabels)
+        for (auto& [stateLabel, v] : stateLabels)
             if (v.toString() == value.toString())
-                return label;
+                return stateLabel;
 
         switch (kind)
         {
@@ -165,7 +165,10 @@ namespace integra
                 const int decimals = magnitude >= 100.0 ? 1 : magnitude >= 10.0 ? 2 : 3;
                 return juce::String (d, decimals);
             }
-            default:            return value.toString();
+            case Kind::text:
+            case Kind::bang:
+            case Kind::missing: return value.toString();
         }
+        return value.toString();
     }
 }

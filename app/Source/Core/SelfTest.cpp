@@ -82,7 +82,7 @@ namespace integra
             auto& b = p.tracks[0].blocks[0];
             t.check (b.start == 0 && b.end == 800, "block spans 0..800 ticks (20 s), from its block envelope");
             t.check (b.modules.size() == 2 && b.findModule ("AudioIn1") && b.findModule ("StereoAudioOut1"), "block has AudioIn1 + StereoAudioOut1");
-            t.check (b.findModule ("AudioIn1") && b.findModule ("AudioIn1")->position == juce::Rectangle<float> (0.875f, 5.25f, 7.0f, 3.0f),
+            t.check (b.findModule ("AudioIn1") && b.findModule ("AudioIn1")->position.toDouble() == juce::Rectangle<double> (0.875, 5.25, 7.0, 3.0),
                      "module position stored in block userData (Flex grid units)");
             t.check (p.tracks[0].userData.colour == 0x0F8AEB, "first track gets the first Flex palette colour");
         }
@@ -112,10 +112,10 @@ namespace integra
         auto delay = controller.addModule (block, session.getCatalogue().findByName ("TapDelay")->guid, { 14, 5 });
         t.check (delay == block + ".TapDelay1", "add TapDelay1");
         controller.setValue (delay + ".delayTime", 1.5);
-        t.check ((double) session.getValue (delay + ".delayTime") == 1.5, "set delayTime");
+        t.check (juce::approximatelyEqual ((double) session.getValue (delay + ".delayTime"), 1.5), "set delayTime");
 
         undo.undo();
-        t.check ((double) session.getValue (delay + ".delayTime") != 1.5, "undo set value");
+        t.check (! juce::approximatelyEqual ((double) session.getValue (delay + ".delayTime"), 1.5), "undo set value");
         undo.undo();
         model.rebuild();
         t.check (! session.nodeExists (delay) && blk (block).userData.modulePositions.count ("TapDelay1") == 0, "undo add module (node and position removed)");

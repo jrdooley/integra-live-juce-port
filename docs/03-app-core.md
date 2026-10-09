@@ -73,7 +73,7 @@ visibility.
 
 ## Self-test results
 
-`IntegraLive --self-test` runs 50+ checks against the real libIntegra + libpd,
+`IntegraLive --self-test` runs 48 checks against the real libIntegra + libpd,
 all passing on Linux, including:
 
 * new project matches the Flex defaults; first track gets the first Flex palette colour

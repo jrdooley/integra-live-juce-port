@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Integra Live
+Comment=Interactive audio processing for live performance
+Exec=integra-live %f
+Icon=integra-live
+Terminal=false
+Categories=AudioVideo;Audio;Music;
+MimeType=application/x-integra-live;

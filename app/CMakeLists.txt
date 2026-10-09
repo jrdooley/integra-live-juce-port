@@ -7,7 +7,16 @@ FetchContent_Declare(JUCE
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
     GIT_TAG ${INTEGRA_JUCE_TAG}
     GIT_SHALLOW TRUE)
-FetchContent_MakeAvailable(JUCE)
+# Populate + EXCLUDE_FROM_ALL so JUCE's own install rules (juceaide, headers,
+# CMake package) don't end up in our installation.
+if(POLICY CMP0169)
+    cmake_policy(SET CMP0169 OLD)
+endif()
+FetchContent_GetProperties(JUCE)
+if(NOT juce_POPULATED)
+    FetchContent_Populate(JUCE)
+    add_subdirectory(${juce_SOURCE_DIR} ${juce_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
 
 juce_add_gui_app(IntegraLive
     PRODUCT_NAME "Integra Live"
@@ -44,6 +53,11 @@ target_link_libraries(IntegraLive
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
 
+if(UNIX AND NOT APPLE)
+    # "Integra Live" is fine for a macOS bundle but awkward as a Linux binary name
+    set_target_properties(IntegraLive PROPERTIES OUTPUT_NAME integra-live)
+endif()
+
 # Ship the module library, demo blocks and libIntegra resources next to the binary
 # (Linux/Windows) or inside the bundle (macOS), where IntegraSession looks for them.
 if(APPLE)
@@ -75,3 +89,30 @@ if(INTEGRA_BUILD_TESTS)
         set_tests_properties(IntegraLive_gui_test PROPERTIES TIMEOUT 300)
     endif()
 endif()
+
+# ------------------------------------------------------------------------------
+# Installation: the binary and its data directories stay together, because
+# IntegraSession looks for modules/, blocks/ and resources/ next to the executable
+# (or in Contents/Resources of the macOS bundle).
+include(GNUInstallDirs)
+if(APPLE)
+    install(TARGETS IntegraLive BUNDLE DESTINATION .)
+else()
+    set(_integra_install_dir ${CMAKE_INSTALL_LIBDIR}/integra-live)
+    install(TARGETS IntegraLive RUNTIME DESTINATION ${_integra_install_dir})
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules ${PROJECT_SOURCE_DIR}/blocks DESTINATION ${_integra_install_dir})
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/libIntegra/data/ DESTINATION ${_integra_install_dir}/resources)
+    if(UNIX)
+        install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR})
+                      execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ../${_integra_install_dir}/integra-live
+                                      \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/integra-live)")
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/Resources/integra-live.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/Resources/icon.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps RENAME integra-live.png)
+    endif()
+endif()
+
+set(CPACK_PACKAGE_NAME "integra-live")
+set(CPACK_PACKAGE_VENDOR "Integra Live")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Interactive audio processing for live performance (JUCE port)")
+set(CPACK_GENERATOR TGZ)
+include(CPack)
