@@ -43,22 +43,92 @@ jobs:
           path: build/integra-live-*.tar.gz
 
   macos:
-    # Apple Silicon runner; builds and runs the headless tests
+    # Self-contained universal (Apple Silicon + Intel) app: static vcpkg dependencies,
+    # signed and packaged as a DMG. Signing/notarisation use repository secrets when
+    # present (see docs/07-macos-packaging.md), otherwise the app is ad-hoc signed.
     runs-on: macos-14
+    env:
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-cache
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: brew install ninja pkg-config libsndfile fftw portaudio portmidi googletest
+      - name: Install build tools and vcpkg
+        run: |
+          brew install ninja
+          if [ -z "${VCPKG_INSTALLATION_ROOT:-}" ] || [ ! -f "$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" ]; then
+            git clone --depth 1 https://github.com/microsoft/vcpkg "$RUNNER_TEMP/vcpkg"
+            "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+            echo "VCPKG_INSTALLATION_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
+          fi
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+
+      - name: Restore vcpkg packages
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}
+          restore-keys: vcpkg-${{ runner.os }}-
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_OVERLAY_TRIPLETS="$PWD/cmake/triplets" \
+            -DVCPKG_TARGET_TRIPLET=universal-osx-static \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Save vcpkg packages
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}
 
       - name: Build
         run: cmake --build build
 
       - name: Test
         run: ctest --test-dir build --output-on-failure -E gui_test
+
+      - name: Check the app is universal and self-contained
+        run: |
+          exe="build/app/IntegraLive_artefacts/Release/Integra Live.app/Contents/MacOS/Integra Live"
+          lipo -info "$exe"
+          lipo "$exe" -verify_arch arm64 x86_64
+          otool -L "$exe"
+          if otool -L "$exe" | tail -n +2 | grep -v -E '^\s+(/System/Library/|/usr/lib/)'; then
+            echo "::error::the app links libraries outside the OS"; exit 1
+          fi
+
+      - name: Import signing certificate
+        if: env.MACOS_CERTIFICATE != ''
+        run: |
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(uuidgen)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/certificate.p12"
+
+      - name: Sign and package
+        run: packaging/macos/package.sh "build/app/IntegraLive_artefacts/Release/Integra Live.app" IntegraLive-macOS.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: integra-live-macos-universal
+          path: IntegraLive-macOS.dmg
 
   windows:
     # MSVC + vcpkg (dependencies from vcpkg.json); see docs/06-windows.md
@@ -73,6 +143,7 @@ jobs:
         with:
           path: ${{ github.workspace }}/vcpkg-cache
           key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
 
       - name: Configure
         shell: pwsh

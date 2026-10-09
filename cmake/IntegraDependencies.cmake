@@ -17,7 +17,9 @@ find_package(LibXml2 REQUIRED)
 function(integra_find_pkg target)
     cmake_parse_arguments(ARG "" "CMAKE_PACKAGE" "PKG_NAMES;CMAKE_TARGET" ${ARGN})
     add_library(${target} INTERFACE IMPORTED GLOBAL)
-    if(PKG_CONFIG_FOUND)
+    # With the vcpkg toolchain (Windows, macOS release builds) use vcpkg's CMake
+    # packages, not whatever pkg-config finds on the machine (e.g. Homebrew dylibs).
+    if(PKG_CONFIG_FOUND AND NOT VCPKG_TOOLCHAIN)
         foreach(name IN LISTS ARG_PKG_NAMES)
             pkg_check_modules(_pc_${name} QUIET IMPORTED_TARGET GLOBAL ${name})
             if(_pc_${name}_FOUND)

@@ -24,7 +24,13 @@ juce_add_gui_app(IntegraLive
     BUNDLE_ID org.integralive.IntegraLive
     VERSION ${PROJECT_VERSION}
     ICON_BIG ${CMAKE_CURRENT_SOURCE_DIR}/Resources/icon.png
-    DOCUMENT_EXTENSIONS integra)
+    DOCUMENT_EXTENSIONS integra
+    # macOS: audio input needs a usage string (the app is killed without one) and,
+    # under the hardened runtime required for notarisation, the audio-input entitlement
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT "Integra Live processes audio from your audio interface or microphone."
+    HARDENED_RUNTIME_ENABLED TRUE
+    HARDENED_RUNTIME_OPTIONS com.apple.security.device.audio-input)
 
 file(GLOB_RECURSE INTEGRA_APP_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/*.cpp

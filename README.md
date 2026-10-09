@@ -101,6 +101,7 @@ platforms; the Windows job uploads a ready-to-run `integra-live-windows-x64` art
 5. [The JUCE user interface](docs/04-gui.md)
 6. [Status, verification and next steps](docs/05-status.md)
 7. [Windows (and macOS) build](docs/06-windows.md)
+8. [macOS packaging and signing](docs/07-macos-packaging.md)
 
 ## Licences
 
