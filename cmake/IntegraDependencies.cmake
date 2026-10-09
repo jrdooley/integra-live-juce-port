@@ -38,15 +38,18 @@ endfunction()
 # --- Lua 5.2 (libIntegra's script engine is written against the 5.2 C API) ----
 integra_find_pkg(integra::lua PKG_NAMES lua5.2 lua-5.2 lua52)
 if(integra::lua_NOTFOUND)
-    message(STATUS "Integra: Lua 5.2 not found on system - fetching lua 5.2.4 sources")
+    message(STATUS "Integra: Lua 5.2 not found on system - fetching Lua 5.2.3 from github.com/lua/lua")
     FetchContent_Declare(lua52
-        URL https://www.lua.org/ftp/lua-5.2.4.tar.gz
-        URL_HASH SHA256=b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b)
-    FetchContent_MakeAvailable(lua52)
-    file(GLOB _lua_sources "${lua52_SOURCE_DIR}/src/*.c")
-    list(FILTER _lua_sources EXCLUDE REGEX "/(lua|luac)\\.c$")
+        GIT_REPOSITORY https://github.com/lua/lua.git
+        GIT_TAG v5.2.3
+        GIT_SHALLOW TRUE)
+    FetchContent_Populate(lua52)
+    file(GLOB _lua_sources "${lua52_SOURCE_DIR}/*.c")
+    list(FILTER _lua_sources EXCLUDE REGEX "/(lua|luac|ltests)\\.c$")
     add_library(integra_lua_static STATIC ${_lua_sources})
-    target_include_directories(integra_lua_static PUBLIC "${lua52_SOURCE_DIR}/src")
+    target_include_directories(integra_lua_static PUBLIC "${lua52_SOURCE_DIR}")
+    # libIntegra uses luaL_register (5.1 API kept in 5.2 behind the compat switch)
+    target_compile_definitions(integra_lua_static PUBLIC LUA_COMPAT_ALL)
     if(UNIX)
         target_compile_definitions(integra_lua_static PRIVATE LUA_USE_POSIX)
         target_link_libraries(integra_lua_static PUBLIC m)

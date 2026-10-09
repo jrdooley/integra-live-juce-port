@@ -12,12 +12,15 @@ or modified. This file records exactly what was copied, from where, and why.
 | `third_party/flext/` | `jamiebullock/flext@cbc44012` (git submodule of integra-framework) | `source/` + licence files only; needed by `fsplay~`. GPL-2.0-or-later. |
 | `third_party/minizip/`, `third_party/tmpfileplus/` | `integra-framework@623ecf71:libIntegra/externals/` | Zip I/O for `.integra`/`.module` files; portable temp files. |
 | `third_party/boost/` | `integra-framework@623ecf71:libIntegra/externals/boost/` | Header subset used by `fsplay~`. |
-| `third_party/libMarkdownParser/` | `IntegraLive@b8cef433 (integra2):libMarkdownParser/` | Markdown parser from the 2018 effort (for rendering module/project *info* text). |
 | `modules/` | `integra-framework@623ecf71:modules/` | 82 `.module` files; identical to IntegraLive `develop` except the fixed `metronome.module`. Unlicense. |
 | `blocks/` | `IntegraLive@91d85f41:blocks/` | Demo block library (`index.xml` + 6 `.integra` files). |
 | `reference/integra2-juce-prototype/` | `IntegraLive@b8cef433 (integra2):JUCE-libIntegra-Client-1/` | The 2018 JUCE prototype, kept for provenance only — **not built**. |
 
 ## Deliberately not imported
+
+* `libMarkdownParser` from the `integra2` branch — it wraps the `sundown`
+  C library, which was never committed upstream, so it cannot be built. The
+  JUCE app renders the (simple) Markdown used in Integra *info* texts itself.
 
 * `externals/portaudio`, `externals/portmidi` (≈70 MB of vendored, partly
   generated sources) — the CMake build uses the system packages or fetches
