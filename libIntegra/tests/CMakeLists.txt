@@ -16,7 +16,7 @@ add_executable(libIntegraTests main.cpp util.cpp)
 target_link_libraries(libIntegraTests PRIVATE Integra GTest::gtest)
 target_compile_definitions(libIntegraTests PRIVATE
     INTEGRA_TEST_MODULE_DIR="${PROJECT_SOURCE_DIR}/modules"
-    INTEGRA_TEST_VERSION_FILE="${PROJECT_SOURCE_DIR}/libIntegra/VERSION")
+    INTEGRA_TEST_VERSION_FILE="${PROJECT_SOURCE_DIR}/libIntegra/VERSION.txt")
 
 # The tests load/save .integra files relative to the working directory, so run
 # them from a scratch copy of the test resources.

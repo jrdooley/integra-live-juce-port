@@ -87,6 +87,8 @@ add_library(integra_pdexternals STATIC
     ${_ext}/fsplay~/fsp_libsndfile.cpp)
 target_include_directories(integra_pdexternals PRIVATE
     ${_ext}/iemlib ${_ext}/fsplay~ ${CMAKE_CURRENT_SOURCE_DIR}/boost)
+# the bundled Boost predates C++17; libc++ (macOS) no longer provides std::auto_ptr
+target_compile_definitions(integra_pdexternals PRIVATE BOOST_NO_AUTO_PTR)
 target_link_libraries(integra_pdexternals PUBLIC integra_flext integra_libpd integra::fftw3f integra::sndfile)
 target_compile_options(integra_pdexternals PRIVATE ${INTEGRA_NO_WARNINGS})
 

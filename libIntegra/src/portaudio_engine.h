@@ -144,7 +144,7 @@ namespace integra_internal
 			static const int potential_sample_rates[];
 			static const int ring_buffer_msecs;
 
-			class CCompareApiNames : public std::binary_function<string, string, bool>
+			class CCompareApiNames
 			{
 				public:
 					CCompareApiNames( const api_map &context );
@@ -155,7 +155,7 @@ namespace integra_internal
 
 			};
 
-			class CCompareDeviceNames : public std::binary_function<string, string, bool>
+			class CCompareDeviceNames
 			{
 				public:
 					CCompareDeviceNames( const device_map &context );

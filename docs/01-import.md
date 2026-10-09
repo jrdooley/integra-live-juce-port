@@ -6,7 +6,7 @@ or modified. This file records exactly what was copied, from where, and why.
 | Path in this repo | Source | Notes |
 |---|---|---|
 | `libIntegra/{api,src,data,tests,doc,LICENSE.txt}` | `integra-framework@623ecf71:libIntegra/` | Newest libIntegra (1.8.2). GPL-2.0-or-later. |
-| `libIntegra/VERSION` | `integra-framework@623ecf71:VERSION` | |
+| `libIntegra/VERSION.txt` | `integra-framework@623ecf71:VERSION` | |
 | `third_party/libpd/` | `integra-framework@623ecf71:libIntegra/externals/libpd/` | Only `pure-data/src`, the four `extra` externals Integra registers (`bonk~`, `expr~`, `fiddle~`, `lrshift~`), `libpd_wrapper`, `cpp`. Pd 0.43.3 — the version the module patches were written for. BSD-3-Clause. |
 | `third_party/pd-externals/` | `integra-framework@623ecf71:libIntegra/externals/extra/` | `partconv~` (bsaylor), `copy`, `freeverb~`, `fsplay~`, `soundfile_info` (iemlib). |
 | `third_party/flext/` | `jamiebullock/flext@cbc44012` (git submodule of integra-framework) | `source/` + licence files only; needed by `fsplay~`. GPL-2.0-or-later. |
