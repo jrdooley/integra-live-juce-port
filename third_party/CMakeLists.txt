@@ -48,16 +48,22 @@ target_include_directories(integra_libpd PUBLIC
 target_compile_definitions(integra_libpd PUBLIC PD USEAPI_DUMMY
     $<$<NOT:$<PLATFORM_ID:Windows>>:HAVE_UNISTD_H HAVE_LIBDL>)
 if(WIN32)
-    target_compile_definitions(integra_libpd PUBLIC WINVER=0x502 PD_INTERNAL _CRT_SECURE_NO_WARNINGS)
+    # MSW: the pre-_WIN32 Windows flag that externals of this era (iemlib) still test.
+    # PD_INTERNAL makes m_pd.h's EXTERN dllexport rather than dllimport, which is
+    # what we want when Pd is linked statically into the application.
+    target_compile_definitions(integra_libpd PUBLIC MSW WINVER=0x0601 _WIN32_WINNT=0x0601 PD_INTERNAL
+                                                    _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
+    # Pd 0.43 uses a few pthread calls (scheduler lock, readsf~/writesf~ threads);
+    # win32-pthread/pthread.h maps them to native Win32 primitives.
+    target_include_directories(integra_libpd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/win32-pthread)
     target_link_libraries(integra_libpd PUBLIC ws2_32 kernel32)
 else()
     target_link_libraries(integra_libpd PUBLIC ${CMAKE_DL_LIBS} m)
 endif()
 target_link_libraries(integra_libpd PUBLIC Threads::Threads)
-if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    # Pd 0.43 predates modern warnings; keep the build log readable.
-    target_compile_options(integra_libpd PRIVATE $<$<COMPILE_LANGUAGE:C>:-w>)
-endif()
+# Third-party code predates modern warnings; keep the build log readable.
+set(INTEGRA_NO_WARNINGS $<IF:$<OR:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,/w,-w>)
+target_compile_options(integra_libpd PRIVATE ${INTEGRA_NO_WARNINGS})
 
 # ---------------------------------------------------------------- flext -------
 file(GLOB INTEGRA_FLEXT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/flext/source/*.cpp)
@@ -68,9 +74,7 @@ target_include_directories(integra_flext PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/flex
 # static, multi-threaded flext for Pd (equivalent of the old libflext-pd_t.a)
 target_compile_definitions(integra_flext PUBLIC FLEXT_SYS=2 FLEXT_THREADS FLEXT_USE_CMEM)
 target_link_libraries(integra_flext PUBLIC integra_libpd)
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(integra_flext PRIVATE -w)
-endif()
+target_compile_options(integra_flext PRIVATE ${INTEGRA_NO_WARNINGS})
 
 # -------------------------------------------------------- other externals -----
 set(_ext ${CMAKE_CURRENT_SOURCE_DIR}/pd-externals)
@@ -84,9 +88,7 @@ add_library(integra_pdexternals STATIC
 target_include_directories(integra_pdexternals PRIVATE
     ${_ext}/iemlib ${_ext}/fsplay~ ${CMAKE_CURRENT_SOURCE_DIR}/boost)
 target_link_libraries(integra_pdexternals PUBLIC integra_flext integra_libpd integra::fftw3f integra::sndfile)
-if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(integra_pdexternals PRIVATE -w)
-endif()
+target_compile_options(integra_pdexternals PRIVATE ${INTEGRA_NO_WARNINGS})
 
 # ---------------------------------------------------------------- minizip -----
 add_library(integra_minizip STATIC
@@ -98,9 +100,7 @@ if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "BSD")
     # minizip's ioapi.c uses the *64 stdio names, which are plain stdio there
     target_compile_definitions(integra_minizip PRIVATE USE_FILE32API)
 endif()
-if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(integra_minizip PRIVATE -w)
-endif()
+target_compile_options(integra_minizip PRIVATE ${INTEGRA_NO_WARNINGS})
 
 # ------------------------------------------------------------ tmpfileplus -----
 add_library(integra_tmpfileplus STATIC tmpfileplus/tmpfileplus.c)

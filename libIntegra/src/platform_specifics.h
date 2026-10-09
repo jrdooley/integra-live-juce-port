@@ -33,8 +33,16 @@
 #include <limits>
 #endif
 
+#ifdef _MSC_VER
+	/* formerly msvc/visual_studio_includes/windows_build_stuff.h */
+	#pragma warning(disable : 4996)		//deprecated string functions
+	#pragma warning(disable : 4018)		//signed/unsigned mismatch
+	#pragma warning(disable : 4244)		//type conversion
+	#pragma warning(disable : 4251)		//exporting classes which use stl
+	#pragma warning(disable : 4800)		//forcing value to bool
+#endif
+
 #ifdef _WIN32
-#include "windows_build_stuff.h"
 #define MIN( a, b ) ( ( a < b ) ? a : b )
 #define MAX( a, b ) ( ( a > b ) ? a : b )
 #endif

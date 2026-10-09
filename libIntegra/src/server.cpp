@@ -399,54 +399,12 @@ namespace integra_internal
 
 	string CServer::get_libintegra_version() const
 	{
-		#ifdef _WIN32
-
-			/*windows only - read version number from current module*/
-
-			HMODULE module_handle = NULL;
-			WCHAR file_name[_MAX_PATH];
-			DWORD handle = 0;
-			BYTE *version_info = NULL;
-			UINT len = 0;
-			VS_FIXEDFILEINFO *vsfi = NULL;
-			DWORD size; 
-
-			GetModuleHandleEx( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS| 
-							GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-							(LPCTSTR) CTrace::error, 
-							&module_handle);
-
-			size = GetModuleFileName(module_handle, file_name, _MAX_PATH);
-			file_name[size] = 0;
-			size = GetFileVersionInfoSize(file_name, &handle);
-			version_info = new BYTE[ size ];
-			if (!GetFileVersionInfo(file_name, handle, size, version_info))
-			{
-				INTEGRA_TRACE_ERROR << "Failed to read version number from module";
-				delete[] version_info;
-
-				return "<failed to read version number>";
-			}
-
-			// we have version information
-			VerQueryValue(version_info, L"\\", (void**)&vsfi, &len);
-
-			ostringstream stream;
-			stream << HIWORD( vsfi->dwFileVersionMS ) << ".";
-			stream << LOWORD( vsfi->dwFileVersionMS ) << ".";
-			stream << HIWORD( vsfi->dwFileVersionLS ) << ".";
-			stream << LOWORD( vsfi->dwFileVersionLS );
-
-			return stream.str();
-
-			delete[] version_info;
-
-		#else
-
-			/*non-windows - use version number from preprocessor macro*/
-			return string( TOSTRING( LIBINTEGRA_VERSION ) );
-
-		#endif
+		/*
+		 The build system defines LIBINTEGRA_VERSION on every platform.  (The old Windows
+		 build read it from the DLL's version resource instead; libIntegra is now a static
+		 library, so there is no such resource.)
+		*/
+		return string( TOSTRING( LIBINTEGRA_VERSION ) );
 	}
 }
 

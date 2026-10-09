@@ -411,11 +411,10 @@ TEST_F(CommandTest, DISABLED_SaveCommandCkSumPass)
 
 
 #pragma mark - main
-#ifndef _WIN32
 int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
 //    ::testing::GTEST_FLAG(filter) = "ServerTest.ProblemFileLoadsCorrectly";
     return RUN_ALL_TESTS();
 }
-#endif
+

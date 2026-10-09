@@ -27,7 +27,7 @@
 
 #include <unordered_map>
 
-#include "semaphore.h"
+#include "integra_semaphore.h"
 
 #include <memory>
 #include <thread>

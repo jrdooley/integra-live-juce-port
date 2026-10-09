@@ -1,0 +1,14 @@
+{
+  "name": "integra-live",
+  "version-string": "1.8.2",
+  "description": "Dependencies for building Integra Live with vcpkg (used on Windows; Linux and macOS use system packages).",
+  "dependencies": [
+    { "name": "libxml2", "default-features": false, "platform": "windows" },
+    { "name": "zlib", "platform": "windows" },
+    { "name": "libsndfile", "default-features": false, "platform": "windows" },
+    { "name": "fftw3", "platform": "windows" },
+    { "name": "portaudio", "platform": "windows" },
+    { "name": "portmidi", "platform": "windows" },
+    { "name": "gtest", "platform": "windows" }
+  ]
+}

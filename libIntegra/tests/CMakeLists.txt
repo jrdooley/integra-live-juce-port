@@ -14,7 +14,6 @@ endif()
 
 add_executable(libIntegraTests main.cpp util.cpp)
 target_link_libraries(libIntegraTests PRIVATE Integra GTest::gtest)
-target_include_directories(libIntegraTests PRIVATE $<$<PLATFORM_ID:Windows>:${CMAKE_CURRENT_SOURCE_DIR}/external>)
 target_compile_definitions(libIntegraTests PRIVATE
     INTEGRA_TEST_MODULE_DIR="${PROJECT_SOURCE_DIR}/modules"
     INTEGRA_TEST_VERSION_FILE="${PROJECT_SOURCE_DIR}/libIntegra/VERSION")

@@ -21,6 +21,9 @@
 #include "api/value.h"
 
 #include <juce_core/juce_core.h>
+#include <cstdlib>
+#include <cstring>
+#include <string_view>
 
 namespace integra
 {

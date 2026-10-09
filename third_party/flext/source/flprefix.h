@@ -372,8 +372,9 @@ WARRANTIES, see the file, "license.txt," in this distribution.
     #if FLEXT_SYS == FLEXT_SYS_MAX && FLEXT_OS == FLEXT_OS_MAC && FLEXT_OSAPI != FLEXT_OSAPI_MAC_MACH
         // Max for CFM doesn't like posix threads
         #define FLEXT_THREADS FLEXT_THR_MP      
-    #elif FLEXT_SYS == FLEXT_SYS_MAX && FLEXT_OS == FLEXT_OS_WIN
-        // for wmax use native Windows threads
+    #elif FLEXT_OS == FLEXT_OS_WIN
+        // native Windows threads for both Max and Pd on Windows
+        // (Integra Live port: avoids needing pthreads-win32 for MSVC builds)
         #define FLEXT_THREADS FLEXT_THR_WIN32
     #else
         #define FLEXT_THREADS FLEXT_THR_POSIX

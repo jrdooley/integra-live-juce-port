@@ -21,23 +21,9 @@
 
 #include "platform_specifics.h"
 
-
-#ifdef __GNUC__
-void __attribute__((constructor)) my_init(void)
-{
-}
-#else
-#ifdef _WIN32
-#include "windows.h"
-BOOL WINAPI DllMain( HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved )
-{
-	return TRUE;
-}
-#else
-void _init()
-{
-}
-#endif
-#endif
-
-
+/*
+ This file used to hold empty library initialisation hooks (a GCC constructor, _init,
+ and a DllMain for the old libIntegra.dll).  libIntegra is now built as a static
+ library, so none of them are needed; the file is kept so the source list matches
+ the original layout.
+*/

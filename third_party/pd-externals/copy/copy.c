@@ -33,7 +33,11 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <errno.h>
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 #include <stdlib.h>
 #include <sys/stat.h>
 
@@ -41,7 +45,7 @@
 #define O_BINARY 0
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
 #define open _open
 #define close _close
 #define fdopen _fdopen

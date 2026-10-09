@@ -56,7 +56,7 @@ static float run_audio( CIntegraSession &session, int blocks, bool feed_sine )
         for( int frame = 0; frame < block_size; frame++ )
         {
             float sample = feed_sine ? 0.5f * (float) std::sin( phase ) : 0.f;
-            phase += 2 * M_PI * 440.0 / sample_rate;
+            phase += 2 * 3.14159265358979323846 * 440.0 / sample_rate;
             for( int channel = 0; channel < channels; channel++ ) input[ frame * channels + channel ] = sample;
         }
 

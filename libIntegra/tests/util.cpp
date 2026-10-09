@@ -8,45 +8,19 @@
 
 #include "util.hpp"
 
-#include <stdio.h>
-#include <sys/types.h>
-#include <string>
-#include <dirent.h>
-
-/*
-// clang doesn't support std::filesystem yet...
-// #include <filesystem>
-std::size_t number_of_files_in_directory(std::filesystem::path path)
-{
-	using std::filesystem::directory_iterator;
-	return std::distance(directory_iterator(path), directory_iterator{});
-}
-*/
+#include <filesystem>
+#include <system_error>
 
 int number_of_files_in_directory(const char *path)
 {
-    DIR *dp = opendir(path);
     int count = 0;
-    struct dirent *ep;
-    
-    if (dp != NULL)
+    std::error_code error;
+    for (const auto &entry : std::filesystem::directory_iterator(path, error))
     {
-        while ((ep = readdir(dp)))
+        if (entry.path().filename().string()[0] != '.')
         {
-            if (ep->d_name[0] == '.')
-            {
-                continue;
-            }
             ++count;
         }
-        
-        (void) closedir(dp);
     }
-    else
-    {
-        perror("Couldn't open directory");
-    }
-    
     return count;
 }
-

@@ -27,7 +27,7 @@
 #include <mutex>
 #include <thread>
 
-#include "semaphore.h"
+#include "integra_semaphore.h"
 
 #include "api/path.h"
 #include "node.h"

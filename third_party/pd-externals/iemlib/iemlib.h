@@ -16,13 +16,12 @@ iemlib written by Thomas Musil, Copyright (c) IEM KUG Graz Austria 2000 - 2006 *
 #define IS_A_COMMA(atom,index) ((atom+index)->a_type == A_COMMA)
 
 
-#ifdef NT
-int sys_noloadbang;
-//t_symbol *iemgui_key_sym=0;
+/* Integra Live port: Pd is linked statically, so sys_noloadbang is always Pd's own
+   (the old NT branch defined a second copy); pick the header by _WIN32, not NT. */
+extern int sys_noloadbang;
+#ifdef _WIN32
 #include <io.h>
 #else
-extern int sys_noloadbang;
-//extern t_symbol *iemgui_key_sym;
 #include <unistd.h>
 #endif
 

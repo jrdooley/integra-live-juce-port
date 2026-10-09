@@ -24,7 +24,7 @@
 #define INTEGRA_THREADED_QUEUE_PRIVATE
 
 
-#include "semaphore.h"
+#include "integra_semaphore.h"
 
 #include <mutex>
 #include <thread>

@@ -30,7 +30,6 @@
 #include "api/path.h"
 #include "api/command_source.h"
 
-#include <semaphore.h>
 #include <atomic>
 #include <mutex>
 #include <thread>

@@ -29,6 +29,10 @@
 
 
 #include <assert.h>
+#include <string.h>
+#ifdef _WIN32
+#include <windows.h>	/* GetTempPathA */
+#endif
 
 
 namespace integra_internal

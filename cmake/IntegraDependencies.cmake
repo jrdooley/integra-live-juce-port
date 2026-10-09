@@ -5,6 +5,9 @@
 # package config, or FetchContent.
 
 include(FetchContent)
+if(POLICY CMP0169)
+    cmake_policy(SET CMP0169 OLD)   # FetchContent_Populate for the Lua fallback
+endif()
 find_package(PkgConfig QUIET)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -12,7 +15,7 @@ find_package(LibXml2 REQUIRED)
 
 # Small helper: try pkg-config names in order, then fall back to a CMake package.
 function(integra_find_pkg target)
-    cmake_parse_arguments(ARG "" "CMAKE_PACKAGE;CMAKE_TARGET" "PKG_NAMES" ${ARGN})
+    cmake_parse_arguments(ARG "" "CMAKE_PACKAGE" "PKG_NAMES;CMAKE_TARGET" ${ARGN})
     add_library(${target} INTERFACE IMPORTED GLOBAL)
     if(PKG_CONFIG_FOUND)
         foreach(name IN LISTS ARG_PKG_NAMES)
@@ -25,12 +28,15 @@ function(integra_find_pkg target)
         endforeach()
     endif()
     if(ARG_CMAKE_PACKAGE)
+        # package config files (e.g. from vcpkg); ports name their targets differently
         find_package(${ARG_CMAKE_PACKAGE} CONFIG QUIET)
-        if(TARGET ${ARG_CMAKE_TARGET})
-            target_link_libraries(${target} INTERFACE ${ARG_CMAKE_TARGET})
-            message(STATUS "Integra: ${target} via CMake package ${ARG_CMAKE_PACKAGE}")
-            return()
-        endif()
+        foreach(candidate IN LISTS ARG_CMAKE_TARGET)
+            if(TARGET ${candidate})
+                target_link_libraries(${target} INTERFACE ${candidate})
+                message(STATUS "Integra: ${target} via CMake package ${ARG_CMAKE_PACKAGE} (${candidate})")
+                return()
+            endif()
+        endforeach()
     endif()
     set(${target}_NOTFOUND TRUE PARENT_SCOPE)
 endfunction()
@@ -70,7 +76,7 @@ if(integra::fftw3f_NOTFOUND)
 endif()
 
 # --- PortAudio ------------------------------------------------------------------
-integra_find_pkg(integra::portaudio PKG_NAMES portaudio-2.0 CMAKE_PACKAGE portaudio CMAKE_TARGET portaudio_static)
+integra_find_pkg(integra::portaudio PKG_NAMES portaudio-2.0 CMAKE_PACKAGE portaudio CMAKE_TARGET portaudio_static portaudio PortAudio::portaudio)
 if(integra::portaudio_NOTFOUND)
     message(STATUS "Integra: PortAudio not found on system - fetching v19.7.0")
     set(PA_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -84,7 +90,7 @@ if(integra::portaudio_NOTFOUND)
 endif()
 
 # --- PortMidi -------------------------------------------------------------------
-integra_find_pkg(integra::portmidi PKG_NAMES portmidi CMAKE_PACKAGE PortMidi CMAKE_TARGET PortMidi::portmidi)
+integra_find_pkg(integra::portmidi PKG_NAMES portmidi CMAKE_PACKAGE PortMidi CMAKE_TARGET PortMidi::portmidi portmidi)
 if(integra::portmidi_NOTFOUND)
     find_path(PORTMIDI_INCLUDE_DIR portmidi.h)
     find_library(PORTMIDI_LIBRARY NAMES portmidi)

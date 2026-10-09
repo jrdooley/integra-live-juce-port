@@ -28,7 +28,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <dirent.h>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -50,17 +50,13 @@ static void check( const CError &error, const std::string &what )
 static std::vector<std::string> files_with_suffix( const std::string &directory, const std::string &suffix )
 {
     std::vector<std::string> result;
-    if( DIR *dir = opendir( directory.c_str() ) )
+    std::error_code error;
+    for( const auto &entry : std::filesystem::directory_iterator( directory, error ) )
     {
-        while( dirent *entry = readdir( dir ) )
+        if( entry.path().extension() == suffix )
         {
-            std::string name( entry->d_name );
-            if( name.size() > suffix.size() && name.compare( name.size() - suffix.size(), suffix.size(), suffix ) == 0 )
-            {
-                result.push_back( directory + "/" + name );
-            }
+            result.push_back( entry.path().string() );
         }
-        closedir( dir );
     }
     return result;
 }
