@@ -11,7 +11,7 @@ its Pure Data (libpd) module library.
 ## What's here
 
 ```
-libIntegra/        libIntegra 1.8.2 (from integra-framework) + tests, with Linux fixes
+libIntegra/        libIntegra 1.8.2 (from integra-framework) + tests, with portability fixes
                    and a new "host-driven audio" mode
 third_party/       libpd (Pd 0.43.3), Pd externals, flext, minizip, tmpfileplus
 modules/           the 82 Integra modules (.module = interface definition + Pd patches)
@@ -55,9 +55,32 @@ ctest --test-dir build --output-on-failure      # GUI test needs xvfb-run (apt i
 JUCE 8 is fetched automatically. Lua 5.2, PortAudio, PortMidi and GoogleTest
 are fetched if not installed. `cmake --install build` installs to
 `<prefix>/lib/integra-live` with a launcher in `<prefix>/bin`; `cpack` makes a
-tarball. macOS should work with Homebrew dependencies (CI job included, not yet
-verified); Windows needs pthreads and is not done yet (see
-[docs/05-status.md](docs/05-status.md)).
+tarball.
+
+## Building (macOS)
+
+```sh
+brew install cmake ninja pkg-config libsndfile fftw portaudio portmidi googletest
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build
+ctest --test-dir build --output-on-failure
+open "build/app/IntegraLive_artefacts/Integra Live.app"
+```
+
+## Building (Windows)
+
+Visual Studio 2022 and [vcpkg](https://vcpkg.io); dependencies come from `vcpkg.json`:
+
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+      -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+      -DVCPKG_TARGET_TRIPLET=x64-windows-static-md
+cmake --build build --config RelWithDebInfo --parallel
+ctest --test-dir build -C RelWithDebInfo --output-on-failure
+```
+
+Details in [docs/06-windows.md](docs/06-windows.md). CI builds and tests all three
+platforms; the Windows job uploads a ready-to-run `integra-live-windows-x64` artifact.
 
 ## Tests
 
@@ -77,6 +100,7 @@ verified); Windows needs pthreads and is not done yet (see
 4. [The JUCE application core](docs/03-app-core.md)
 5. [The JUCE user interface](docs/04-gui.md)
 6. [Status, verification and next steps](docs/05-status.md)
+7. [Windows (and macOS) build](docs/06-windows.md)
 
 ## Licences
 

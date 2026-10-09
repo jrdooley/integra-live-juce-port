@@ -4,7 +4,7 @@
 
 | Area | State |
 |---|---|
-| libIntegra (Pd/libpd backend) | Kept. Builds from source with CMake on Linux; Linux portability bugs fixed; new host-driven audio mode |
+| libIntegra (Pd/libpd backend) | Kept. Builds from source with CMake on Linux, macOS and Windows; threads/files ported to standard C++17; new host-driven audio mode |
 | libpd + externals | Pd 0.43.3 as used by the module library; all 9 externals compiled in; every module instantiates |
 | Module library, demo blocks | Unchanged, all load |
 | Flex GUI → JUCE | Arrange, Module and Live views, 18 widget types, properties (info, routing, scripting, MIDI), transport, settings, menus, undo/redo |
@@ -12,10 +12,14 @@
 | File compatibility with Integra Live 1.x | Same node conventions and `userData` XML; Flex-saved demo blocks open with their layouts |
 | Audio I/O | JUCE `AudioDeviceManager` (ALSA/JACK/CoreAudio/WASAPI/ASIO) driving libpd |
 | MIDI | libIntegra's PortMidi engine via the `MidiSettings` module |
-| Build/CI | CMake (JUCE via FetchContent), GitHub Actions (Linux blocking, macOS experimental), install rules, CPack |
-| Platforms | **Linux: built and tested.** macOS: expected to work (CI job included, unverified). Windows: not yet (see below) |
+| Build/CI | CMake (JUCE via FetchContent; vcpkg manifest on Windows), GitHub Actions building and testing Linux, macOS and Windows, install rules, CPack, Windows zip artifact |
+| Platforms | **Linux, macOS (Apple Silicon) and Windows (x64, MSVC): built and tested in CI** — see [06-windows.md](06-windows.md) |
 
-## How it was verified (Linux, Ubuntu 24.04, GCC 13, JUCE 8.0.8)
+## How it was verified
+
+On Linux (Ubuntu 24.04, GCC 13, JUCE 8.0.8) locally and in CI; on macOS 14 (Apple
+Silicon, Apple clang) and Windows Server 2022 (MSVC 2022, x64) in CI, which runs tests 1–4
+there (the GUI test needs a desktop session).
 
 `ctest --test-dir build` — all 5 pass:
 
@@ -47,12 +51,10 @@ real MIDI devices.
 
 ## Next steps
 
-1. **Windows**: libIntegra uses pthreads throughout (`pthread_mutex_t`, `sem_t`) and `dirent.h`.
-   Either build with vcpkg's `pthreads` + a `dirent` shim, or replace the threading primitives with
-   `std::mutex`/`std::condition_variable` (cleaner; touches ~10 files). The Pd sources also need
-   the MSVC defines already present in `third_party/CMakeLists.txt`.
-2. **macOS**: confirm the experimental CI job; add code signing/notarisation for the bundle.
-3. Remaining Flex features (see doc 04): module version upgrade/switch dialog, block library
+1. **Packaging**: code signing/notarisation for the macOS bundle; a Windows installer
+   (CI currently uploads a zip-able folder). The GUI interaction test runs on Linux only in
+   CI (it needs a desktop session on macOS/Windows).
+2. Remaining Flex features (see doc 04): module version upgrade/switch dialog, block library
    panel, multi-select in the module graph, envelope curvature gesture, track collapse.
-4. Optionally route MIDI through JUCE as well (a host-driven MIDI engine analogous to the audio
+3. Optionally route MIDI through JUCE as well (a host-driven MIDI engine analogous to the audio
    one), so device handling is uniform.

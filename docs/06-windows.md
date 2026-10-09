@@ -108,6 +108,32 @@ cache is restored before configure and saved right after configure, so the depen
 later step fails. If a test crashes, the job reruns `integra_host_audio_test` under
 `cdb` to put a symbolised stack trace in the log.
 
-## Verification so far
+## Verification
 
-See the status table in `05-status.md`.
+GitHub Actions, `windows-2022` runner, MSVC 2022 x64, `RelWithDebInfo`:
+
+| Test | Result |
+|---|---|
+| `libIntegraTests` (upstream GoogleTest suite, 29 tests) | pass |
+| `integra_smoke` (all 63 modules instantiate and answer pings, 6 demo blocks load) | pass |
+| `integra_host_audio_test` (signal through libpd, host-driven) | pass |
+| `IntegraLive_self_test` (48 end-to-end checks of the app core, including the JUCE audio callback path) | pass |
+| `IntegraLive_gui_test` | not run in CI (needs an interactive desktop session) |
+
+The same commits also turned the macOS job (macOS 14, Apple Silicon) green: build plus
+tests 1–4. Before them, macOS failed to compile (`<version>` shadowing, `auto_ptr`,
+`binary_function`), and then crashed on the first module (the arm64 variadic-call issue
+above).
+
+Not verified: the GUI with real audio and MIDI devices on Windows (WASAPI/ASIO via JUCE,
+PortMidi). CI machines have no audio hardware; the app falls back to its no-device
+processing thread, as it does on Linux.
+
+### How it got there (CI iterations)
+
+1. vcpkg dependencies and CMake configure: fine on the first run.
+2. flext's lock-free CAS used x86 inline assembly → MSVC intrinsics.
+3. libxml2 2.14 API change in `convert_input()` → own Latin-1 → UTF-8 conversion.
+4. Everything built, but every test crashed at session start (access violation) →
+   32-bit `t_int` on Win64 → `long long`.
+5. Green.

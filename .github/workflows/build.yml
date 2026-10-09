@@ -43,9 +43,8 @@ jobs:
           path: build/integra-live-*.tar.gz
 
   macos:
-    # Not yet verified on real hardware during the port; kept non-blocking.
+    # Apple Silicon runner; builds and runs the headless tests
     runs-on: macos-14
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -62,9 +61,8 @@ jobs:
         run: ctest --test-dir build --output-on-failure -E gui_test
 
   windows:
-    # MSVC + vcpkg (dependencies from vcpkg.json). Non-blocking until it has been green.
+    # MSVC + vcpkg (dependencies from vcpkg.json); see docs/06-windows.md
     runs-on: windows-2022
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -99,6 +97,19 @@ jobs:
       - name: Test
         id: test
         run: ctest --test-dir build -C RelWithDebInfo --output-on-failure -E gui_test
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $app = "build/app/IntegraLive_artefacts/RelWithDebInfo"
+          New-Item -ItemType Directory -Force -Path package/IntegraLive | Out-Null
+          Copy-Item "$app/Integra Live.exe" package/IntegraLive/
+          Copy-Item -Recurse "$app/modules","$app/blocks","$app/resources" package/IntegraLive/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: integra-live-windows-x64
+          path: package/
 
       # A crashing test only reports "SegFault"; rerun one under the Windows debugger
       # to get a symbolised stack trace in the log.
