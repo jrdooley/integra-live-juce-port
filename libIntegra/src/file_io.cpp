@@ -985,72 +985,48 @@ namespace integra_internal
 	}
 
 
-	/* taken from libxml2 examples */
+	/*
+	 Converts the ISO-8859-1 (Latin-1) strings libIntegra stores into the UTF-8 libxml2
+	 writes.  Originally the libxml2 example ConvertInput(), which called the encoding
+	 handler's input function directly; that member became a union in libxml2 2.14,
+	 so the (trivial) Latin-1 conversion is done here.  Result is malloc'ed: callers
+	 free() it.  Returns NULL for an empty string, as before.
+	*/
 	xmlChar *CFileIO::convert_input( const string &in, const string &encoding )
 	{
-		unsigned char *out;
-		int ret;
-		int size;
-		int out_size;
-		int temp;
-		xmlCharEncodingHandlerPtr handler;
-
 		if( in.empty() )
 		{
 			return NULL;
 		}
 
-		handler = xmlFindCharEncodingHandler( encoding.c_str() );
-
-		if (!handler) 
+		bool is_utf8 = ( xmlParseCharEncoding( encoding.c_str() ) == XML_CHAR_ENCODING_UTF8 );
+		if( !is_utf8 && xmlParseCharEncoding( encoding.c_str() ) != XML_CHAR_ENCODING_8859_1 )
 		{
-			INTEGRA_TRACE_ERROR << "ConvertInput: no encoding handler found for " << encoding;
+			INTEGRA_TRACE_ERROR << "ConvertInput: unsupported encoding " << encoding;
 			return NULL;
 		}
 
-        auto length = in.length();
-        
-        if (length > std::numeric_limits<int>::max())
-        {
-            INTEGRA_TRACE_ERROR << "String length out of range: " << length;
-            return NULL;
-        }
-        
-		size = static_cast<int>(length) + 1;
-		out_size = size * 2 - 1;
-		out = new unsigned char[ out_size ];
-
-		if (out != 0) 
-		{
-			temp = size - 1;
-			ret = handler->input( out, &out_size, (const xmlChar *)in.c_str(), &temp );
-			if ((ret < 0) || (temp - size + 1)) 
-			{
-				if (ret < 0) 
-				{
-					INTEGRA_TRACE_ERROR << "ConvertInput: conversion wasn't successful.";
-				} 
-				else 
-				{
-					INTEGRA_TRACE_ERROR << "ConvertInput: conversion wasn't successful. converted octets: " << temp;
-				}
-
-				free(out);
-				out = NULL;
-			} 
-			else 
-			{
-				unsigned char *new_buffer = new unsigned char[ out_size + 1 ];
-				memcpy( new_buffer, out, out_size );
-				new_buffer[ out_size ] = 0;	/* null terminating out */
-				delete out;
-				out = new_buffer;
-			}
-		} 
-		else 
+		unsigned char *out = ( unsigned char * ) malloc( in.length() * 2 + 1 );
+		if( !out )
 		{
 			INTEGRA_TRACE_ERROR << "ConvertInput: no mem";
+			return NULL;
 		}
+
+		unsigned char *position = out;
+		for( unsigned char c : in )
+		{
+			if( c < 0x80 || is_utf8 )
+			{
+				*position++ = c;
+			}
+			else
+			{
+				*position++ = 0xC0 | ( c >> 6 );
+				*position++ = 0x80 | ( c & 0x3F );
+			}
+		}
+		*position = 0;
 
 		return out;
 	}
