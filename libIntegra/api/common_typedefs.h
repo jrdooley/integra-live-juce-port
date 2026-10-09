@@ -31,6 +31,7 @@
 #ifndef INTEGRA_COMMON_TYPEDEFS
 #define INTEGRA_COMMON_TYPEDEFS
 
+#include <cstdint>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -51,7 +52,7 @@ namespace integra_api
 }
 #endif
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(INTEGRA_STATIC)
 	#ifdef LIBINTEGRA_EXPORTS	
 		#define INTEGRA_API __declspec(dllexport)			/** Windows-specific DLL export qualifier */
 	#else

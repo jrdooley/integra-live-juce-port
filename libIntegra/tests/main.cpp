@@ -29,13 +29,20 @@ using namespace integra_api;
 
 namespace k
 {
-#ifdef _WIN32
+#if defined(INTEGRA_TEST_MODULE_DIR)
+    // CMake build: absolute paths injected by libIntegra/tests/CMakeLists.txt
+    const std::string moduleDirectory           = INTEGRA_TEST_MODULE_DIR;
+#elif defined(_WIN32)
 	const std::string moduleDirectory			= "modules";
 #else
     const std::string moduleDirectory           = "Integra.framework/Resources/modules";
 #endif
     const std::string thirdPartyModuleDirectory = "third_party";
+#if defined(INTEGRA_TEST_VERSION_FILE)
+    const std::string versionFileName           = INTEGRA_TEST_VERSION_FILE;
+#else
     const std::string versionFileName           = "VERSION";
+#endif
     const std::string containerName             = "IntegraTest";
     const std::string integraSuffix             = ".integra";
     const std::string testFileName              = containerName + integraSuffix;

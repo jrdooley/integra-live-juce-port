@@ -23,6 +23,7 @@
 #include "platform_specifics.h"
 
 #include <assert.h>
+#include <limits>
 #include <dirent.h>
 
 #ifdef _WIN32

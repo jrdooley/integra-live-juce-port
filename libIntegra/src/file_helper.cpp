@@ -31,6 +31,10 @@
 #define mkdir(x) mkdir(x, 0777)
 #endif
 #include <dirent.h>
+#include <stdlib.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "file_helper.h"
 #include "file_io.h"
@@ -295,17 +299,51 @@ namespace integra_internal
     
     string CFileHelper::get_resources_path()
     {
-        string path;
-        
-#ifdef __APPLE__
-        Dl_info info;
-        
-        if (dladdr((void *)&CFileHelper::get_resources_path, &info))
+        /*
+         Lookup order:
+          1. INTEGRA_RESOURCES_PATH environment variable (lets hosts and tests relocate resources)
+          2. platform default relative to the binary containing libIntegra
+             (macOS framework: <binary dir>/Resources/, elsewhere: <binary dir>/resources/)
+          3. the source-tree data directory baked in at build time (INTEGRA_RESOURCES_DIR)
+        */
+        const char *environment_path = getenv( "INTEGRA_RESOURCES_PATH" );
+        if( environment_path && *environment_path )
         {
-            path = CFileHelper::extract_directory_from_path(info.dli_fname) + "Resources/";
+            string path( environment_path );
+            if( path.back() != '/' && path.back() != '\\' ) path += "/";
+            return path;
+        }
+
+        string path;
+
+#ifndef _WIN32
+        Dl_info info;
+        if( dladdr( (void *)&CFileHelper::get_resources_path, &info ) && info.dli_fname )
+        {
+            #ifdef __APPLE__
+                path = CFileHelper::extract_directory_from_path( info.dli_fname ) + "Resources/";
+            #else
+                path = CFileHelper::extract_directory_from_path( info.dli_fname ) + "resources/";
+            #endif
+        }
+#else
+        char module_path[ MAX_PATH ];
+        HMODULE module = NULL;
+        if( GetModuleHandleExA( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                (LPCSTR) &CFileHelper::get_resources_path, &module ) &&
+            GetModuleFileNameA( module, module_path, MAX_PATH ) > 0 )
+        {
+            path = CFileHelper::extract_directory_from_path( module_path ) + "resources\\";
         }
 #endif
-        
+
+#ifdef INTEGRA_RESOURCES_DIR
+        if( path.empty() || !file_exists( path + "CollectionSchema.xsd" ) )
+        {
+            path = INTEGRA_RESOURCES_DIR;
+        }
+#endif
+
         return path;
     }
 

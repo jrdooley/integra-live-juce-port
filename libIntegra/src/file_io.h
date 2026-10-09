@@ -28,7 +28,7 @@
 #include "api/error.h"
 #include "node.h"
 
-#include "../externals/minizip/zip.h"
+#include "zip.h"
 #include <libxml/xmlreader.h>
 #include <libxml/xmlwriter.h>
 

@@ -37,7 +37,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 
-#ifdef __APPLE__
+#ifndef O_BINARY
 #define O_BINARY 0
 #endif
 

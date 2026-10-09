@@ -21,6 +21,8 @@
 
 #include "platform_specifics.h"
 
+#include <cmath>
+
 #include "envelope_logic.h"
 #include "control_point_logic.h"
 #include "node_endpoint.h"

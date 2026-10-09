@@ -29,6 +29,7 @@
 #include "common_typedefs.h"
 
 #include "notification_sink.h"
+#include "command_source.h"
 
 #include <pthread.h>
 

@@ -64,14 +64,24 @@ namespace integra_internal
 
 		#else
 
+			/*
+			 TMPDIR is always set on macOS but often not on Linux.  The original fallback
+			 of "~/." relied on tilde expansion, which never happens in fopen/mkdir, so
+			 fall back to $HOME and finally /tmp instead.
+			*/
 			const char *tmp_dir = getenv( "TMPDIR" );
-			if( tmp_dir )
+			const char *home_dir = getenv( "HOME" );
+			if( tmp_dir && *tmp_dir )
 			{
 				m_scratch_directory = string( tmp_dir ) + CFileIO::path_separator + ".";
 			}
+			else if( home_dir && *home_dir )
+			{
+				m_scratch_directory = string( home_dir ) + CFileIO::path_separator + ".";
+			}
 			else
 			{
-				m_scratch_directory = "~/.";
+				m_scratch_directory = "/tmp/.";
 			}
 		#endif
 	

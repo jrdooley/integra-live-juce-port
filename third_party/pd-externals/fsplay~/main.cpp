@@ -246,7 +246,10 @@ protected:
     WorkerPtr worker;
 };
 
-static flext::ThrCond cond;
+// Intentionally leaked: the file-reader thread blocks on this condition for the
+// lifetime of the process.  With a static object glibc's pthread_cond_destroy()
+// waits for that thread at exit and the process never terminates.
+static flext::ThrCond &cond = *new flext::ThrCond;
 typedef TypedFifo<Command> List;
 static List list;
 

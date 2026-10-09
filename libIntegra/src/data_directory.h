@@ -22,8 +22,8 @@
 #ifndef INTEGRA_DATA_DIRECTORY_H
 #define INTEGRA_DATA_DIRECTORY_H
 
-#include "../externals/minizip/zip.h"
-#include "../externals/minizip/unzip.h"
+#include "zip.h"
+#include "unzip.h"
 
 #include "api/error.h"
 #include "api/common_typedefs.h"

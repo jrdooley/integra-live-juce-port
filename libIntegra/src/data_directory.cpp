@@ -35,8 +35,8 @@
 
 #include <limits>
 
-#include "../externals/minizip/zip.h"
-#include "../externals/minizip/unzip.h"
+#include "zip.h"
+#include "unzip.h"
 
 #include "data_directory.h"
 #include "scratch_directory.h"

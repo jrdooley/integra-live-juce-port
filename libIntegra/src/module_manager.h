@@ -22,8 +22,8 @@
 #ifndef INTEGRA_MODULE_MANAGER_PRIVATE_H
 #define INTEGRA_MODULE_MANAGER_PRIVATE_H
 
-#include "../externals/minizip/zip.h"
-#include "../externals/minizip/unzip.h"
+#include "zip.h"
+#include "unzip.h"
 
 #include "interface_definition.h"
 #include "node.h"

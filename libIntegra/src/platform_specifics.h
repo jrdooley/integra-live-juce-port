@@ -23,6 +23,16 @@
 #define INTEGRA_PLATFORM_SPECIFICS_PRIVATE_H
 
 
+/*
+ The original Xcode build used a prefix header which pulled these standard
+ headers into every translation unit; several sources still rely on that.
+*/
+#ifdef __cplusplus
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#endif
+
 #ifdef _WIN32
 #include "windows_build_stuff.h"
 #define MIN( a, b ) ( ( a < b ) ? a : b )
@@ -43,7 +53,7 @@
      __a < __b ? __a : __b; })
 #endif
 
-#ifdef __APPLE__
+#ifndef _WIN32
 
 #if !defined sprintf_s
 #define sprintf_s sprintf_s_alt
@@ -55,7 +65,7 @@ int vsprintf_s_alt (char *str, size_t size, const char *format, va_list ap);
 #endif
 #include "version.h" // For LIBINTEGRA_VERSION
 
-#endif /* __APPLE__ */
+#endif /* !_WIN32 */
 
 
 #endif
