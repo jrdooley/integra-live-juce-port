@@ -25,4 +25,8 @@ namespace integra
     */
     int runStressTest (IntegraSession&, ProjectModel&, ProjectController&, AudioHost&,
                        double playbackSeconds, const juce::Array<juce::File>& extraProjects, juce::String& log);
+
+    /** `IntegraLive --fingerprint-modules`: one line per module ("fp <name> <rms> <peak>")
+        with a fixed input, for comparing two builds (e.g. two Pd versions). */
+    juce::String fingerprintModules (IntegraSession&, ProjectModel&, ProjectController&, AudioHost&);
 }

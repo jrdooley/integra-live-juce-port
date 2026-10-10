@@ -2,12 +2,12 @@
 * For information on usage and redistribution, and for a DISCLAIMER OF ALL
 * WARRANTIES, see the file, "LICENSE.txt," in this distribution.  */
 
-/*  utility functions for signals 
+/*  utility functions for signals
 */
 
 #include "m_pd.h"
 #include <math.h>
-#define LOGTEN 2.302585092994
+#define LOGTEN 2.302585092994046
 
 t_float mtof(t_float f)
 {
@@ -164,7 +164,7 @@ void x_acoustics_setup(void)
         sizeof(t_object), 0, 0);
     class_addfloat(mtof_class, (t_method)mtof_float);
     class_sethelpsymbol(mtof_class, s);
-    
+
     ftom_class = class_new(gensym("ftom"), ftom_new, 0,
         sizeof(t_object), 0, 0);
     class_addfloat(ftom_class, (t_method)ftom_float);
@@ -190,4 +190,4 @@ void x_acoustics_setup(void)
     class_addfloat(dbtorms_class, (t_method)dbtorms_float);
     class_sethelpsymbol(dbtorms_class, s);
 }
-   
+

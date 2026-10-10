@@ -45,6 +45,11 @@ namespace integra
             public so tests can drive the callback without a device). */
         void configure (int numInputs, int numOutputs, int sampleRate);
 
+        /** For tests that drive audioDeviceIOCallbackWithContext themselves: stops the
+            thread that otherwise runs the engine when there is no audio device, so only
+            the test advances it (deterministic output). */
+        void stopNoDeviceThread();
+
         // AudioIODeviceCallback
         void audioDeviceIOCallbackWithContext (const float* const* inputChannelData, int numInputChannels,
                                                float* const* outputChannelData, int numOutputChannels,
@@ -60,6 +65,7 @@ namespace integra
 
         IntegraSession& session;
         std::unique_ptr<NoDeviceThread> noDeviceThread;
+        bool manualDrive = false;
         juce::AudioDeviceManager deviceManager;
 
         const int blockSize;

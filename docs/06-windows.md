@@ -46,12 +46,12 @@ The server lock's owner check now uses `std::thread::id` and is race-free. The m
 build also stopped sharing named semaphores between processes. The tests use
 `std::filesystem` as well, so the bundled `dirent.h` shim was removed.
 
-### Pd 0.43 / libpd
+### Pd / libpd
 
-* **Threads**: Pd's core needs only a scheduler mutex and the `readsf~`/`writesf~` disk
-  threads. `third_party/win32-pthread/pthread.h` maps those few calls onto SRWLOCK,
-  CONDITION_VARIABLE and `_beginthreadex`, so no pthreads-win32 dependency is needed.
-  It is only on the include path for Windows builds.
+* **Threads**: Pd 0.43 needed only a few pthread calls, which a small
+  `win32-pthread/pthread.h` shim mapped onto Win32. Pd 0.56 (see
+  [10-pd-upgrade.md](10-pd-upgrade.md)) uses more of pthreads, so Windows builds now link
+  vcpkg's `pthreads` (PThreads4W) and the shim is gone.
 * **`t_int` on Win64**: `t_int` was `long`, which is 32 bits on 64-bit Windows. Pd keeps
   pointers in `t_int` (DSP chains, pointer arguments), so they were truncated and every
   session crashed on start. It is now `long long` on `_WIN64`, as in Pd 0.47+.

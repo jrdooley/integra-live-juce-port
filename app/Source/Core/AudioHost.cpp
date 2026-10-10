@@ -76,6 +76,12 @@ namespace integra
         noDeviceThread.reset();
     }
 
+    void AudioHost::stopNoDeviceThread()
+    {
+        manualDrive = true;
+        noDeviceThread.reset();
+    }
+
     void AudioHost::changeListenerCallback (juce::ChangeBroadcaster*)
     {
         updateNoDeviceThread();
@@ -83,7 +89,7 @@ namespace integra
 
     void AudioHost::updateNoDeviceThread()
     {
-        const bool needThread = processing && deviceManager.getCurrentAudioDevice() == nullptr;
+        const bool needThread = processing && ! manualDrive && deviceManager.getCurrentAudioDevice() == nullptr;
 
         if (needThread && noDeviceThread == nullptr)
         {

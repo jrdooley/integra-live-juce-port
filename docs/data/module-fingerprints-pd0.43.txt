@@ -1,0 +1,675 @@
+fp FourByOneMixer 0.16977 0.72000
+fv FourByOneMixer.bypass 0
+fv FourByOneMixer.outLevel 1.0000
+fv FourByOneMixer.gain1 1.0000
+fv FourByOneMixer.phaseInv1 -1
+fv FourByOneMixer.gain2 1.0000
+fv FourByOneMixer.phaseInv2 -1
+fv FourByOneMixer.gain3 1.0000
+fv FourByOneMixer.phaseInv3 -1
+fv FourByOneMixer.gain4 1.0000
+fv FourByOneMixer.phaseInv4 -1
+fv FourByOneMixer.vu1 -15.2117
+fv FourByOneMixer.vu2 -120.0000
+fv FourByOneMixer.vu3 -120.0000
+fv FourByOneMixer.vu4 -120.0000
+fv FourByOneMixer.vuOut -15.2117
+fp AddSynth 0.00000 0.00000
+fv AddSynth.mute 0
+fv AddSynth.gain 1.0000
+fv AddSynth.chNumber 0
+fv AddSynth.partial1 1.0000
+fv AddSynth.partial2 0.0000
+fv AddSynth.partial3 0.0000
+fv AddSynth.partial4 0.0000
+fv AddSynth.partial5 0.0000
+fv AddSynth.partial6 0.0000
+fv AddSynth.partial7 0.0000
+fv AddSynth.partial8 0.0000
+fv AddSynth.attack 0.0050
+fv AddSynth.decay 0.1000
+fv AddSynth.sustain 0.5000
+fv AddSynth.release 0.5000
+fp BandPass 0.09411 0.15534
+fv BandPass.bypass 0
+fv BandPass.inLevel 1.0000
+fv BandPass.outLevel 1.0000
+fv BandPass.mix 1.0000
+fv BandPass.frequency 440.0000
+fv BandPass.q 1.0000
+fp BrightnessAnalyser 0.00000 0.00000
+fv BrightnessAnalyser.inLevel 1.0000
+fv BrightnessAnalyser.brightness 220.0000
+fp Compressor 0.13382 0.48062
+fv Compressor.bypass 0
+fv Compressor.inLevel 1.0000
+fv Compressor.attackTime 2
+fv Compressor.makeUp 9.0000
+fv Compressor.mix 0.5000
+fv Compressor.outLevel 1.0000
+fv Compressor.releaseTime 500
+fv Compressor.threshold -10.0000
+fv Compressor.ratio 2.0000
+fp Convolution 0.12005 0.50912
+fv Convolution.bypass 0
+fv Convolution.inLevel 1.0000
+fv Convolution.outLevel 1.0000
+fv Convolution.mix 0.5000
+fv Convolution.file 
+fp Delay 0.24010 1.01823
+fv Delay.bypass 0
+fv Delay.inLevel 1.0000
+fv Delay.outLevel 1.0000
+fv Delay.mix 0.5000
+fv Delay.delayTime 0.5000
+fp Distortion 0.19326 0.58951
+fv Distortion.bypass 0
+fv Distortion.inLevel 1.0000
+fv Distortion.outLevel 1.0000
+fv Distortion.mix 0.5000
+fv Distortion.amount 0.5000
+fv Distortion.type type1
+fp EnvelopeFollower 0.00000 0.00000
+fv EnvelopeFollower.inLevel 1.0000
+fv EnvelopeFollower.vu1 -6.2440
+fv EnvelopeFollower.soundLevel 1.0000
+fp Flanger 0.34146 0.93933
+fv Flanger.bypass 0
+fv Flanger.inLevel 1.0000
+fv Flanger.outLevel 1.0000
+fv Flanger.mix 0.5000
+fv Flanger.modFrequency 0.1000
+fv Flanger.modDepth 0.7000
+fp Flute 0.00006 0.00010
+fv Flute.mute 0
+fv Flute.gain 1.0000
+fv Flute.air 2.0000
+fv Flute.clip 0.2000
+fv Flute.power 2.0000
+fv Flute.feedback 0.9000
+fv Flute.attack 0.0050
+fv Flute.decay 0.1000
+fv Flute.sustain 0.8000
+fv Flute.release 0.2000
+fp Gate 0.12005 0.50912
+fv Gate.bypass 0
+fv Gate.inLevel 1.0000
+fv Gate.outLevel 1.0000
+fv Gate.mix 0.5000
+fv Gate.threshold 0.0000
+fv Gate.attackTime 10.0000
+fv Gate.releaseTime 20.0000
+fv Gate.mode normal
+fp GranularDelay 0.12365 0.51382
+fv GranularDelay.bypass 0
+fv GranularDelay.inLevel 1.0000
+fv GranularDelay.outLevel 1.0000
+fv GranularDelay.mix 0.5000
+fv GranularDelay.delayTime 0.5000
+fv GranularDelay.delayVariation 0.4000
+fv GranularDelay.grainPhase 0.4000
+fv GranularDelay.grainRate 20.0000
+fv GranularDelay.grainLevel 0.5000
+fv GranularDelay.grainQ 1.0000
+fv GranularDelay.fineTune 0.1000
+fv GranularDelay.levelVariation 0.1000
+fv GranularDelay.phaseVariation 0.0000
+fv GranularDelay.panVariation 0.5000
+fv GranularDelay.sizeVariation 0.0500
+fp GraphicEqFifteenBands 0.28639 0.96402
+fv GraphicEqFifteenBands.bypass 0
+fv GraphicEqFifteenBands.inLevel 1.0000
+fv GraphicEqFifteenBands.gain 1.0000
+fv GraphicEqFifteenBands.mix 0.5000
+fv GraphicEqFifteenBands.f25 0.0000
+fv GraphicEqFifteenBands.f40 0.0000
+fv GraphicEqFifteenBands.f63 0.0000
+fv GraphicEqFifteenBands.f100 0.0000
+fv GraphicEqFifteenBands.f160 0.0000
+fv GraphicEqFifteenBands.f250 0.0000
+fv GraphicEqFifteenBands.f400 0.0000
+fv GraphicEqFifteenBands.f630 0.0000
+fv GraphicEqFifteenBands.f1000 0.0000
+fv GraphicEqFifteenBands.f1600 0.0000
+fv GraphicEqFifteenBands.f2500 0.0000
+fv GraphicEqFifteenBands.f4000 0.0000
+fv GraphicEqFifteenBands.f6300 0.0000
+fv GraphicEqFifteenBands.f10000 0.0000
+fv GraphicEqFifteenBands.f16000 0.0000
+fp GraphicEQ 0.27951 0.92923
+fv GraphicEQ.bypass 0
+fv GraphicEQ.inLevel 1.0000
+fv GraphicEQ.gain 1.0000
+fv GraphicEQ.mix 0.5000
+fv GraphicEQ.f20 0.0000
+fv GraphicEQ.f25 0.0000
+fv GraphicEQ.f31 0.0000
+fv GraphicEQ.f40 0.0000
+fv GraphicEQ.f50 0.0000
+fv GraphicEQ.f63 0.0000
+fv GraphicEQ.f80 0.0000
+fv GraphicEQ.f100 0.0000
+fv GraphicEQ.f125 0.0000
+fv GraphicEQ.f160 0.0000
+fv GraphicEQ.f200 0.0000
+fv GraphicEQ.f250 0.0000
+fv GraphicEQ.f315 0.0000
+fv GraphicEQ.f400 0.0000
+fv GraphicEQ.f500 0.0000
+fv GraphicEQ.f630 0.0000
+fv GraphicEQ.f800 0.0000
+fv GraphicEQ.f1000 0.0000
+fv GraphicEQ.f1250 0.0000
+fv GraphicEQ.f1600 0.0000
+fv GraphicEQ.f2000 0.0000
+fv GraphicEQ.f2500 0.0000
+fv GraphicEQ.f3150 0.0000
+fv GraphicEQ.f4000 0.0000
+fv GraphicEQ.f5000 0.0000
+fv GraphicEQ.f6300 0.0000
+fv GraphicEQ.f8000 0.0000
+fv GraphicEQ.f10000 0.0000
+fv GraphicEQ.f12500 0.0000
+fv GraphicEQ.f16000 0.0000
+fv GraphicEQ.f20000 0.0000
+fp HarmonicFilter 0.00000 0.00000
+fv HarmonicFilter.bypass 0
+fv HarmonicFilter.inLevel 1.0000
+fv HarmonicFilter.gain 1.0000
+fv HarmonicFilter.mix 1.0000
+fv HarmonicFilter.frequency 440.0000
+fv HarmonicFilter.q 1.0000
+fv HarmonicFilter.first 1
+fv HarmonicFilter.second 1
+fv HarmonicFilter.third 1
+fv HarmonicFilter.fourth 1
+fv HarmonicFilter.fifth 1
+fv HarmonicFilter.sixth 1
+fv HarmonicFilter.seventh 1
+fv HarmonicFilter.eighth 1
+fv HarmonicFilter.ninth 1
+fv HarmonicFilter.tenth 1
+fv HarmonicFilter.eleventh 1
+fv HarmonicFilter.twelfth 1
+fv HarmonicFilter.thirteenth 1
+fv HarmonicFilter.fourteenth 1
+fv HarmonicFilter.fifteenth 1
+fv HarmonicFilter.sixteenth 1
+fp HighPass 0.07603 0.79410
+fv HighPass.bypass 0
+fv HighPass.inLevel 1.0000
+fv HighPass.outLevel 1.0000
+fv HighPass.mix 1.0000
+fv HighPass.frequency 440.0000
+fp Limiter 0.27075 1.07094
+fv Limiter.bypass 0
+fv Limiter.inLevel 1.0000
+fv Limiter.outLevel 1.0000
+fv Limiter.mix 0.5000
+fv Limiter.knee soft
+fv Limiter.threshold 0.0000
+fp LowPass 0.22131 0.45672
+fv LowPass.bypass 0
+fv LowPass.inLevel 1.0000
+fv LowPass.outLevel 1.0000
+fv LowPass.mix 0.5000
+fv LowPass.frequency 440.0000
+fp MaterialSimulator 0.22273 0.79099
+fv MaterialSimulator.bypass 0
+fv MaterialSimulator.inLevel 1.0000
+fv MaterialSimulator.outLevel 1.0000
+fv MaterialSimulator.mix 0.5000
+fv MaterialSimulator.material metal
+fp Metronome 0.00000 0.00000
+fv Metronome.mute 0
+fv Metronome.outLevel 1.0000
+fv Metronome.frequency 440.0000
+fv Metronome.tempo 60
+fv Metronome.state 0.0000
+fp MultiBandCompressor 0.25442 1.08213
+fv MultiBandCompressor.bypass 0
+fv MultiBandCompressor.inLevel 1.0000
+fv MultiBandCompressor.outLevel 1.0000
+fv MultiBandCompressor.mix 0.5000
+fv MultiBandCompressor.bandLimit1 100.0000
+fv MultiBandCompressor.bandLimit2 520.0000
+fv MultiBandCompressor.bandLimit3 5300.0000
+fv MultiBandCompressor.cIn1 1.0000
+fv MultiBandCompressor.cOut1 1.0000
+fv MultiBandCompressor.cIn2 1.0000
+fv MultiBandCompressor.cOut2 1.0000
+fv MultiBandCompressor.cIn3 1.0000
+fv MultiBandCompressor.cOut3 1.0000
+fv MultiBandCompressor.cIn4 1.0000
+fv MultiBandCompressor.cOut4 1.0000
+fv MultiBandCompressor.t1 0.0000
+fv MultiBandCompressor.t2 0.0000
+fv MultiBandCompressor.t3 0.0000
+fv MultiBandCompressor.t4 0.0000
+fv MultiBandCompressor.r1 1
+fv MultiBandCompressor.r2 1
+fv MultiBandCompressor.r3 1
+fv MultiBandCompressor.r4 1
+fp Noisiness 0.00000 0.00000
+fv Noisiness.inLevel 1.0000
+fv Noisiness.noisiness 0.0197
+fp Notch 0.14130 0.58738
+fv Notch.bypass 0
+fv Notch.inLevel 1.0000
+fv Notch.outLevel 1.0000
+fv Notch.mix 1.0000
+fv Notch.frequency 440.0000
+fv Notch.q 1.0000
+fp Octosoundfiler 0.00000 0.00000
+fv Octosoundfiler.mute 0
+fv Octosoundfiler.record 0
+fv Octosoundfiler.play 0
+fv Octosoundfiler.loop 0
+fv Octosoundfiler.speed 1.0000
+fv Octosoundfiler.position 0.0000
+fv Octosoundfiler.gain 1.0000
+fv Octosoundfiler.inLevel 1.0000
+fv Octosoundfiler.outLevel 1.0000
+fp PartialAnalyser 0.00000 0.00000
+fv PartialAnalyser.gain 1
+fv PartialAnalyser.amp1 0.2328
+fv PartialAnalyser.freq1 220.0007
+fv PartialAnalyser.note1 57
+fv PartialAnalyser.amp2 0.0000
+fv PartialAnalyser.freq2 20.0000
+fv PartialAnalyser.note2 0
+fv PartialAnalyser.amp3 0.0000
+fv PartialAnalyser.freq3 20.0000
+fv PartialAnalyser.note3 0
+fv PartialAnalyser.amp4 0.0000
+fv PartialAnalyser.freq4 20.0000
+fv PartialAnalyser.note4 0
+fv PartialAnalyser.amp5 0.0000
+fv PartialAnalyser.freq5 20.0000
+fv PartialAnalyser.note5 0
+fv PartialAnalyser.amp6 0.0000
+fv PartialAnalyser.freq6 20.0000
+fv PartialAnalyser.note6 0
+fv PartialAnalyser.amp7 0.0000
+fv PartialAnalyser.freq7 20.0000
+fv PartialAnalyser.note7 0
+fv PartialAnalyser.amp8 0.0000
+fv PartialAnalyser.freq8 20.0000
+fv PartialAnalyser.note8 0
+fv PartialAnalyser.amp9 0.0000
+fv PartialAnalyser.freq9 20.0000
+fv PartialAnalyser.note9 0
+fv PartialAnalyser.amp10 0.0000
+fv PartialAnalyser.freq10 20.0000
+fv PartialAnalyser.note10 0
+fp PerceptualLoudness 0.00000 0.00000
+fv PerceptualLoudness.inLevel 1.0000
+fv PerceptualLoudness.loudness 45
+fv PerceptualLoudness.intensity 84
+fv PerceptualLoudness.intensityY 84.0000
+fv PerceptualLoudness.loudnessS 45.0000
+fp PercussiveOnsetDetector 0.00000 0.00000
+fv PercussiveOnsetDetector.inLevel 1.0000
+fv PercussiveOnsetDetector.onset 62.9487
+fp PhaseVocoder 0.12005 0.50912
+fv PhaseVocoder.bypass 0
+fv PhaseVocoder.inLevel 1.0000
+fv PhaseVocoder.outLevel 1.0000
+fv PhaseVocoder.mix 0.5000
+fv PhaseVocoder.loadSound 
+fv PhaseVocoder.recSound 0
+fv PhaseVocoder.recLength 10.0000
+fv PhaseVocoder.relPosition 0.1000
+fv PhaseVocoder.pitchTransposition 0.0000
+fp Phaser 0.27500 1.30187
+fv Phaser.bypass 0
+fv Phaser.inLevel 1.0000
+fv Phaser.outLevel 1.0000
+fv Phaser.mix 0.5000
+fv Phaser.modFrequency 0.1000
+fv Phaser.modDepth 1.0000
+fp PianoReverbMSP 0.22139 0.73903
+fv PianoReverbMSP.bypass 0
+fv PianoReverbMSP.inLevel 1.0000
+fv PianoReverbMSP.fftSize 2048
+fv PianoReverbMSP.reverbTime 10.0000
+fv PianoReverbMSP.outLevel 1.0000
+fv PianoReverbMSP.mix 0.5000
+fp PianoReverbStrings 0.21336 0.65086
+fv PianoReverbStrings.bypass 0
+fv PianoReverbStrings.inLevel 1.0000
+fv PianoReverbStrings.outLevel 1.0000
+fv PianoReverbStrings.mix 0.5000
+fp PingPongDelay 0.19688 0.61167
+fv PingPongDelay.bypass 0
+fv PingPongDelay.inLevel 1.0000
+fv PingPongDelay.outLevel 1.0000
+fv PingPongDelay.mix 0.5000
+fv PingPongDelay.delayTime 0.5000
+fv PingPongDelay.ratioOne 2.0000
+fv PingPongDelay.ratioTwo 3.0000
+fv PingPongDelay.feedback 0.5000
+fv PingPongDelay.frequency 22050.0000
+fv PingPongDelay.q 2.0000
+fp PitchDetector 0.00000 0.00000
+fv PitchDetector.inLevel 1.0000
+fv PitchDetector.pitch 5690
+fv PitchDetector.frequency 218.7195
+fp PitchShifter 0.21036 0.65240
+fv PitchShifter.bypass 0
+fv PitchShifter.inLevel 1.0000
+fv PitchShifter.outLevel 1.0000
+fv PitchShifter.mix 0.5000
+fv PitchShifter.pitch 0.0000
+fv PitchShifter.windowSize 0.0400
+fp OnsetDetector 0.00000 0.00000
+fv OnsetDetector.inLevel 1.0000
+fv OnsetDetector.onset 84.6101
+fp PluckedString 0.00000 0.00000
+fv PluckedString.mute 0
+fv PluckedString.gain 1.0000
+fv PluckedString.chNumber 0
+fv PluckedString.decay 0.2000
+fv PluckedString.filter 10000.0000
+fp QuadAudioIn 0.16977 0.72000
+fv QuadAudioIn.startChannel 1
+fv QuadAudioIn.outLevel 0.8000
+fv QuadAudioIn.vu1 -6.2093
+fv QuadAudioIn.vu2 -6.2093
+fv QuadAudioIn.vu3 -120.0000
+fv QuadAudioIn.vu4 -120.0000
+fp QuadAudioOut 0.16977 0.72000
+fv QuadAudioOut.startChannel 1
+fv QuadAudioOut.inLevel 1.0000
+fv QuadAudioOut.vu1 -6.2023
+fv QuadAudioOut.vu2 -120.0000
+fv QuadAudioOut.vu3 -120.0000
+fv QuadAudioOut.vu4 -120.0000
+fp QuadAutoPanner 0.00000 0.00000
+fv QuadAutoPanner.bypass 0
+fv QuadAutoPanner.inLevel 1.0000
+fv QuadAutoPanner.outLevel 1.0000
+fv QuadAutoPanner.mix 1.0000
+fv QuadAutoPanner.auto 0
+fv QuadAutoPanner.rate 1.0000
+fv QuadAutoPanner.panning 0.0000
+fv QuadAutoPanner.position 0.0000
+fp QuadGranularSynthesizer 0.12005 0.50912
+fv QuadGranularSynthesizer.bypass 0
+fv QuadGranularSynthesizer.inLevel 1.0000
+fv QuadGranularSynthesizer.outLevel 1.0000
+fv QuadGranularSynthesizer.mix 0.5000
+fv QuadGranularSynthesizer.loadSound 
+fv QuadGranularSynthesizer.recSound 0
+fv QuadGranularSynthesizer.recLength 10.0000
+fv QuadGranularSynthesizer.nrOfPositions 0
+fv QuadGranularSynthesizer.maxNrGrains 16
+fv QuadGranularSynthesizer.attackTime 15.0000
+fv QuadGranularSynthesizer.releaseTime 15.0000
+fv QuadGranularSynthesizer.maxGrainSize 0.0500
+fv QuadGranularSynthesizer.maxPitchTransposition 0.0000
+fv QuadGranularSynthesizer.minGrainSize 0.0300
+fv QuadGranularSynthesizer.minPitchTransposition 0.0000
+fv QuadGranularSynthesizer.maxCloudDensity 8
+fv QuadGranularSynthesizer.maxSpatialPosition 0.7000
+fv QuadGranularSynthesizer.minCloudDensity 5
+fv QuadGranularSynthesizer.minSpatialPosition 0.3000
+fv QuadGranularSynthesizer.devCloudPos 0.2000
+fv QuadGranularSynthesizer.relMeanPos 0.1000
+fp QuadHarmoniser 0.15925 0.63626
+fv QuadHarmoniser.bypass 0
+fv QuadHarmoniser.inLevel 1.0000
+fv QuadHarmoniser.outLevel 1.0000
+fv QuadHarmoniser.mix 0.5000
+fv QuadHarmoniser.pitch1 -600
+fv QuadHarmoniser.pitch2 -200
+fv QuadHarmoniser.pitch3 200.0000
+fv QuadHarmoniser.pitch4 600
+fv QuadHarmoniser.windowSize 2048
+fp QuadPanner 0.00000 0.00000
+fv QuadPanner.bypass 0
+fv QuadPanner.inLevel 1.0000
+fv QuadPanner.outLevel 1.0000
+fv QuadPanner.mix 1.0000
+fv QuadPanner.panning 0.0000
+fp QuadSoundfiler 0.00000 0.00000
+fv QuadSoundfiler.mute 0
+fv QuadSoundfiler.record 0
+fv QuadSoundfiler.play 0
+fv QuadSoundfiler.loop 0
+fv QuadSoundfiler.speed 1.0000
+fv QuadSoundfiler.position 0.0000
+fv QuadSoundfiler.gain 1.0000
+fv QuadSoundfiler.inLevel 1.0000
+fv QuadSoundfiler.outLevel 1.0000
+fp QuadXYPanner 0.08489 0.36000
+fv QuadXYPanner.bypass 0
+fv QuadXYPanner.inLevel 1.0000
+fv QuadXYPanner.outLevel 1.0000
+fv QuadXYPanner.mix 1.0000
+fv QuadXYPanner.xPosition 0.5000
+fv QuadXYPanner.yPosition 0.5000
+fp ResonantBandPass 0.07592 0.13980
+fv ResonantBandPass.bypass 0
+fv ResonantBandPass.inLevel 1.0000
+fv ResonantBandPass.outLevel 1.0000
+fv ResonantBandPass.mix 1.0000
+fv ResonantBandPass.frequency 440.0000
+fv ResonantBandPass.q 1.0000
+fv ResonantBandPass.normalisation peak
+fp ResonantHarmonicFilter 0.16977 0.72000
+fv ResonantHarmonicFilter.bypass 0
+fv ResonantHarmonicFilter.inLevel 1.0000
+fv ResonantHarmonicFilter.gain 1.0000
+fv ResonantHarmonicFilter.mix 1.0000
+fv ResonantHarmonicFilter.frequency 440.0000
+fv ResonantHarmonicFilter.q 100.0000
+fv ResonantHarmonicFilter.hf1 0
+fv ResonantHarmonicFilter.hf2 0
+fv ResonantHarmonicFilter.hf3 0
+fv ResonantHarmonicFilter.hf4 0
+fv ResonantHarmonicFilter.hf5 0
+fv ResonantHarmonicFilter.hf6 0
+fv ResonantHarmonicFilter.hf7 0
+fv ResonantHarmonicFilter.hf8 0
+fv ResonantHarmonicFilter.hf9 0
+fv ResonantHarmonicFilter.hf10 0
+fv ResonantHarmonicFilter.hf11 0
+fv ResonantHarmonicFilter.hf12 0
+fv ResonantHarmonicFilter.hf13 0
+fv ResonantHarmonicFilter.hf14 0
+fv ResonantHarmonicFilter.hf15 0
+fv ResonantHarmonicFilter.hf16 0
+fv ResonantHarmonicFilter.ghf 30.0000
+fp ResonantHighPass 0.01392 0.65858
+fv ResonantHighPass.bypass 0
+fv ResonantHighPass.inLevel 1.0000
+fv ResonantHighPass.outLevel 1.0000
+fv ResonantHighPass.mix 1.0000
+fv ResonantHighPass.frequency 440.0000
+fv ResonantHighPass.q 1.0000
+fp ResonantLowPass 0.20885 0.29543
+fv ResonantLowPass.bypass 0
+fv ResonantLowPass.inLevel 1.0000
+fv ResonantLowPass.outLevel 1.0000
+fv ResonantLowPass.mix 1.0000
+fv ResonantLowPass.frequency 440.0000
+fv ResonantLowPass.q 1.0000
+fp Reverb 0.20554 0.56757
+fv Reverb.bypass 0
+fv Reverb.inLevel 1.0000
+fv Reverb.outLevel 1.0000
+fv Reverb.mix 0.5000
+fv Reverb.decayHigh 1.5000
+fv Reverb.decayLow 3.5000
+fv Reverb.decayMid 2.5000
+fv Reverb.decayMidHigh 2.0000
+fv Reverb.decayMidLow 3.0000
+fv Reverb.roomVolume 350.0000
+fv Reverb.earlyLateBalance 0.5000
+fv Reverb.sourceDistance 0.5000
+fv Reverb.roomShape 0.5000
+fp RingModulator 0.20446 0.78377
+fv RingModulator.bypass 0
+fv RingModulator.inLevel 1.0000
+fv RingModulator.outLevel 1.0000
+fv RingModulator.mix 0.5000
+fv RingModulator.lfoShape sine
+fv RingModulator.lfoAmount 0.5000
+fv RingModulator.lfoRate 0.2000
+fv RingModulator.modFreq 3.0000
+fv RingModulator.modDrive 1.0000
+fp Soundfiler 0.00000 0.00000
+fv Soundfiler.mute 0
+fv Soundfiler.record 0
+fv Soundfiler.play 0
+fv Soundfiler.loop 0
+fv Soundfiler.speed 1.0000
+fv Soundfiler.position 0.0000
+fv Soundfiler.gain 1.0000
+fv Soundfiler.inLevel 1.0000
+fv Soundfiler.outLevel 1.0000
+fp SpectralDelay 0.06073 0.62053
+fv SpectralDelay.bypass 0
+fv SpectralDelay.inLevel 1.0000
+fv SpectralDelay.outLevel 1.0000
+fv SpectralDelay.mix 0.5000
+fv SpectralDelay.delay1 0.2000
+fv SpectralDelay.delay2 0.4000
+fv SpectralDelay.delay3 0.6000
+fv SpectralDelay.delay4 1.0000
+fv SpectralDelay.delay5 1.2000
+fv SpectralDelay.delay6 1.4000
+fv SpectralDelay.delay7 1.6000
+fv SpectralDelay.delay8 1.8000
+fv SpectralDelay.feedback1 0.5000
+fv SpectralDelay.feedback2 0.5000
+fv SpectralDelay.feedback3 0.5000
+fv SpectralDelay.feedback4 0.5000
+fv SpectralDelay.feedback5 0.5000
+fv SpectralDelay.feedback6 0.5000
+fv SpectralDelay.feedback7 0.5000
+fv SpectralDelay.feedback8 0.5000
+fp SpectralFreeze 0.12005 0.50912
+fv SpectralFreeze.bypass 0
+fv SpectralFreeze.inLevel 1.0000
+fv SpectralFreeze.outLevel 1.0000
+fv SpectralFreeze.mix 0.5000
+fp SpectralVocoder 0.12005 0.50912
+fv SpectralVocoder.bypass 0
+fv SpectralVocoder.inLevel 1.0000
+fv SpectralVocoder.outLevel 1.0000
+fv SpectralVocoder.mix 0.5000
+fv SpectralVocoder.loadSound 
+fv SpectralVocoder.recSound 0
+fv SpectralVocoder.resizeSound 10.0000
+fv SpectralVocoder.relPosition 0.1000
+fv SpectralVocoder.squelchThreshold -40.0000
+fp StereoChorus 0.11773 0.66068
+fv StereoChorus.bypass 0
+fv StereoChorus.inLevel 1.0000
+fv StereoChorus.outLevel 1.0000
+fv StereoChorus.mix 0.5000
+fv StereoChorus.intensity 1.0000
+fv StereoChorus.frequency 2.0000
+fp StereoGranularSynthesizer 0.00000 0.00000
+fv StereoGranularSynthesizer.bypass 0
+fv StereoGranularSynthesizer.inLevel 1.0000
+fv StereoGranularSynthesizer.outLevel 1.0000
+fv StereoGranularSynthesizer.mix 0.5000
+fv StereoGranularSynthesizer.loadSound 
+fv StereoGranularSynthesizer.recSound 0
+fv StereoGranularSynthesizer.recLength 10.0000
+fv StereoGranularSynthesizer.nrOfPositions 0
+fv StereoGranularSynthesizer.maxNrGrains 16
+fv StereoGranularSynthesizer.attackTime 15.0000
+fv StereoGranularSynthesizer.releaseTime 15.0000
+fv StereoGranularSynthesizer.maxGrainSize 0.0500
+fv StereoGranularSynthesizer.maxPitchTransposition 0.0000
+fv StereoGranularSynthesizer.minGrainSize 0.0300
+fv StereoGranularSynthesizer.minPitchTransposition 0.0000
+fv StereoGranularSynthesizer.maxCloudDensity 8
+fv StereoGranularSynthesizer.maxSpatialPosition 0.7000
+fv StereoGranularSynthesizer.minCloudDensity 5
+fv StereoGranularSynthesizer.minSpatialPosition 0.3000
+fv StereoGranularSynthesizer.devCloudPos 0.2000
+fv StereoGranularSynthesizer.relMeanPos 0.1000
+fp StereoPanner 0.12005 0.50912
+fv StereoPanner.bypass 0
+fv StereoPanner.inLevel 1.0000
+fv StereoPanner.outLevel 1.0000
+fv StereoPanner.panning 0.0000
+fp StereoReverb 0.14863 0.51805
+fv StereoReverb.bypass 0
+fv StereoReverb.inLevel 1.0000
+fv StereoReverb.outLevel 1.0000
+fv StereoReverb.mix 0.5000
+fv StereoReverb.decayHigh 1.5000
+fv StereoReverb.decayLow 3.5000
+fv StereoReverb.decayMid 2.5000
+fv StereoReverb.decayMidHigh 2.0000
+fv StereoReverb.decayMidLow 3.0000
+fv StereoReverb.roomVolume 350.0000
+fv StereoReverb.earlyLateBalance 0.5000
+fv StereoReverb.sourceDistance 0.5000
+fv StereoReverb.firstEchoPanning 0.5000
+fv StereoReverb.roomShape 0.5000
+fp StereoReverbTwo 0.10966 0.46244
+fv StereoReverbTwo.bypass 0
+fv StereoReverbTwo.inLevel 1.0000
+fv StereoReverbTwo.outLevel 1.0000
+fv StereoReverbTwo.mix 0.5000
+fv StereoReverbTwo.roomsize 0.8500
+fv StereoReverbTwo.damping 0.5000
+fv StereoReverbTwo.width 1.0000
+fv StereoReverbTwo.freeze 0
+fp StereoSoundfiler 0.00000 0.00000
+fv StereoSoundfiler.mute 0
+fv StereoSoundfiler.record 0
+fv StereoSoundfiler.play 0
+fv StereoSoundfiler.loop 0
+fv StereoSoundfiler.speed 1.0000
+fv StereoSoundfiler.position 0.0000
+fv StereoSoundfiler.gain 1.0000
+fv StereoSoundfiler.inLevel 1.0000
+fv StereoSoundfiler.outLevel 1.0000
+fp SubSynth 0.00000 0.00000
+fv SubSynth.mute 0
+fv SubSynth.gain 1.0000
+fv SubSynth.chNumber 0
+fv SubSynth.waveform 1
+fv SubSynth.attack 0.0050
+fv SubSynth.decay 0.1000
+fv SubSynth.sustain 0.8000
+fv SubSynth.release 0.2000
+fv SubSynth.formant1freq 200.0000
+fv SubSynth.formant1Q 0.5000
+fv SubSynth.formant2freq 800.0000
+fv SubSynth.formant2Q 0.1000
+fv SubSynth.lp 0.0000
+fv SubSynth.lpmod 5000.0000
+fp TapDelay 0.21707 0.90301
+fv TapDelay.bypass 0
+fv TapDelay.inLevel 1.0000
+fv TapDelay.outLevel 1.0000
+fv TapDelay.mix 0.5000
+fv TapDelay.delayTime 0.5000
+fv TapDelay.feedback 0.5000
+fv TapDelay.frequency 22050.0000
+fp TempoDetector 0.00000 0.00000
+fv TempoDetector.inLevel 1.0000
+fv TempoDetector.currentTempo 1
+fv TempoDetector.resolution 500.0000
+fv TempoDetector.complessiveTempo 0.0000
+fp TestSource 0.70710 1.00000
+fv TestSource.mute 0
+fv TestSource.gain 1.0000
+fv TestSource.frequency 440.0000
+fv TestSource.source sine
+fp VibratoChorus 0.11184 0.43653
+fv VibratoChorus.bypass 0
+fv VibratoChorus.inLevel 1.0000
+fv VibratoChorus.outLevel 1.0000
+fv VibratoChorus.mix 0.5000
+fv VibratoChorus.intensity 1.0000
+fv VibratoChorus.frequency 2.0000

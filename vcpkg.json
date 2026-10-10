@@ -9,6 +9,7 @@
     { "name": "fftw3", "platform": "windows | osx" },
     { "name": "portaudio", "platform": "windows | osx" },
     { "name": "portmidi", "platform": "windows | osx" },
-    { "name": "gtest", "platform": "windows | osx" }
+    { "name": "gtest", "platform": "windows | osx" },
+    { "name": "pthreads", "platform": "windows" }
   ]
 }

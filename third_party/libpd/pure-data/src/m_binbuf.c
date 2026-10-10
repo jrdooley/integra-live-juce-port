@@ -6,16 +6,28 @@
 #include <stdlib.h>
 #include "m_pd.h"
 #include "s_stuff.h"
+#include "g_canvas.h"
 #include <stdio.h>
+#include <errno.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 #ifdef _WIN32
 #include <io.h>
 #endif
-#include <fcntl.h>
 #include <string.h>
 #include <stdarg.h>
+
+#include "m_private_utils.h"
+
+    /* returns the start of a valid dollar or dollsym */
+static const char *str_dollar(const char *s)
+{
+    for (; (s = strchr(s, '$')); ++s)
+        if (('0' <= s[1] && s[1] <= '9'))
+            break;
+    return s;
+}
 
 struct _binbuf
 {
@@ -37,7 +49,7 @@ void binbuf_free(t_binbuf *x)
     t_freebytes(x,  sizeof(*x));
 }
 
-t_binbuf *binbuf_duplicate(t_binbuf *y)
+t_binbuf *binbuf_duplicate(const t_binbuf *y)
 {
     t_binbuf *x = (t_binbuf *)t_getbytes(sizeof(*x));
     x->b_n = y->b_n;
@@ -53,16 +65,15 @@ void binbuf_clear(t_binbuf *x)
 }
 
     /* convert text to a binbuf */
-void binbuf_text(t_binbuf *x, char *text, size_t size)
+void binbuf_text(t_binbuf *x, const char *text, size_t size)
 {
     char buf[MAXPDSTRING+1], *bufp, *ebuf = buf+MAXPDSTRING;
     const char *textp = text, *etext = text+size;
     t_atom *ap;
     int nalloc = 16, natom = 0;
-    t_freebytes(x->b_vec, x->b_n * sizeof(*x->b_vec));
-    x->b_vec = t_getbytes(nalloc * sizeof(*x->b_vec));
+    binbuf_clear(x);
+    if (!binbuf_resize(x, nalloc)) return;
     ap = x->b_vec;
-    x->b_n = 0;
     while (1)
     {
         int type;
@@ -141,12 +152,17 @@ void binbuf_text(t_binbuf *x, char *text, size_t size)
                         if (!digit) floatstate = -1;
                     }
                 }
-                if (!lastslash && c == '$' && (textp != etext && 
+                if (!lastslash && c == '$' && (textp != etext &&
                     textp[0] >= '0' && textp[0] <= '9'))
                         dollar = 1;
                 if (!slash) bufp++;
+                else if (lastslash)
+                {
+                    bufp++;
+                    slash = 0;
+                }
             }
-            while (textp != etext && bufp != ebuf && 
+            while (textp != etext && bufp != ebuf &&
                 (slash || (*textp != ' ' && *textp != '\n' && *textp != '\r'
                     && *textp != '\t' &&*textp != ',' && *textp != ';')));
             *bufp = 0;
@@ -162,7 +178,7 @@ void binbuf_text(t_binbuf *x, char *text, size_t size)
                 was. */
             else if (dollar)
             {
-                if (buf[0] != '$') 
+                if (buf[0] != '$')
                     dollar = 0;
                 for (bufp = buf+1; *bufp; bufp++)
                     if (*bufp < '0' || *bufp > '9')
@@ -177,26 +193,23 @@ void binbuf_text(t_binbuf *x, char *text, size_t size)
         natom++;
         if (natom == nalloc)
         {
-            x->b_vec = t_resizebytes(x->b_vec, nalloc * sizeof(*x->b_vec),
-                nalloc * (2*sizeof(*x->b_vec)));
+            if (!binbuf_resize(x, nalloc*2)) break;
             nalloc = nalloc * 2;
             ap = x->b_vec + natom;
         }
         if (textp == etext) break;
     }
     /* reallocate the vector to exactly the right size */
-    x->b_vec = t_resizebytes(x->b_vec, nalloc * sizeof(*x->b_vec),
-        natom * sizeof(*x->b_vec));
-    x->b_n = natom;
+    binbuf_resize(x, natom);
 }
 
     /* convert a binbuf to text; no null termination. */
-void binbuf_gettext(t_binbuf *x, char **bufp, int *lengthp)
+void binbuf_gettext(const t_binbuf *x, char **bufp, int *lengthp)
 {
     char *buf = getbytes(0), *newbuf;
     int length = 0;
     char string[MAXPDSTRING];
-    t_atom *ap;
+    const t_atom *ap;
     int indx;
 
     for (ap = x->b_vec, indx = x->b_n; indx--; ap++)
@@ -205,7 +218,7 @@ void binbuf_gettext(t_binbuf *x, char **bufp, int *lengthp)
         if ((ap->a_type == A_SEMI || ap->a_type == A_COMMA) &&
                 length && buf[length-1] == ' ') length--;
         atom_string(ap, string, MAXPDSTRING);
-        newlength = length + strlen(string) + 1;
+        newlength = length + (int)strlen(string) + 1;
         if (!(newbuf = resizebytes(buf, length, newlength))) break;
         buf = newbuf;
         strcpy(buf + length, string);
@@ -215,7 +228,7 @@ void binbuf_gettext(t_binbuf *x, char **bufp, int *lengthp)
     }
     if (length && buf[length-1] == ' ')
     {
-        if (newbuf = t_resizebytes(buf, length, length-1))
+        if ((newbuf = t_resizebytes(buf, length, length-1)))
         {
             buf = newbuf;
             length--;
@@ -228,16 +241,15 @@ void binbuf_gettext(t_binbuf *x, char **bufp, int *lengthp)
 /* LATER improve the out-of-space behavior below.  Also fix this so that
 writing to file doesn't buffer everything together. */
 
-void binbuf_add(t_binbuf *x, int argc, t_atom *argv)
+void binbuf_add(t_binbuf *x, int argc, const t_atom *argv)
 {
-    int newsize = x->b_n + argc, i;
+    int previoussize = x->b_n;
+    int newsize = previoussize + argc, i;
     t_atom *ap;
-    if (ap = t_resizebytes(x->b_vec, x->b_n * sizeof(*x->b_vec),
-        newsize * sizeof(*x->b_vec)))
-            x->b_vec = ap;
-    else
+
+    if (!binbuf_resize(x, newsize))
     {
-        error("binbuf_addmessage: out of space");
+        pd_error(0, "binbuf_addmessage: out of space");
         return;
     }
 #if 0
@@ -245,25 +257,24 @@ void binbuf_add(t_binbuf *x, int argc, t_atom *argv)
     postatom(argc, argv);
     endpost();
 #endif
-    for (ap = x->b_vec + x->b_n, i = argc; i--; ap++)
+    for (ap = x->b_vec + previoussize, i = argc; i--; ap++)
         *ap = *(argv++);
-    x->b_n = newsize;
 }
 
 #define MAXADDMESSV 100
-void binbuf_addv(t_binbuf *x, char *fmt, ...)
+void binbuf_addv(t_binbuf *x, const char *fmt, ...)
 {
     va_list ap;
     t_atom arg[MAXADDMESSV], *at =arg;
     int nargs = 0;
-    char *fp = fmt;
+    const char *fp = fmt;
 
     va_start(ap, fmt);
     while (1)
     {
         if (nargs >= MAXADDMESSV)
         {
-            error("binbuf_addmessv: only %d allowed", MAXADDMESSV);
+            pd_error(0, "binbuf_addmessv: only %d allowed", MAXADDMESSV);
             break;
         }
         switch(*fp++)
@@ -284,17 +295,19 @@ done:
 }
 
 /* add a binbuf to another one for saving.  Semicolons and commas go to
-symbols ";", "'",; the symbol ";" goes to "\;", etc. */
+symbols ";", "'",; and inside symbols, characters ';', ',' and '$' get
+escaped.  LATER also figure out about escaping white space */
 
-void binbuf_addbinbuf(t_binbuf *x, t_binbuf *y)
+void binbuf_addbinbuf(t_binbuf *x, const t_binbuf *y)
 {
     t_binbuf *z = binbuf_new();
-    int i;
+    int i, fixit;
     t_atom *ap;
     binbuf_add(z, y->b_n, y->b_vec);
     for (i = 0, ap = z->b_vec; i < z->b_n; i++, ap++)
     {
         char tbuf[MAXPDSTRING];
+        const char *s;
         switch (ap->a_type)
         {
         case A_FLOAT:
@@ -314,18 +327,22 @@ void binbuf_addbinbuf(t_binbuf *x, t_binbuf *y)
             SETSYMBOL(ap, gensym(tbuf));
             break;
         case A_SYMBOL:
-                /* FIXME make this general */
-            if (!strcmp(ap->a_w.w_symbol->s_name, ";"))
-                SETSYMBOL(ap, gensym(";"));
-            else if (!strcmp(ap->a_w.w_symbol->s_name, ","))
-                SETSYMBOL(ap, gensym(","));
+            for (s = ap->a_w.w_symbol->s_name, fixit = 0; *s; s++)
+                if (*s == ';' || *s == ',' || *s == '$' || *s == '\\')
+                    fixit = 1;
+            if (fixit)
+            {
+                atom_string(ap, tbuf, MAXPDSTRING);
+                SETSYMBOL(ap, gensym(tbuf));
+            }
             break;
         default:
             bug("binbuf_addbinbuf");
         }
     }
-    
+
     binbuf_add(x, z->b_n, z->b_vec);
+    binbuf_free(z);
 }
 
 void binbuf_addsemi(t_binbuf *x)
@@ -338,56 +355,86 @@ void binbuf_addsemi(t_binbuf *x)
 /* Supply atoms to a binbuf from a message, making the opposite changes
 from binbuf_addbinbuf.  The symbol ";" goes to a semicolon, etc. */
 
-void binbuf_restore(t_binbuf *x, int argc, t_atom *argv)
+void binbuf_restore(t_binbuf *x, int argc, const t_atom *argv)
 {
-    int newsize = x->b_n + argc, i;
+    int previoussize = x->b_n;
+    int newsize = previoussize + argc, i;
     t_atom *ap;
-    if (ap = t_resizebytes(x->b_vec, x->b_n * sizeof(*x->b_vec),
-        newsize * sizeof(*x->b_vec)))
-            x->b_vec = ap;
-    else
+
+    if (!binbuf_resize(x, newsize))
     {
-        error("binbuf_addmessage: out of space");
+        pd_error(0, "binbuf_restore: out of space");
         return;
     }
 
-    for (ap = x->b_vec + x->b_n, i = argc; i--; ap++)
+    for (ap = x->b_vec + previoussize, i = argc; i--; ap++)
     {
         if (argv->a_type == A_SYMBOL)
         {
-            char *str = argv->a_w.w_symbol->s_name, *str2;
+            const char *str = argv->a_w.w_symbol->s_name, *str2;
             if (!strcmp(str, ";")) SETSEMI(ap);
             else if (!strcmp(str, ",")) SETCOMMA(ap);
-            else if ((str2 = strchr(str, '$')) && str2[1] >= '0'
-                && str2[1] <= '9')
+            else
             {
-                int dollsym = 0;
-                if (*str != '$')
-                    dollsym = 1;
-                else for (str2 = str + 1; *str2; str2++)
-                    if (*str2 < '0' || *str2 > '9')
+                char buf[MAXPDSTRING], *sp1;
+                const char *sp2, *usestr;
+                int dollar = 0;
+                if (strchr(str, '\\'))
                 {
-                    dollsym = 1;
-                    break;
+                    int slashed = 0;
+                    for (sp1 = buf, sp2 = argv->a_w.w_symbol->s_name;
+                        *sp2 && sp1 < buf + (MAXPDSTRING-1);
+                            sp2++)
+                    {
+                        if (slashed)
+                            *sp1++ = *sp2, slashed = 0;
+                        else if (*sp2 == '\\')
+                            slashed = 1;
+                        else
+                        {
+                            if (*sp2 == '$' && sp2[1] >= '0' && sp2[1] <= '9')
+                                dollar = 1;
+                            *sp1++ = *sp2;
+                            slashed = 0;
+                        }
+                    }
+                    *sp1 = 0;
+                    usestr = buf;
                 }
-                if (dollsym)
-                    SETDOLLSYM(ap, gensym(str));
-                else
+                else usestr = str;
+                if (dollar || (usestr == str && (str2 = str_dollar(usestr))))
                 {
-                    int dollar = 0;
-                    sscanf(argv->a_w.w_symbol->s_name + 1, "%d", &dollar);
-                    SETDOLLAR(ap, dollar);
+                    int dollsym = 0;
+                    if (*usestr != '$')
+                        dollsym = 1;
+                    else for (str2 = usestr + 1; *str2; str2++)
+                        if (*str2 < '0' || *str2 > '9')
+                    {
+                        dollsym = 1;
+                        break;
+                    }
+                    if (dollsym)
+                        SETDOLLSYM(ap, usestr == str ?
+                            argv->a_w.w_symbol : gensym(usestr));
+                    else
+                    {
+                        int dollar = 0;
+                        sscanf(usestr + 1, "%d", &dollar);
+                        SETDOLLAR(ap, dollar);
+                    }
                 }
+                else SETSYMBOL(ap, usestr == str ?
+                    argv->a_w.w_symbol : gensym(usestr));
+                /* fprintf(stderr, "arg %s -> binbuf %s type %d\n",
+                    argv->a_w.w_symbol->s_name, usestr, ap->a_type); */
             }
-            else *ap = *argv;
             argv++;
         }
         else *ap = *(argv++);
     }
-    x->b_n = newsize;
 }
 
-void binbuf_print(t_binbuf *x)
+void binbuf_print(const t_binbuf *x)
 {
     int i, startedpost = 0, newline = 1;
     for (i = 0; i < x->b_n; i++)
@@ -401,22 +448,31 @@ void binbuf_print(t_binbuf *x)
         postatom(1, x->b_vec + i);
         if (x->b_vec[i].a_type == A_SEMI)
             newline = 1;
-        else newline = 0; 
+        else newline = 0;
     }
     if (startedpost) endpost();
 }
 
-int binbuf_getnatom(t_binbuf *x)
+int binbuf_getnatom(const t_binbuf *x)
 {
     return (x->b_n);
 }
 
-t_atom *binbuf_getvec(t_binbuf *x)
+t_atom *binbuf_getvec(const t_binbuf *x)
 {
     return (x->b_vec);
 }
 
-int canvas_getdollarzero( void);
+int binbuf_resize(t_binbuf *x, int newsize)
+{
+    t_atom *new = t_resizebytes(x->b_vec,
+        x->b_n * sizeof(*x->b_vec), newsize * sizeof(*x->b_vec));
+    if (new)
+        x->b_vec = new, x->b_n = newsize;
+    return (new != 0);
+}
+
+int canvas_getdollarzero(void);
 
 /* JMZ:
  * s points to the first character after the $
@@ -427,75 +483,71 @@ int canvas_getdollarzero( void);
  * the return value holds the length of the $arg (in most cases: 1)
  * buf holds the expanded $arg
  *
- * if some error occured, "-1" is returned
+ * if some error occurred, "-1" is returned
  *
  * e.g. "$1-bla" with list "10 20 30"
  * s="1-bla"
  * buf="10"
  * return value = 1; (s+1=="-bla")
  */
-int binbuf_expanddollsym(char*s, char*buf,t_atom dollar0, int ac, t_atom *av, int tonew)
+static int binbuf_expanddollsym(const char *s, char *buf, t_atom *dollar0,
+    int ac, const t_atom *av, int tonew)
 {
-  int argno=atol(s);
-  int arglen=0;
-  char*cs=s;
-  char c=*cs;
-  *buf=0;
+    char *cs;
+    int argno = (int)strtol(s, &cs, 10);
 
-  while(c&&(c>='0')&&(c<='9')){
-    c=*cs++;
-    arglen++;
-  }
-
-  if (cs==s) { /* invalid $-expansion (like "$bla") */
-    sprintf(buf, "$");
-    return 0;
-  }
-  else if (argno < 0 || argno > ac) /* undefined argument */
+    *buf=0;
+    if (cs==s)      /* invalid $-expansion (like "$bla") */
     {
-      if(!tonew)return 0;
-      sprintf(buf, "$%d", argno);
+        sprintf(buf, "$");
+        return 0;
     }
-  else if (argno == 0){ /* $0 */
-    atom_string(&dollar0, buf, MAXPDSTRING/2-1);
-  }
-  else{ /* fine! */
-    atom_string(av+(argno-1), buf, MAXPDSTRING/2-1);
-  }
-  return (arglen-1);
+    else if (argno < 0 || argno > ac) /* undefined argument */
+    {
+        if (!tonew)
+            return 0;
+        sprintf(buf, "$%d", argno);
+    }
+    else        /* well formed; expand it */
+    {
+        const t_atom *dollarvalue = (argno ? &av[argno-1] : dollar0);
+        if (dollarvalue->a_type == A_SYMBOL)
+        {
+            strncpy(buf, dollarvalue->a_w.w_symbol->s_name, MAXPDSTRING/2-1);
+            buf[MAXPDSTRING/2-2] = 0;
+        }
+        else atom_string(dollarvalue, buf, MAXPDSTRING/2-1);
+    }
+    return (cs - s);
 }
 
+/* expand any '$' variables in the symbol s.  "tonow" is set if this is in the
+context of a message to create a new object; in this case out-of-range '$'
+args become 0 - otherwise zero is returned and the caller has to check the
+result. */
 /* LATER remove the dependence on the current canvas for $0; should be another
 argument. */
-t_symbol *binbuf_realizedollsym(t_symbol *s, int ac, t_atom *av, int tonew)
+t_symbol *binbuf_realizedollsym(t_symbol *s, int ac, const t_atom *av,
+    int tonew)
 {
     char buf[MAXPDSTRING];
     char buf2[MAXPDSTRING];
-    char*str=s->s_name;
+    const char*str=s->s_name;
     char*substr;
-    int next=0, i=MAXPDSTRING;
+    int next=0;
     t_atom dollarnull;
     SETFLOAT(&dollarnull, canvas_getdollarzero());
-    while(i--)buf2[i]=0;
+    buf2[0] = buf2[MAXPDSTRING-1] = 0;
 
-#if 1
-    /* JMZ: currently, a symbol is detected to be A_DOLLSYM if it starts with '$'
-     * the leading $ is stripped and the rest stored in "s"
-     * i would suggest to NOT strip the leading $
-     * and make everything a A_DOLLSYM that contains(!) a $
-     *
-     * whenever this happened, enable this code
-     */
     substr=strchr(str, '$');
     if (!substr || substr-str >= MAXPDSTRING)
         return (s);
 
-    strncat(buf2, str, (substr-str));
+    strncpy(buf2, str, (substr-str));
+    buf2[substr-str] = 0;
     str=substr+1;
 
-#endif
-
-    while((next=binbuf_expanddollsym(str, buf, dollarnull, ac, av, tonew))>=0)
+    while((next=binbuf_expanddollsym(str, buf, &dollarnull, ac, av, tonew))>=0)
     {
         /*
         * JMZ: i am not sure what this means, so i might have broken it
@@ -505,22 +557,24 @@ t_symbol *binbuf_realizedollsym(t_symbol *s, int ac, t_atom *av, int tonew)
         * this happens, when expanding in a message-box, but does not happen
         * when the A_DOLLSYM is the name of a subpatch
         */
-        if(!tonew&&(0==next)&&(0==*buf))
+        if (!tonew && (0==next) && (0==*buf))
         {
-            return 0; /* JMZ: this should mimick the original behaviour */
+            return 0; /* JMZ: this should mimic the original behaviour */
         }
 
-        strncat(buf2, buf, MAXPDSTRING/2-1);
+        strncat(buf2, buf, MAXPDSTRING-strlen(buf2)-1);
         str+=next;
         substr=strchr(str, '$');
-        if(substr)
+        if (substr)
         {
-            strncat(buf2, str, (substr-str));
+            unsigned long n = substr-str;
+            if(n>MAXPDSTRING-strlen(buf2)-1) n=MAXPDSTRING-strlen(buf2)-1;
+            strncat(buf2, str, n);
             str=substr+1;
-        } 
+        }
         else
         {
-            strcat(buf2, str);
+            strncat(buf2, str, MAXPDSTRING-strlen(buf2)-1);
             goto done;
         }
     }
@@ -530,33 +584,21 @@ done:
 
 #define SMALLMSG 5
 #define HUGEMSG 1000
-#ifdef _WIN32
-#include <malloc.h>
-#else
-#include <alloca.h>
-#endif
-#if HAVE_ALLOCA
-#define ATOMS_ALLOCA(x, n) ((x) = (t_atom *)((n) < HUGEMSG ?  \
-        alloca((n) * sizeof(t_atom)) : getbytes((n) * sizeof(t_atom))))
-#define ATOMS_FREEA(x, n) ( \
-    ((n) < HUGEMSG || (freebytes((x), (n) * sizeof(t_atom)), 0)))
-#else
-#define ATOMS_ALLOCA(x, n) ((x) = (t_atom *)getbytes((n) * sizeof(t_atom)))
-#define ATOMS_FREEA(x, n) (freebytes((x), (n) * sizeof(t_atom)))
-#endif
 
-void binbuf_eval(t_binbuf *x, t_pd *target, int argc, t_atom *argv)
+void binbuf_eval(const t_binbuf *x, t_pd *target, int argc, const t_atom *argv)
 {
     t_atom smallstack[SMALLMSG], *mstack, *msp;
-    t_atom *at = x->b_vec;
+    const t_atom *at = x->b_vec;
     int ac = x->b_n;
     int nargs, maxnargs = 0;
+    t_pd *initial_target = target;
+
     if (ac <= SMALLMSG)
         mstack = smallstack;
     else
     {
 #if 1
-            /* count number of args in biggest message.  The wierd
+            /* count number of args in biggest message.  The weird
             treatment of "pd_objectmaker" is because when the message
             goes out to objectmaker, commas and semis are passed
             on as regular args (see below).  We're tacitly assuming here
@@ -580,14 +622,14 @@ void binbuf_eval(t_binbuf *x, t_pd *target, int argc, t_atom *argv)
         }
         if (maxnargs <= SMALLMSG)
             mstack = smallstack;
-        else ATOMS_ALLOCA(mstack, maxnargs);
+        else ALLOCA(t_atom, mstack, maxnargs, HUGEMSG);
 #else
             /* just pessimistically allocate enough to hold everything
             at once.  This turned out to run slower in a simple benchmark
             I tried, perhaps because the extra memory allocation
             hurt the cache hit rate. */
         maxnargs = ac;
-        ATOMS_ALLOCA(mstack, maxnargs);
+        ALLOCA(t_atom, mstack, maxnargs, HUGEMSG);
 #endif
 
     }
@@ -606,15 +648,15 @@ void binbuf_eval(t_binbuf *x, t_pd *target, int argc, t_atom *argv)
             {
                 if (at->a_w.w_index <= 0 || at->a_w.w_index > argc)
                 {
-                    error("$%d: not enough arguments supplied",
+                    pd_error(initial_target, "$%d: not enough arguments supplied",
                             at->a_w.w_index);
-                    goto cleanup; 
+                    goto cleanup;
                 }
                 else if (argv[at->a_w.w_index-1].a_type != A_SYMBOL)
                 {
-                    error("$%d: symbol needed as message destination",
+                    pd_error(initial_target, "$%d: symbol needed as message destination",
                         at->a_w.w_index);
-                    goto cleanup; 
+                    goto cleanup;
                 }
                 else s = argv[at->a_w.w_index-1].a_w.w_symbol;
             }
@@ -623,7 +665,7 @@ void binbuf_eval(t_binbuf *x, t_pd *target, int argc, t_atom *argv)
                 if (!(s = binbuf_realizedollsym(at->a_w.w_symbol,
                     argc, argv, 0)))
                 {
-                    error("$%s: not enough arguments supplied",
+                    pd_error(initial_target, "$%s: not enough arguments supplied",
                         at->a_w.w_symbol->s_name);
                     goto cleanup;
                 }
@@ -631,7 +673,7 @@ void binbuf_eval(t_binbuf *x, t_pd *target, int argc, t_atom *argv)
             else s = atom_getsymbol(at);
             if (!(target = s->s_thing))
             {
-                error("%s: no such object", s->s_name);
+                pd_error(initial_target, "%s: no such object ", s->s_name);
             cleanup:
                 do at++, ac--;
                 while (ac && at->a_type != A_SEMI);
@@ -688,7 +730,7 @@ void binbuf_eval(t_binbuf *x, t_pd *target, int argc, t_atom *argv)
                         SETFLOAT(msp, 0);
                     else
                     {
-                        error("$%d: argument number out of range",
+                        pd_error(target, "$%d: argument number out of range",
                             at->a_w.w_index);
                         SETFLOAT(msp, 0);
                     }
@@ -699,7 +741,7 @@ void binbuf_eval(t_binbuf *x, t_pd *target, int argc, t_atom *argv)
                     target == &pd_objectmaker);
                 if (!s9)
                 {
-                    error("%s: argument number out of range", at->a_w.w_symbol->s_name);
+                    pd_error(target, "%s: argument number out of range", at->a_w.w_symbol->s_name);
                     SETSYMBOL(msp, at->a_w.w_symbol);
                 }
                 else SETSYMBOL(msp, s9);
@@ -725,6 +767,13 @@ void binbuf_eval(t_binbuf *x, t_pd *target, int argc, t_atom *argv)
                 if (nargs == 1) pd_float(target, mstack->a_w.w_float);
                 else pd_list(target, 0, nargs, mstack);
                 break;
+            case A_POINTER:
+                if (nargs == 1) pd_pointer(target, mstack->a_w.w_gpointer);
+                else pd_list(target, 0, nargs, mstack);
+                break;
+            default:
+                bug("bad selector");
+                break;
             }
         }
         msp = mstack;
@@ -733,56 +782,43 @@ void binbuf_eval(t_binbuf *x, t_pd *target, int argc, t_atom *argv)
         at++;
         ac--;
     }
-broken: 
+broken:
     if (maxnargs > SMALLMSG)
-         ATOMS_FREEA(mstack, maxnargs);
+         FREEA(t_atom, mstack, maxnargs, HUGEMSG);
 }
 
-static int binbuf_doopen(char *s, int mode)
+int binbuf_read(t_binbuf *b, const char *filename, const char *dirname, int flag)
 {
-    char namebuf[MAXPDSTRING];
-#ifdef _WIN32
-    mode |= O_BINARY;
-#endif
-    sys_bashfilename(s, namebuf);
-    return (open(namebuf, mode));
-}
-
-static FILE *binbuf_dofopen(char *s, char *mode)
-{
-    char namebuf[MAXPDSTRING];
-    sys_bashfilename(s, namebuf);
-    return (fopen(namebuf, mode));
-}
-
-int binbuf_read(t_binbuf *b, char *filename, char *dirname, int crflag)
-{
-    long length;
+    long length, length0;
     int fd;
     int readret;
-    char *buf;
+    char *buf, *buf0;
     char namebuf[MAXPDSTRING];
-    
-    namebuf[0] = 0;
+
     if (*dirname)
-        strcat(namebuf, dirname), strcat(namebuf, "/");
-    strcat(namebuf, filename);
-    
-    if ((fd = binbuf_doopen(namebuf, 0)) < 0)
+        pd_snprintf(namebuf, MAXPDSTRING-1, "%s/%s", dirname, filename);
+    else
+        pd_snprintf(namebuf, MAXPDSTRING-1, "%s", filename);
+    namebuf[MAXPDSTRING-1] = 0;
+
+    if ((fd = sys_open(namebuf, 0)) < 0)
     {
         fprintf(stderr, "open: ");
         perror(namebuf);
         return (1);
     }
-    if ((length = lseek(fd, 0, SEEK_END)) < 0 || lseek(fd, 0, SEEK_SET) < 0 
-        || !(buf = t_getbytes(length)))
+    if ((length0 = (long)lseek(fd, 0, SEEK_END)) < 0 ||
+        lseek(fd, 0, SEEK_SET) < 0
+            || !(buf0 = t_getbytes(length0)))
     {
         fprintf(stderr, "lseek: ");
         perror(namebuf);
         close(fd);
         return(1);
     }
-    if ((readret = read(fd, buf, length)) < length)
+    length = length0;
+    buf = buf0;
+    if ((readret = (int)read(fd, buf, length)) < length)
     {
         fprintf(stderr, "read (%d %ld) -> %d\n", fd, length, readret);
         perror(namebuf);
@@ -790,35 +826,63 @@ int binbuf_read(t_binbuf *b, char *filename, char *dirname, int crflag)
         t_freebytes(buf, length);
         return(1);
     }
+
+        /* skip any (totally unnecessary) BOM header */
+    if (length >= 3 &&
+        ((int)buf[0] & 0xFF) == 0xEF && ((int)buf[1] & 0xFF) == 0xBB
+            && ((int)buf[2] & 0xFF) == 0xBF)
+    {
+        length -= 3;
+        buf+= 3;
+    }
+
+        /* optionally skip the shebang */
+    if (flag & BINBUF_SHEBANG
+        && length >=3
+        && buf[0] == '#' && buf[1] == '!')
+    {
+        long offset = 0;
+        for(offset = 0; offset<length; offset++)
+        {
+            if (buf[offset] == '\n')
+            {
+                length -= offset;
+                buf += offset;
+                break;
+            }
+        }
+    }
+
         /* optionally map carriage return to semicolon */
-    if (crflag)
+    if (flag & BINBUF_CR)
     {
         int i;
         for (i = 0; i < length; i++)
             if (buf[i] == '\n')
                 buf[i] = ';';
     }
+
     binbuf_text(b, buf, length);
 
 #if 0
     startpost("binbuf_read "); postatom(b->b_n, b->b_vec); endpost();
 #endif
 
-    t_freebytes(buf, length);
+    t_freebytes(buf0, length0);
     close(fd);
     return (0);
 }
 
     /* read a binbuf from a file, via the search patch of a canvas */
-int binbuf_read_via_canvas(t_binbuf *b, char *filename, t_canvas *canvas,
-    int crflag)
+int binbuf_read_via_canvas(t_binbuf *b, const char *filename,
+    const t_canvas *canvas, int crflag)
 {
     int filedesc;
     char buf[MAXPDSTRING], *bufptr;
     if ((filedesc = canvas_open(canvas, filename, "",
         buf, &bufptr, MAXPDSTRING, 0)) < 0)
     {
-        error("%s: can't open", filename);
+        pd_error(0, "%s: can't open", filename);
         return (1);
     }
     else close (filedesc);
@@ -828,7 +892,7 @@ int binbuf_read_via_canvas(t_binbuf *b, char *filename, t_canvas *canvas,
 }
 
     /* old version */
-int binbuf_read_via_path(t_binbuf *b, char *filename, char *dirname,
+int binbuf_read_via_path(t_binbuf *b, const char *filename, const char *dirname,
     int crflag)
 {
     int filedesc;
@@ -836,7 +900,7 @@ int binbuf_read_via_path(t_binbuf *b, char *filename, char *dirname,
     if ((filedesc = open_via_path(
         dirname, filename, "", buf, &bufptr, MAXPDSTRING, 0)) < 0)
     {
-        error("%s: can't open", filename);
+        pd_error(0, "%s: can't open", filename);
         return (1);
     }
     else close (filedesc);
@@ -846,98 +910,86 @@ int binbuf_read_via_path(t_binbuf *b, char *filename, char *dirname,
 }
 
 #define WBUFSIZE 4096
-static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd);
+static t_binbuf *binbuf_convert(const t_binbuf *oldb, int maxtopd);
 
     /* write a binbuf to a text file.  If "crflag" is set we suppress
     semicolons. */
-int binbuf_write(t_binbuf *x, char *filename, char *dir, int crflag)
+int binbuf_write(const t_binbuf *x, const char *filename, const char *dir,
+    int crflag)
 {
     FILE *f = 0;
     char sbuf[WBUFSIZE], fbuf[MAXPDSTRING], *bp = sbuf, *ep = sbuf + WBUFSIZE;
     t_atom *ap;
-    int indx, deleteit = 0;
-    int ncolumn = 0;
+    t_binbuf *y = 0;
+    const t_binbuf *z = x;
+    int indx;
 
-    fbuf[0] = 0;
     if (*dir)
-        strcat(fbuf, dir), strcat(fbuf, "/");
-    strcat(fbuf, filename);
+        pd_snprintf(fbuf, MAXPDSTRING-1, "%s/%s", dir, filename);
+    else
+        pd_snprintf(fbuf, MAXPDSTRING-1, "%s", filename);
+    fbuf[MAXPDSTRING-1] = 0;
+
     if (!strcmp(filename + strlen(filename) - 4, ".pat") ||
         !strcmp(filename + strlen(filename) - 4, ".mxt"))
     {
-        x = binbuf_convert(x, 0);
-        deleteit = 1;
+        y = binbuf_convert(x, 0);
+        z = y;
     }
-    
-    if (!(f = binbuf_dofopen(fbuf, "w")))
-    {
-        fprintf(stderr, "open: ");
-        sys_unixerror(fbuf);
+
+    if (!(f = sys_fopen(fbuf, "w")))
         goto fail;
-    }
-    for (ap = x->b_vec, indx = x->b_n; indx--; ap++)
+    for (ap = z->b_vec, indx = z->b_n; indx--; ap++)
     {
         int length;
             /* estimate how many characters will be needed.  Printing out
             symbols may need extra characters for inserting backslashes. */
         if (ap->a_type == A_SYMBOL || ap->a_type == A_DOLLSYM)
-            length = 80 + strlen(ap->a_w.w_symbol->s_name);
+            length = 80 + (int)strlen(ap->a_w.w_symbol->s_name);
         else length = 40;
         if (ep - bp < length)
         {
             if (fwrite(sbuf, bp-sbuf, 1, f) < 1)
-            {
-                sys_unixerror(fbuf);
                 goto fail;
-            }
             bp = sbuf;
         }
         if ((ap->a_type == A_SEMI || ap->a_type == A_COMMA) &&
             bp > sbuf && bp[-1] == ' ') bp--;
-        if (!crflag || ap->a_type != A_SEMI)
+        if (!(crflag & BINBUF_CR) || ap->a_type != A_SEMI)
         {
-            atom_string(ap, bp, (ep-bp)-2);
-            length = strlen(bp);
+            atom_string(ap, bp, (unsigned int)((ep-bp)-2));
+            length = (int)strlen(bp);
             bp += length;
-            ncolumn += length;
         }
-        if (ap->a_type == A_SEMI || (!crflag && ncolumn > 65))
+        if (ap->a_type == A_SEMI)
         {
             *bp++ = '\n';
-            ncolumn = 0;
         }
         else
         {
             *bp++ = ' ';
-            ncolumn++;
         }
     }
     if (fwrite(sbuf, bp-sbuf, 1, f) < 1)
-    {
-        sys_unixerror(fbuf);
         goto fail;
-    }
 
-    if (fflush(f) != 0) 
-    {
-        sys_unixerror(fbuf);
+    if (fflush(f) != 0)
         goto fail;
-    }
 
-    if (deleteit)
-        binbuf_free(x);
+    if (y)
+        binbuf_free(y);
     fclose(f);
     return (0);
 fail:
-    if (deleteit)
-        binbuf_free(x);
+    if (y)
+        binbuf_free(y);
     if (f)
         fclose(f);
     return (1);
 }
 
 /* The following routine attempts to convert from max to pd or back.  The
-max to pd direction is working OK but you will need to make lots of 
+max to pd direction is working OK but you will need to make lots of
 abstractions for objects like "gate" which don't exist in Pd.  conversion
 from Pd to Max hasn't been tested for patches with subpatches yet!  */
 
@@ -946,12 +998,13 @@ from Pd to Max hasn't been tested for patches with subpatches yet!  */
 #define ISSYMBOL(a, b) ((a)->a_type == A_SYMBOL && \
     !strcmp((a)->a_w.w_symbol->s_name, (b)))
 
-static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
+static t_binbuf *binbuf_convert(const t_binbuf *oldb, int maxtopd)
 {
     t_binbuf *newb = binbuf_new();
     t_atom *vec = oldb->b_vec;
-    t_int n = oldb->b_n, nextindex, stackdepth = 0, stack[MAXSTACK],
-        nobj = 0, i, gotfontsize = 0;
+    t_int n = oldb->b_n, nextindex, stackdepth = 0, stack[MAXSTACK] = {0},
+        nobj = 0, gotfontsize = 0;
+	int i;
     t_atom outmess[MAXSTACK], *nextmess;
     t_float fontsize = 10;
     if (!maxtopd)
@@ -959,8 +1012,8 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
     for (nextindex = 0; nextindex < n; )
     {
         int endmess, natom;
-        char *first, *second, *third;
-        for (endmess = nextindex; endmess < n && vec[endmess].a_type != A_SEMI;
+        const char *first, *second, *third;
+        for (endmess = (int)nextindex; endmess < n && vec[endmess].a_type != A_SEMI;
             endmess++)
                 ;
         if (endmess == n) break;
@@ -971,7 +1024,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
             nextindex = endmess + 1;
             continue;
         }
-        natom = endmess - nextindex;
+        natom = endmess - (int)nextindex;
         if (natom > MAXSTACK-10) natom = MAXSTACK-10;
         nextmess = vec + nextindex;
         first = nextmess->a_w.w_symbol->s_name;
@@ -979,7 +1032,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
         if (maxtopd)
         {
                 /* case 1: importing a ".pat" file into Pd. */
-                
+
                 /* dollar signs in file translate to symbols */
             for (i = 0; i < natom; i++)
             {
@@ -1002,13 +1055,13 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                 {
                     if (stackdepth >= MAXSTACK)
                     {
-                        error("stack depth exceeded: too many embedded patches");
+                        pd_error(0, "stack depth exceeded: too many embedded patches");
                         return (newb);
                     }
                     stack[stackdepth] = nobj;
                     stackdepth++;
                     nobj = 0;
-                    binbuf_addv(newb, "ssfffff;", 
+                    binbuf_addv(newb, "ssfffff;",
                         gensym("#N"), gensym("canvas"),
                             atom_getfloatarg(2, natom, nextmess),
                             atom_getfloatarg(3, natom, nextmess),
@@ -1066,7 +1119,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                     binbuf_add(newb, natom - 1, outmess);
                     nobj++;
                 }
-                else if (!strcmp(second, "message") || 
+                else if (!strcmp(second, "message") ||
                     !strcmp(second, "comment"))
                 {
                     SETSYMBOL(outmess, gensym("#X"));
@@ -1132,7 +1185,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                         gensym("#X"), gensym("obj"),
                         atom_getfloatarg(2, natom, nextmess),
                         atom_getfloatarg(3, natom, nextmess),
-                        gensym((natom > 5 ? "inlet~" : "inlet"))); 
+                        gensym((natom > 5 ? "inlet~" : "inlet")));
                     nobj++;
                 }
                 else if (!strcmp(second, "outlet"))
@@ -1141,7 +1194,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                         gensym("#X"), gensym("obj"),
                         atom_getfloatarg(2, natom, nextmess),
                         atom_getfloatarg(3, natom, nextmess),
-                        gensym((natom > 5 ? "outlet~" : "outlet"))); 
+                        gensym((natom > 5 ? "outlet~" : "outlet")));
                     nobj++;
                 }
                 else if (!strcmp(second, "user"))
@@ -1163,7 +1216,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                                     range + offset,
                                     0., 0.,
                                     gensym("empty"), gensym("empty"), gensym("empty"),
-                                    0., -8., 0., 8., -262144., -1., -1., 0., 1.); 
+                                    0., -8., 0., 8., -262144., -1., -1., 0., 1.);
                    }
                     else if (!strcmp(third, "uslider"))
                     {
@@ -1199,7 +1252,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                         nobj - atom_getfloatarg(2, natom, nextmess) - 1,
                         atom_getfloatarg(3, natom, nextmess),
                         nobj - atom_getfloatarg(4, natom, nextmess) - 1,
-                        atom_getfloatarg(5, natom, nextmess)); 
+                        atom_getfloatarg(5, natom, nextmess));
                 }
             }
         }
@@ -1212,7 +1265,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                     t_float x, y;
                     if (stackdepth >= MAXSTACK)
                     {
-                        error("stack depth exceeded: too many embedded patches");
+                        pd_error(0, "stack depth exceeded: too many embedded patches");
                         return (newb);
                     }
                     stack[stackdepth] = nobj;
@@ -1224,7 +1277,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                     }
                     x = atom_getfloatarg(2, natom, nextmess);
                     y = atom_getfloatarg(3, natom, nextmess);
-                    binbuf_addv(newb, "ssffff;", 
+                    binbuf_addv(newb, "ssffff;",
                         gensym("#N"), gensym("vpatcher"),
                             x, y,
                             atom_getfloatarg(4, natom, nextmess) + x,
@@ -1304,7 +1357,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                                     (atom_getfloatarg(6, natom, nextmess) == 1? 1 :
                                          atom_getfloatarg(6, natom, nextmess) - 1),
                             atom_getfloatarg(7, natom, nextmess));
-                    else if (classname == gensym("hsl")) 
+                    else if (classname == gensym("hsl"))
                     {
                         t_float slmin = atom_getfloatarg(7, natom, nextmess);
                         t_float slmax = atom_getfloatarg(8, natom, nextmess);
@@ -1345,7 +1398,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                                 SETSYMBOL(outmess + i + 2, gensym("l"));
                             else if (arg == gensym("symbol"))
                                 SETSYMBOL(outmess + i + 2, gensym("s"));
-                            else 
+                            else
                                 outmess[i+2] = nextmess[i];
                         }
                         SETSEMI(outmess + natom + 2);
@@ -1367,9 +1420,9 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                         binbuf_add(newb, natom + 3, outmess);
                     }
                     nobj++;
-                
+
                 }
-                else if (!strcmp(second, "msg") || 
+                else if (!strcmp(second, "msg") ||
                     !strcmp(second, "text"))
                 {
                     SETSYMBOL(outmess, gensym("#P"));
@@ -1403,7 +1456,7 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
                         nobj - atom_getfloatarg(2, natom, nextmess) - 1,
                         atom_getfloatarg(3, natom, nextmess),
                         nobj - atom_getfloatarg(4, natom, nextmess) - 1,
-                        atom_getfloatarg(5, natom, nextmess)); 
+                        atom_getfloatarg(5, natom, nextmess));
                 }
             }
         }
@@ -1417,44 +1470,6 @@ static t_binbuf *binbuf_convert(t_binbuf *oldb, int maxtopd)
     return (newb);
 }
 
-    /* function to support searching */
-int binbuf_match(t_binbuf *inbuf, t_binbuf *searchbuf, int wholeword)
-{
-    int indexin, nmatched;
-    for (indexin = 0; indexin <= inbuf->b_n - searchbuf->b_n; indexin++)
-    {
-        for (nmatched = 0; nmatched < searchbuf->b_n; nmatched++)
-        {
-            t_atom *a1 = &inbuf->b_vec[indexin + nmatched], 
-                *a2 = &searchbuf->b_vec[nmatched];
-            if (a1->a_type == A_SEMI || a1->a_type == A_COMMA)
-            {
-                if (a2->a_type != a1->a_type)
-                    goto nomatch;
-            }
-            else if (a1->a_type == A_FLOAT || a1->a_type == A_DOLLAR)
-            {
-                if (a2->a_type != a1->a_type || 
-                    a1->a_w.w_float != a2->a_w.w_float)
-                        goto nomatch;
-            }
-            else if (a1->a_type == A_SYMBOL || a1->a_type == A_DOLLSYM)
-            {
-                if ((a2->a_type != A_SYMBOL && a2->a_type != A_DOLLSYM)
-                    || (wholeword && a1->a_w.w_symbol != a2->a_w.w_symbol)
-                    || (!wholeword &&  !strstr(a1->a_w.w_symbol->s_name,
-                                        a2->a_w.w_symbol->s_name)))
-                        goto nomatch;
-            }           
-        }
-        return (1);
-    nomatch: ;
-    }
-    return (0);
-}
-
-void pd_doloadbang(void);
-
 /* LATER make this evaluate the file on-the-fly. */
 /* LATER figure out how to log errors */
 void binbuf_evalfile(t_symbol *name, t_symbol *dir)
@@ -1462,15 +1477,17 @@ void binbuf_evalfile(t_symbol *name, t_symbol *dir)
     t_binbuf *b = binbuf_new();
     int import = !strcmp(name->s_name + strlen(name->s_name) - 4, ".pat") ||
         !strcmp(name->s_name + strlen(name->s_name) - 4, ".mxt");
-        /* set filename so that new canvases can pick them up */
     int dspstate = canvas_suspend_dsp();
+        /* set filename so that new canvases can pick them up */
     glob_setfilename(0, name, dir);
-    if (binbuf_read(b, name->s_name, dir->s_name, 0))
-    {
-        perror(name->s_name);
-    }
+    if (binbuf_read(b, name->s_name, dir->s_name, BINBUF_SHEBANG))
+        pd_error(0, "%s: read failed; %s", name->s_name, strerror(errno));
     else
     {
+            /* save bindings of symbols #N, #A (and restore afterward) */
+        t_pd *bounda = gensym("#A")->s_thing, *boundn = s__N.s_thing;
+        gensym("#A")->s_thing = 0;
+        s__N.s_thing = &pd_canvasmaker;
         if (import)
         {
             t_binbuf *newb = binbuf_convert(b, 1);
@@ -1478,28 +1495,38 @@ void binbuf_evalfile(t_symbol *name, t_symbol *dir)
             b = newb;
         }
         binbuf_eval(b, 0, 0, 0);
+            /* avoid crashing if no canvas was created by binbuf eval */
+        if (s__X.s_thing && *s__X.s_thing == canvas_class)
+            canvas_initbang((t_canvas *)(s__X.s_thing)); /* JMZ*/
+        gensym("#A")->s_thing = bounda;
+        s__N.s_thing = boundn;
     }
     glob_setfilename(0, &s_, &s_);
     binbuf_free(b);
     canvas_resume_dsp(dspstate);
 }
 
-t_pd *glob_evalfile(t_pd *ignore, t_symbol *name, t_symbol *dir)
+    /* save a text object to a binbuf for a file or copy buf */
+void binbuf_savetext(const t_binbuf *bfrom, t_binbuf *bto)
 {
-    t_pd *x = 0;
-        /* even though binbuf_evalfile appears to take care of dspstate,
-        we have to do it again here, because canvas_startdsp() assumes
-        that all toplevel canvases are visible.  LATER check if this
-        is still necessary -- probably not. */
-
-    int dspstate = canvas_suspend_dsp();
-    binbuf_evalfile(name, dir);
-    while ((x != s__X.s_thing) && s__X.s_thing) 
+    int k, n = binbuf_getnatom(bfrom);
+    const t_atom *ap = binbuf_getvec(bfrom);
+    t_atom at;
+    for (k = 0; k < n; k++)
     {
-        x = s__X.s_thing;
-        vmess(x, gensym("pop"), "i", 1);
+        if (ap[k].a_type == A_FLOAT ||
+            (ap[k].a_type == A_SYMBOL &&
+                !strchr(ap[k].a_w.w_symbol->s_name, ';') &&
+                !strchr(ap[k].a_w.w_symbol->s_name, ',') &&
+                !strchr(ap[k].a_w.w_symbol->s_name, '$')))
+                    binbuf_add(bto, 1, &ap[k]);
+        else
+        {
+            char buf[MAXPDSTRING+1];
+            atom_string(&ap[k], buf, MAXPDSTRING);
+            SETSYMBOL(&at, gensym(buf));
+            binbuf_add(bto, 1, &at);
+        }
     }
-    pd_doloadbang();
-    canvas_resume_dsp(dspstate);
-    return x;
+    binbuf_addsemi(bto);
 }

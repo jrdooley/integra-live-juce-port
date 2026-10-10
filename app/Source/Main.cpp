@@ -72,7 +72,7 @@ namespace integra
             if (result.failed())
             {
                 juce::Logger::writeToLog (result.getErrorMessage());
-                if (selfTest || stressIndex >= 0)
+                if (selfTest || stressIndex >= 0 || args.contains ("--fingerprint-modules"))
                 {
                     setApplicationReturnValue (1);
                     quit();
@@ -96,6 +96,13 @@ namespace integra
                 const int failures = runSelfTest (context.session, context.model, context.controller, context.audioHost, log);
                 std::cout << log << (failures == 0 ? "self test passed" : juce::String (failures) + " self test failure(s)") << std::endl;
                 setApplicationReturnValue (failures == 0 ? 0 : 1);
+                quit();
+                return;
+            }
+
+            if (args.contains ("--fingerprint-modules"))
+            {
+                std::cout << fingerprintModules (context.session, context.model, context.controller, context.audioHost) << std::flush;
                 quit();
                 return;
             }

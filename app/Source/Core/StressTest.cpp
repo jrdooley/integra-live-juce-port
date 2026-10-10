@@ -449,4 +449,81 @@ namespace integra
         temp.deleteRecursively();
         return t.failures;
     }
+
+    juce::String fingerprintModules (IntegraSession& session, ProjectModel& model, ProjectController& controller, AudioHost& host)
+    {
+        // every module at its defaults between the block's input and output, fed a fixed
+        // signal (a 220 Hz sine plus a click every 0.5 s) for 2 s; RMS and peak of the
+        // last second, so two builds (e.g. two Pd versions) can be compared
+        host.stopNoDeviceThread();
+        host.configure (2, 2, 44100);
+        juce::String out;
+        auto& p = model.get();
+
+        for (auto* entry : session.getCatalogue().getUserModules())
+        {
+            if (! entry->hasImplementation || entry->definition == nullptr)
+                continue;
+            controller.newProject();
+            model.rebuild();
+            const auto block = p.tracks.front().blocks.front().path;
+            auto module = controller.addModule (block, entry->guid, { 20.0f, 2.0f });
+            model.rebuild();
+
+            juce::String audioIn, audioOut;
+            for (auto* ep : entry->definition->get_endpoint_definitions())
+            {
+                auto info = EndpointInfo::fromDefinition (*ep);
+                if (info.isAudioStream && info.isAudioInput && audioIn.isEmpty())    audioIn = info.name;
+                if (info.isAudioStream && ! info.isAudioInput && audioOut.isEmpty()) audioOut = info.name;
+            }
+            if (audioOut.isNotEmpty())
+                controller.connect (block, module + "." + audioOut, block + ".StereoAudioOut1.in1");
+            if (audioIn.isNotEmpty())
+                controller.connect (block, block + ".AudioIn1.out", module + "." + audioIn);
+            controller.setPlayPosition (0);
+            controller.play (true);     // blocks only run while the playhead is inside them
+
+            const int numSamples = 100, channels = 2, callbacks = 882;
+            juce::AudioBuffer<float> in (channels, numSamples), buf (channels, numSamples);
+            double sum = 0, peak = 0;
+            int counted = 0;
+            long sampleIndex = 0;
+            for (int cb = 0; cb < callbacks; ++cb)
+            {
+                for (int i = 0; i < numSamples; ++i, ++sampleIndex)
+                {
+                    float v = 0.3f * (float) std::sin (juce::MathConstants<double>::twoPi * 220.0 * (double) sampleIndex / 44100.0);
+                    if (sampleIndex % 22050 == 0) v = 0.9f;
+                    in.setSample (0, i, v);
+                    in.setSample (1, i, v);
+                }
+                host.audioDeviceIOCallbackWithContext (in.getArrayOfReadPointers(), channels, buf.getArrayOfWritePointers(), channels, numSamples, {});
+                if (cb >= callbacks / 2)
+                    for (int i = 0; i < numSamples; ++i)
+                    {
+                        const double v = buf.getSample (0, i);
+                        sum += v * v;
+                        peak = juce::jmax (peak, std::abs (v));
+                        ++counted;
+                    }
+            }
+            controller.play (false);
+            out << "fp " << entry->name << " " << juce::String (std::sqrt (sum / juce::jmax (1, counted)), 5) << " " << juce::String (peak, 5) << "\n";
+
+            // and what it reported back (analysers' outputs, meters...)
+            for (auto* ep : entry->definition->get_endpoint_definitions())
+            {
+                auto info = EndpointInfo::fromDefinition (*ep);
+                if (! info.isAudioStream && info.kind != EndpointInfo::Kind::bang && info.canBeSource)
+                {
+                    const auto v = session.getValue (module + "." + info.name);
+                    out << "fv " << entry->name << "." << info.name << " "
+                        << (v.isDouble() ? juce::String ((double) v, 4) : v.toString().substring (0, 60)) << "\n";
+                }
+            }
+        }
+        controller.newProject();
+        return out;
+    }
 }

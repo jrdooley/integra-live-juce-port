@@ -33,6 +33,12 @@
 
 #include "PdBase.hpp"
 
+extern "C"
+{
+	#include "m_pd.h"
+	#include "g_canvas.h"
+}
+
 #include <fstream>
 #include <iostream>
 
@@ -84,11 +90,14 @@ namespace integra_internal
 
 		m_pd = new pd::PdBase;
 
+		m_pd->setReceiver( &m_pd_messages );
+		m_pd->setMidiReceiver( &m_pd_messages );
 		m_pd->init( m_input_channels, m_output_channels, m_sample_rate );
 
 		setup_libpd();
 
-		pd::Patch patch = m_pd->openPatch( patch_file_name, m_server.get_scratch_directory() );
+		m_patch = m_pd->openPatch( patch_file_name, m_server.get_scratch_directory() );
+		const pd::Patch &patch = m_patch;
 		if( !patch.isValid() )
 		{
 			INTEGRA_TRACE_ERROR << "failed to load patch: " << get_patch_file_path();
@@ -103,6 +112,17 @@ namespace integra_internal
 	CDspEngine::~CDspEngine()
 	{
 		m_mutex.lock();
+
+		/*
+		Integra Live port: libpd 0.4x's clear() reset Pd; libpd 0.16's only detaches the
+		callbacks, and Pd itself lives as long as the process. Close the host patch (and
+		with it every module) so a later session doesn't run alongside this one's.
+		*/
+		m_pd->unsubscribeAll();
+		if( m_patch.isValid() )
+		{
+			m_pd->closePatch( m_patch );
+		}
 
 		m_pd->clear();
 		delete m_pd;
@@ -125,10 +145,6 @@ namespace integra_internal
 
 	void CDspEngine::register_externals()
 	{
-		bonk_tilde_setup();
-		expr_setup();
-		fiddle_tilde_setup();
-		lrshift_tilde_setup();
 		partconv_tilde_setup();
 		freeverb_tilde_setup();
 		soundfile_info_setup();
@@ -219,6 +235,15 @@ namespace integra_internal
 
 	void CDspEngine::setup_libpd()
 	{
+		/*
+		Integra Live port: the module patches were written for Pd 0.43. Pd keeps the old
+		behaviour of objects it has since changed (e.g. [osc~]'s table resolution, [line]
+		and [vline~] timing, [delread~] limits) behind this compatibility level.
+		*/
+		m_pd->startMessage();
+		m_pd->addFloat( 0.43f );
+		m_pd->finishMessage( "pd", "compatibility" );
+
 		m_pd->computeAudio( true );
 		m_pd->subscribe( feedback_source );
 	}
@@ -366,17 +391,6 @@ namespace integra_internal
 		m_pd->addSymbol( bang );
         m_pd->finishList( broadcast_symbol );
 
-		//do the magic to select and delete the module
-		ostringstream find;
-		find << "+" << id;
-
-		m_pd->startMessage();
-        m_pd->addSymbol( find.str() );
-		m_pd->addFloat( 1 );
-		m_pd->finishMessage( patch_message_target, "find" );
-
-		m_pd->sendMessage( patch_message_target, "cut" );
-
         internal_id patch_id;
         
         try
@@ -389,7 +403,19 @@ namespace integra_internal
             result = CError::FAILED;
             goto EXIT;
         }
-        
+
+		/*
+		Integra Live port: delete the module's object from the host canvas directly. This
+		used to send the canvas "find +<id>" then "cut", which relies on Pd's editor: since
+		Pd 0.47 "find" opens the canvas and searches subpatches too, and "cut" is ignored on
+		a canvas with no window, so with libpd 0.16 deleted modules stayed in the DSP graph.
+		The module's patch id is its index in the host canvas.
+		*/
+		if( !delete_host_object( patch_id ) )
+		{
+			INTEGRA_TRACE_ERROR << "couldn't find the Pd object of module " << id << " (patch id " << patch_id << ")";
+		}
+
 		m_map_id_to_patch_id.erase( static_cast<int>( id ) );
 
 		for( auto i = m_map_id_to_patch_id.begin(); i != m_map_id_to_patch_id.end(); i++ )
@@ -405,6 +431,36 @@ namespace integra_internal
 		m_mutex.unlock();
 
 		return result;
+	}
+
+
+	bool CDspEngine::delete_host_object( internal_id patch_id )
+	{
+		sys_lock();
+
+		bool deleted = false;
+		t_canvas *canvas = ( t_canvas * ) pd_findbyclass( gensym( patch_message_target.c_str() ), canvas_class );
+		if( canvas )
+		{
+			t_gobj *object = canvas->gl_list;
+			for( internal_id i = 0; object && i < patch_id; i++ )
+			{
+				object = object->g_next;
+			}
+
+			if( object )
+			{
+				/* as the editor's "cut" does: rebuild the DSP graph once, after the
+				   whole module is gone, not while its subpatches are half deleted */
+				int dsp_state = canvas_suspend_dsp();
+				glist_delete( canvas, object );
+				canvas_resume_dsp( dsp_state );
+				deleted = true;
+			}
+		}
+
+		sys_unlock();
+		return deleted;
 	}
 
 
@@ -606,9 +662,9 @@ namespace integra_internal
 	{
 		pd_message_list queue_messages;
 
-		while( m_pd->numMessages() > 0 ) 
+		while( !m_pd_messages.empty() )
 		{
-			pd::Message &message = m_pd->nextMessage();
+			pd::Message message = m_pd_messages.pop();
 
 			if( should_queue_message( message ) )
 			{

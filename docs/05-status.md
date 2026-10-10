@@ -5,7 +5,7 @@
 | Area | State |
 |---|---|
 | libIntegra (Pd/libpd backend) | Kept. Builds from source with CMake on Linux, macOS and Windows; threads/files ported to standard C++17; new host-driven audio mode |
-| libpd + externals | Pd 0.43.3 as used by the module library; all 9 externals compiled in; every module instantiates |
+| libpd + externals | libpd 0.16.1 (Pd 0.56-5), upgraded from the original Pd 0.43.3 with the module patches checked — see [10-pd-upgrade.md](10-pd-upgrade.md); all externals compiled in; every module instantiates |
 | Module library, demo blocks | Unchanged, all load |
 | Flex GUI → JUCE | Arrange, Module and Live views, 18 widget types, properties (info, routing, scripting, MIDI), transport, settings, menus, undo/redo |
 | integra_server (XML-RPC/OSC) | Removed — libIntegra runs in-process |
@@ -45,9 +45,7 @@ real MIDI devices.
   harmless; see doc 02).
 * Some module patches print Pd console errors with silent input or no files loaded (pre-existing
   module behaviour; see doc 02).
-* libIntegra's unit tests take ~90 s because every session start probes PortAudio host APIs.
-* The libpd used is the 2013 version bundled with Integra (Pd 0.43). Upgrading to a current libpd is
-  possible but would need the module patches re-validated; deliberately not done here.
+* Pd was upgraded to 0.56-5 (libpd 0.16.1); see [10-pd-upgrade.md](10-pd-upgrade.md).
 
 ## Next steps
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Dan Wilcox <danomatika@gmail.com>
+ * Copyright (c) 2012-2022 Dan Wilcox <danomatika@gmail.com>
  *
  * BSD Simplified License.
  * For information on usage and redistribution, and for a DISCLAIMER OF ALL
@@ -15,6 +15,8 @@
 
 #include <string>
 #include <vector>
+#include <iostream>
+#include <sstream>
 
 namespace pd {
 
@@ -22,52 +24,91 @@ namespace pd {
 
 /// a pd patch
 ///
-/// if you use the copy constructor/operator, keep in mind the libpd void* pointer
-/// patch handle is copied and problems can arise if one object is used to close
-/// a patch that other copies may be referring to
+/// if you use the copy constructor/operator, keep in mind the libpd void*
+/// pointer patch handle is copied and problems can arise if one object is used
+/// to close a patch that other copies may be referring to
 class Patch {
 
-    public:
+public:
 
-        Patch();
-        Patch(const std::string& filename, const std::string& path);
-        Patch(void* handle, int dollarZero, const std::string& filename, const std::string& path);
+    Patch() :
+        _handle(NULL), _dollarZero(0), _dollarZeroStr("0"),
+        _filename(""), _path("") {}
 
-        /// data access
-        void* handle()                const    {return _handle;}
-        int dollarZero()            const    {return _dollarZero;}
-        std::string filename()        const    {return _filename;}
-        std::string path()            const    {return _path;}
+    Patch(const std::string &filename, const std::string &path) :
+        _handle(NULL), _dollarZero(0), _dollarZeroStr("0"),
+        _filename(filename), _path(path) {}
 
-        /// get dollarZero as a string
-        std::string dollarZeroStr()    const    {return _dollarZeroStr;}
+    Patch(void *handle, int dollarZero,
+          const std::string &filename,
+          const std::string &path) :
+        _handle(handle), _dollarZero(dollarZero),
+        _filename(filename), _path(path) {
+            std::stringstream itoa;
+            itoa << dollarZero;
+            _dollarZeroStr = itoa.str();
+        }
 
-        /// is the patch pointer valid?
-        bool isValid() const;
+    /// get the raw pointer to the patch instance
+    void* handle() const {return _handle;}
 
-        /// clear patch pointer and dollar zero (does not close patch!)
-        ///
-        /// note: does not clear filename and path so the object can be reused
-        //        for opening multiple instances
-        void clear();
+    /// get the unqiue instance $0 ID
+    int dollarZero() const {return _dollarZero;}
 
-        /// copy constructor
-        Patch(const Patch& from);
+    /// get the patch filename
+    std::string filename() const {return _filename;}
 
-        /// copy operator
-        void operator=(const Patch& from);
+    /// get the parent dir path for the file
+    std::string path() const {return _path;}
 
-        /// print to ostream
-        friend std::ostream& operator<<(std::ostream& os, const Patch& from);
+    /// get the unique instance $0 ID as a string
+    std::string dollarZeroStr() const {return _dollarZeroStr;}
 
-    private:
+    /// is the patch pointer valid?
+    bool isValid() const {return _handle != NULL;}
 
-        void* _handle;                ///< patch handle pointer
-        int _dollarZero;            ///< the unique patch id, ie $0
-        std::string _dollarZeroStr;    ///< $0 as a string
+    /// clear patch pointer and dollar zero (does not close patch!)
+    ///
+    /// note: does not clear filename and path so the object can be reused
+    //        for opening multiple instances
+    void clear()  {
+        _handle = NULL;
+        _dollarZero = 0;
+        _dollarZeroStr = "0";
+    }
 
-        std::string _filename;    ///< filename
-        std::string _path;        ///< full path
+    /// copy constructor
+    Patch(const Patch &from) {
+        _handle = from._handle;
+        _dollarZero = from._dollarZero;
+        _dollarZeroStr = from._dollarZeroStr;
+        _filename = from._filename;
+        _path = from._path;
+    }
+
+    /// copy operator
+    void operator=(const Patch &from) {
+        _handle = from._handle;
+        _dollarZero = from._dollarZero;
+        _dollarZeroStr = from._dollarZeroStr;
+        _filename = from._filename;
+        _path = from._path;
+    }
+
+    /// print info to ostream
+    friend std::ostream& operator<<(std::ostream &os, const Patch &from) {
+        return os << "Patch: \"" << from.filename() << "\" $0: "
+                  << from.dollarZeroStr() << " valid: " << from.isValid();
+    }
+
+private:
+
+    void *_handle;              ///< patch handle pointer
+    int _dollarZero;            ///< the unique $0 patch ID
+    std::string _dollarZeroStr; ///< $0 as a string
+
+    std::string _filename;      ///< filename
+    std::string _path;          ///< full path to parent folder
 };
 
 /// \section Pd stream interface message objects
@@ -77,7 +118,7 @@ struct Bang {
 
     const std::string dest; ///< dest receiver name
 
-    explicit Bang(const std::string& dest) : dest(dest) {}
+    explicit Bang(const std::string &dest) : dest(dest) {}
 };
 
 /// float value
@@ -86,93 +127,198 @@ struct Float {
     const std::string dest; ///< dest receiver name
     const float num;        ///< the float value
 
-    Float(const std::string& dest, const float num) :
+    Float(const std::string &dest, const float num) :
         dest(dest), num(num) {}
 };
 
 /// symbol value
 struct Symbol {
 
-    const std::string dest;        ///< dest receiver name
-    const std::string symbol;    ///< the symbol value
+    const std::string dest;   ///< dest receiver name
+    const std::string symbol; ///< the symbol value
 
-    Symbol(const std::string& dest, const std::string& symbol) :
+    Symbol(const std::string &dest, const std::string &symbol) :
         dest(dest), symbol(symbol) {}
 };
 
 /// a compound message containing floats and symbols
 class List {
 
-    public:
+public:
 
-        List();
+    List() {}
 
-        /// \section Read
+/// \section Read
 
-        /// check type
-        bool isFloat(const unsigned int index) const;
-        bool isSymbol(const unsigned int index) const;
+    /// check if index is a float type
+    bool isFloat(const unsigned int index) const {
+        if(index < objects.size())
+            if(objects[index].type == List::FLOAT)
+                return true;
+        return false;
+    }
 
-        /// get item as type
-        float getFloat(const unsigned int index) const;
-        std::string getSymbol(const unsigned int index) const;
+    /// check if index is a symbol type
+    bool isSymbol(const unsigned int index) const {
+        if(index < objects.size())
+            if(objects[index].type == List::SYMBOL)
+                return true;
+        return false;
+    }
 
-        /// \section Write
+    /// get index as a float
+    float getFloat(const unsigned int index) const {
+        if(!isFloat(index)) {
+            std::cerr << "Pd: List object " << index << " is not a float"
+                      << std::endl;
+            return 0;
+        }
+        return objects[index].value;
+    }
 
-        /// add elements to the list
-        ///
-        /// List list;
-        /// list.addSymbol("hello");
-        /// list.addFloat(1.23);
-        ///
-        void addFloat(const float num);
-        void addSymbol(const std::string& symbol);
+    /// get index as a symbol
+    std::string getSymbol(const unsigned int index) const {
+        if(!isSymbol(index)) {
+            std::cerr << "Pd: List object " << index << " is not a symbol"
+                      << std::endl;
+            return "";
+        }
+        return objects[index].symbol;
+    }
 
-        /// \section Write Stream Interface
+/// \section Write
+///
+/// add elements to the list
+///
+/// List list;
+/// list.addSymbol("hello");
+/// list.addFloat(1.23);
+///
 
-        /// list << "hello" << 1.23;
+    /// add a float to the list
+    void addFloat(const float num) {
+        MsgObject o;
+        o.type = List::FLOAT;
+        o.value = num;
+        objects.push_back(o);
+        typeString += 'f';
+    }
 
-        /// add a float to the message
-        List& operator<<(const bool var);
-        List& operator<<(const int var);
-        List& operator<<(const float var);
-        List& operator<<(const double var);
+    /// add a symbol to the list
+    void addSymbol(const std::string &symbol) {
+        MsgObject o;
+        o.type = List::SYMBOL;
+        o.symbol = symbol;
+        objects.push_back(o);
+        typeString += 's';
+    }
 
-        /// add a symbol to the message
-        List& operator<<(const char var);
-        List& operator<<(const char* var);
-        List& operator<<(const std::string& var);
+/// \section Write Stream Interface
+///
+/// list << "hello" << 1.23;
+///
 
-        /// \section Util
+    /// add a float to the message
+    List& operator<<(const bool var) {
+        addFloat((float) var);
+        return *this;
+    }
 
-        const unsigned int len() const;        ///< number of items
-        const std::string& types() const;    ///< OSC style type string ie "fsfs"
-        void clear();                         ///< clear all objects
+    /// add a float to the message
+    List& operator<<(const int var) {
+        addFloat((float) var);
+        return *this;
+    }
 
-        /// get list as a string
-        std::string toString() const;
+    /// add a float to the message
+    List& operator<<(const float var) {
+        addFloat((float) var);
+        return *this;
+    }
 
-        /// print to ostream
-        friend std::ostream& operator<<(std::ostream& os, const List& from);
+    /// add a float to the message
+    List& operator<<(const double var) {
+        addFloat((float) var);
+        return *this;
+    }
 
-    private:
+    /// add a symbol to the message
+    List& operator<<(const char var) {
+        std::string s;
+        s = var;
+        addSymbol(s);
+        return *this;
+    }
 
-        std::string typeString;    ///< OSC style type string
+    /// add a symbol to the message
+    List& operator<<(const char *var) {
+        addSymbol((std::string) var);
+        return *this;
+    }
 
-        // object type
-        enum MsgType {
-            FLOAT,
-            SYMBOL
-        };
+    /// add a symbol to the message
+    List& operator<<(const std::string &var) {
+        addSymbol((std::string) var);
+        return *this;
+    }
 
-        // object wrapper
-        struct MsgObject {
-            MsgType type;
-            float value;
-            std::string symbol;
-        };
+/// \section Util
 
-        std::vector<MsgObject> objects;    ///< list objects
+    /// return number of items
+    unsigned int len() const {return (unsigned int) objects.size();}
+
+    /// return OSC style type string ie "fsfs"
+    const std::string& types() const {return typeString;}
+
+    /// clear all objects
+    void clear() {
+        typeString = "";
+        objects.clear();
+    }
+
+    /// get list as a string
+    std::string toString() const {
+        std::string line;
+        std::stringstream itoa;
+        for(int i = 0; i < (int)objects.size(); ++i) {
+            if(isFloat(i)) {
+                itoa << getFloat(i);
+                line += itoa.str();
+                itoa.str("");
+            }
+            else {
+                line += getSymbol(i);
+            }
+            if(i < (int)objects.size()-1) {
+                line += " ";
+            }
+        }
+        return line;
+    }
+
+    /// print to ostream
+    friend std::ostream& operator<<(std::ostream &os, const List &from) {
+        return os << from.toString();
+    }
+
+private:
+
+    std::string typeString; ///< OSC style type string
+
+    // object type
+    enum MsgType {
+        FLOAT,
+        SYMBOL
+    };
+
+    // object wrapper
+    struct MsgObject {
+        MsgType type;
+        float value;
+        std::string symbol;
+    };
+
+    std::vector<MsgObject> objects; ///< list objects
 };
 
 /// start a compound message
@@ -183,30 +329,30 @@ struct StartMessage {
 /// finish a compound message as a list
 struct FinishList {
 
-    const std::string dest;     ///< dest receiver name
+    const std::string dest; ///< dest receiver name
 
-    explicit FinishList(const std::string& dest) : dest(dest) {}
+    explicit FinishList(const std::string &dest) : dest(dest) {}
 };
 
 /// finish a compound message as a typed message
 struct FinishMessage {
 
-    const std::string dest;    ///< dest receiver name
-    const std::string msg;    ///< target msg at the dest
+    const std::string dest; ///< dest receiver name
+    const std::string msg;  ///< target msg at the dest
 
-    FinishMessage(const std::string& dest, const std::string& msg) :
+    FinishMessage(const std::string &dest, const std::string &msg) :
             dest(dest), msg(msg) {}
 };
 
-/// /section Pd stream interface midi objects
+/// \section Pd stream interface midi objects
 /// ref: http://www.gweep.net/~prefect/eng/reference/protocol/midispec.html
 
 /// send a note on event (set vel = 0 for noteoff)
 struct NoteOn {
 
-    const int channel;    ///< channel (0 - 15 * dev#)
+    const int channel;  ///< channel (0 - 15 * dev#)
     const int pitch;    ///< pitch (0 - 127)
-    const int velocity;    ///< velocity (0 - 127)
+    const int velocity; ///< velocity (0 - 127)
 
     NoteOn(const int channel, const int pitch, const int velocity=64) :
         channel(channel), pitch(pitch), velocity(velocity) {}
@@ -215,9 +361,9 @@ struct NoteOn {
 /// change a control value aka send a CC message
 struct ControlChange {
 
-    const int channel;        ///< channel (0 - 15 * dev#)
-    const int controller;    ///< controller (0 - 127)
-    const int value;        ///< value (0 - 127)
+    const int channel;    ///< channel (0 - 15 * dev#)
+    const int controller; ///< controller (0 - 127)
+    const int value;      ///< value (0 - 127)
 
     ControlChange(const int channel, const int controller, const int value) :
         channel(channel), controller(controller), value(value) {}
@@ -226,8 +372,8 @@ struct ControlChange {
 /// change a program value (ie an instrument)
 struct ProgramChange {
 
-    const int channel;    ///< channel (0 - 15 * dev#)
-    const int value;    ///< value (0 - 127)
+    const int channel; ///< channel (0 - 15 * dev#)
+    const int value;   ///< value (0 - 127)
 
     ProgramChange(const int channel, const int value) :
         channel(channel), value(value) {}
@@ -236,8 +382,8 @@ struct ProgramChange {
 /// change the pitch bend value
 struct PitchBend {
 
-    const int channel;    ///< channel (0 - 15 * dev#)
-    const int value;    ///< value (-8192 - 8192)
+    const int channel; ///< channel (0 - 15 * dev#)
+    const int value;   ///< value (-8192 - 8192)
 
     PitchBend(const int channel, const int value) :
         channel(channel), value(value) {}
@@ -246,8 +392,8 @@ struct PitchBend {
 /// change an aftertouch value
 struct Aftertouch {
 
-    const int channel;    ///< channel (0 - 15 * dev#)
-    const int value;    ///< value (0 - 127)
+    const int channel; ///< channel (0 - 15 * dev#)
+    const int value;   ///< value (0 - 127)
 
     Aftertouch(const int channel, const int value) :
         channel(channel), value(value) {}
@@ -256,9 +402,9 @@ struct Aftertouch {
 /// change a poly aftertouch value
 struct PolyAftertouch {
 
-    const int channel;    ///< channel (0 - 15 * dev#)
-    const int pitch;    ///< pitch (0 - 127)
-    const int value;    ///< value (0 - 127)
+    const int channel; ///< channel (0 - 15 * dev#)
+    const int pitch;   ///< pitch (0 - 127)
+    const int value;   ///< value (0 - 127)
 
     PolyAftertouch(const int channel, const int pitch, const int value) :
         channel(channel), pitch(pitch), value(value) {}
@@ -267,9 +413,9 @@ struct PolyAftertouch {
 /// a raw midi byte
 struct MidiByte {
 
-    const int port;                ///< raw portmidi port
-                                ///< see http://en.wikipedia.org/wiki/PortMidi
-    const unsigned char byte;    ///< the raw midi byte value
+    const int port; ///< raw portmidi port
+                    ///< see http://en.wikipedia.org/wiki/PortMidi
+    const unsigned char byte; ///< the raw midi byte value
 
     MidiByte(const int port, unsigned char byte) : port(port), byte(byte) {}
 };
@@ -277,7 +423,7 @@ struct MidiByte {
 /// start a raw midi byte stream
 struct StartMidi {
 
-    const int port;     ///< raw portmidi port
+    const int port; ///< raw portmidi port
 
     explicit StartMidi(const int port=0) : port(port) {}
 };
@@ -285,7 +431,7 @@ struct StartMidi {
 /// start a raw sysex byte stream
 struct StartSysex {
 
-    const int port;     ///< raw portmidi port
+    const int port; ///< raw portmidi port
 
     explicit StartSysex(const int port=0) : port(port) {}
 };
@@ -293,7 +439,7 @@ struct StartSysex {
 /// start a sys realtime byte stream
 struct StartSysRealTime {
 
-    const int port;     ///< raw portmidi port
+    const int port; ///< raw portmidi port
 
     explicit StartSysRealTime(const int port=0) : port(port) {}
 };
@@ -301,90 +447,6 @@ struct StartSysRealTime {
 /// finish a midi byte stream
 struct Finish {
     explicit Finish() {}
-};
-
-/// \section pd message polling objects
-
-enum MessageType {
-    NONE,
-
-    PRINT,
-
-    // events
-    BANG,
-    FLOAT,
-    SYMBOL,
-    LIST,
-    MESSAGE,
-
-    // midi
-    NOTE_ON,
-    CONTROL_CHANGE,
-    PROGRAM_CHANGE,
-    PITCH_BEND,
-    AFTERTOUCH,
-    POLY_AFTERTOUCH,
-    BYTE
-};
-
-/// a general message for polling
-///
-/// check message type and grab data:
-///
-/// while(pd.numMessages() > 0) {
-///        pd::Message& msg = pd.nextMessage(&msg);
-///
-///        switch(msg.type) {
-///            case PRINT:
-///                cout << got print: " << msg.symbol << endl;
-///                break;
-///            case BANG:
-///                cout << "go a bang to " << msg.dest << endl;
-///                break;
-///            case NOTE_ON:
-///                cout << "got a note on " << msg.channel
-///                     << msg.pitch << " " << msg.velocity << endl;
-///                break;
-///            ...
-///        }
-///    }
-///
-/// the message-specific types are only set for the appropriate
-/// message types ie pitch is only set for NOTE_ON & POLY_AFTERTOUCH messages etc
-///
-struct Message {
-
-        Message();
-        explicit Message(MessageType type);
-
-        MessageType type;        ///< the type of message
-
-        // events
-        std::string dest;        ///< dest receiver name
-
-        float num;                ///< FLOAT value
-        std::string symbol;        ///< SYMBOL value
-                                ///< PRINT message & message name for MESSAGE
-
-        pd::List list;            ///< LIST & MESSAGE
-
-        // midi
-        int channel;            ///< channel (0 - 15 * dev#)
-        int pitch;                ///< pitch (0 - 127) for NOTE_ON & POLY_AFTERTOUCH
-        int velocity;            ///< velocity (0 - 127) for NOTE_ON
-        int controller;            ///< controller (0 - 127) for CONTROL_CHANGE
-
-        int value;                ///< value (0 - 127) for CONTROL_CHANGE,
-                                ///< PROGRAM_CHANGE, & POLY_AFTERTOUCH
-                                ///< value (-8192 - 8192) for PITCH_BEND
-
-        // raw midi byte
-        int port;                ///< raw portmidi port
-                                ///< see http://en.wikipedia.org/wiki/PortMidi
-        unsigned char byte;        ///< the raw midi byte value
-
-        // clear the message contents, sets the type to NONE
-        void clear();
 };
 
 } // namespace

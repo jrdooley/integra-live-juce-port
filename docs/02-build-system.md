@@ -46,7 +46,7 @@ ctest --test-dir build --output-on-failure
 ## How libpd and the externals are built
 
 * `integra_libpd` compiles the same file list as libpd's own Makefile
-  (Pd 0.43.3 core + `libpd_wrapper` + `libpd_wrapper/util` + the C++ `PdBase`),
+  (originally Pd 0.43.3, now Pd 0.56-5 — see [10-pd-upgrade.md](10-pd-upgrade.md) — + `libpd_wrapper` + `libpd_wrapper/util` + the C++ `PdBase`),
   with `PD USEAPI_DUMMY HAVE_UNISTD_H HAVE_LIBDL`. The four Pd "extra"
   externals Integra registers (`bonk~`, `fiddle~`, `lrshift~`, `expr`/`expr~`/`fexpr~`)
   are compiled into the same library.

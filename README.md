@@ -13,7 +13,7 @@ its Pure Data (libpd) module library.
 ```
 libIntegra/        libIntegra 1.8.2 (from integra-framework) + tests, with portability fixes
                    and a new "host-driven audio" mode
-third_party/       libpd (Pd 0.43.3), Pd externals, flext, minizip, tmpfileplus
+third_party/       libpd 0.16.1 (Pd 0.56-5), Pd externals, flext, minizip, tmpfileplus
 modules/           the 82 Integra modules (.module = interface definition + Pd patches)
 blocks/            demo blocks
 app/               the JUCE application (replaces the Flex GUI and integra_server)
@@ -31,7 +31,7 @@ reference/         the 2018 JUCE prototype from the integra2 branch (not built)
  ┌───────────────▼──────────────────────────────▼────────────┐
  │ libIntegra: node tree, commands, scenes, player, envelopes,│
  │ scalers, Lua scripting, MIDI (PortMidi), file I/O          │
- │ DSP engine ──▶ libpd (Pd 0.43.3) + externals ──▶ modules   │
+ │ DSP engine ──▶ libpd (Pd 0.56-5) + externals ──▶ modules   │
  └────────────────────────────────────────────────────────────┘
 ```
 
@@ -104,6 +104,7 @@ platforms; the Windows job uploads a ready-to-run `integra-live-windows-x64` art
 8. [macOS packaging and signing](docs/07-macos-packaging.md)
 9. [Feature parity with the Flex GUI](docs/08-flex-parity.md)
 10. [Robustness pass: stress test, sanitizers, crash fixes](docs/09-robustness.md)
+11. [Upgrade to libpd 0.16.1 / Pd 0.56-5](docs/10-pd-upgrade.md)
 
 ## Licences
 

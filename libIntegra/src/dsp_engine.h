@@ -31,12 +31,11 @@
 #include <mutex>
 
 
-extern "C"	//setup functions for externals
+#include "pd_message_queue.h"
+
+
+extern "C"	//setup functions for externals (bonk~, fiddle~, lrshift~ and expr are built into libpd 0.16)
 {
-	void bonk_tilde_setup();
-	void expr_setup();		
-	void fiddle_tilde_setup();
-	void lrshift_tilde_setup();
 	void partconv_tilde_setup();
 	void freeverb_tilde_setup();
 	void soundfile_info_setup();
@@ -44,13 +43,6 @@ extern "C"	//setup functions for externals
         void copy_setup();
 }
 
-
-namespace pd
-{
-	class PdBase;
-	class List;
-	struct Message;
-}
 
 namespace integra_api
 {
@@ -130,8 +122,11 @@ namespace integra_internal
 			void trace_to_pd_log( const string &message ) const;
 
 			void test_map_sanity();
+			bool delete_host_object( internal_id patch_id );
 
 			pd::PdBase *m_pd;
+			pd::Patch m_patch;
+			CPdMessageQueue m_pd_messages;
 
 			CServer &m_server;
 
