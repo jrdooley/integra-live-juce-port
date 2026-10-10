@@ -329,9 +329,14 @@ namespace integra
         valueEditor->setFont (juce::FontOptions (11.0f));
         valueEditor->setText (info (attribute).format (get (attribute)), false);
         valueEditor->setInputRestrictions (256);
-        valueEditor->onReturnKey = [this] { juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<IntegraWidget> (this)] { if (safe) safe->finishEditingValue (true); }); };
-        valueEditor->onEscapeKey = [this] { juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<IntegraWidget> (this)] { if (safe) safe->finishEditingValue (false); }); };
-        valueEditor->onFocusLost = [this] { juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<IntegraWidget> (this)] { if (safe) safe->finishEditingValue (true); }); };
+        // (the pointer is made here: MSVC takes `this` in a nested lambda's capture as the outer lambda)
+        auto finishLater = [safe = juce::Component::SafePointer<IntegraWidget> (this)] (bool save)
+        {
+            juce::MessageManager::callAsync ([safe, save] { if (safe) safe->finishEditingValue (save); });
+        };
+        valueEditor->onReturnKey = [finishLater] { finishLater (true); };
+        valueEditor->onEscapeKey = [finishLater] { finishLater (false); };
+        valueEditor->onFocusLost = [finishLater] { finishLater (true); };
         addAndMakeVisible (*valueEditor);
         valueEditor->setBounds (getValueTextArea().expanded (2, 1));
         valueEditor->selectAll();
