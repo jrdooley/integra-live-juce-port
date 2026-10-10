@@ -898,6 +898,87 @@ namespace integra
             g.setColour (t.textDim);
             g.setFont (juce::FontOptions (11.0f));
         }
+
+        if (! dropOutline.isEmpty())
+        {
+            g.setColour (juce::Colour (0xff808080));
+            g.drawRect (dropOutline, 1.0f);
+        }
+    }
+
+    //==============================================================================
+    bool TrackLanes::isInterestedInDragSource (const SourceDetails& d)
+    {
+        return d.description.toString().startsWith (BlockLibrary::dragPrefix);
+    }
+
+    void TrackLanes::itemDropped (const SourceDetails& d)
+    {
+        updateDropOutline (std::nullopt);
+        juce::File file (d.description.toString().fromFirstOccurrenceOf (BlockLibrary::dragPrefix, false, false));
+        auto result = importBlockAt (file, d.localPosition);
+        if (result.failed())
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Import block", result.getErrorMessage());
+    }
+
+    bool TrackLanes::isInterestedInFileDrag (const juce::StringArray& files)
+    {
+        for (auto& f : files)
+            if (juce::File (f).hasFileExtension ("integra"))
+                return true;
+        return false;
+    }
+
+    void TrackLanes::filesDropped (const juce::StringArray& files, int x, int y)
+    {
+        updateDropOutline (std::nullopt);
+        for (auto& f : files)
+        {
+            if (! juce::File (f).hasFileExtension ("integra"))
+                continue;
+            auto result = importBlockAt (juce::File (f), { x, y });
+            if (result.failed())
+                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Import block", result.getErrorMessage());
+            break;
+        }
+    }
+
+    void TrackLanes::updateDropOutline (std::optional<juce::Point<int>> position)
+    {
+        // ArrangeViewTrack.onDragEnter: a new block's length, centred on the mouse
+        juce::Rectangle<float> outline;
+        if (position.has_value())
+        {
+            for (auto& r : rows())
+            {
+                if (position->y >= r.bounds.getY() && position->y < r.bounds.getBottom() && position->x >= mapping.laneX)
+                {
+                    const float width = (float) (ProjectController::newBlockSeconds * context.model.get().player.rate * mapping.pixelsPerTick);
+                    outline = { (float) position->x - width / 2.0f, (float) r.bounds.getY(), width, (float) r.bounds.getHeight() };
+                }
+            }
+        }
+
+        if (outline != dropOutline)
+        {
+            dropOutline = outline;
+            repaint();
+        }
+    }
+
+    juce::Result TrackLanes::importBlockAt (const juce::File& file, juce::Point<int> position)
+    {
+        // ArrangeViewTrack.onDragDrop
+        auto* track = trackAt (position.y);
+        if (track == nullptr || position.x < mapping.laneX)
+            return juce::Result::fail ("Drop the block onto a track");
+
+        const int halfLength = ProjectController::newBlockSeconds * context.model.get().player.rate / 2;
+        const int start = juce::jmax (0, (int) std::round (mapping.xToTick ((float) position.x)) - halfLength);
+        auto result = context.controller.importBlock (file, track->path, start);
+        if (result.wasOk() && onSelectionChanged)
+            onSelectionChanged();
+        return result;
     }
 
     void TrackLanes::mouseMove (const juce::MouseEvent& e)
@@ -1066,8 +1147,6 @@ namespace integra
 
     void TrackLanes::mouseDrag (const juce::MouseEvent& e)
     {
-        const int rate = juce::jmax (1, context.model.get().player.rate);
-
         if (drag == Drag::curve)
         {
             dragCurvature = curvatureFromMouse (e.position);
@@ -1217,52 +1296,7 @@ namespace integra
 
     void TrackLanes::rescheduleBlocks (const model::Track& track, bool movingRight)
     {
-        // ArrangeView.doBlockRescheduling for the dragged block: push the other blocks on
-        // its (target) track out of the way, keeping their order, instead of overlapping
-        const auto dragged = draggedBlocks[dragBlock];
-
-        struct Span { juce::String path; int start, end; int length() const { return end - start; } };
-        std::vector<Span> others;
-        for (auto& b : track.blocks)
-            if (b.path != dragBlock)
-                others.push_back ({ b.path, b.start, b.end });
-        std::stable_sort (others.begin(), others.end(), [] (const Span& a, const Span& b) { return a.start + a.end < b.start + b.end; });
-
-        int insertion = (int) others.size();
-        for (int i = 0; i < (int) others.size(); ++i)
-        {
-            if (movingRight ? others[(size_t) i].end > dragged.getStart() : others[(size_t) i].start >= dragged.getEnd())
-            {
-                insertion = i;
-                break;
-            }
-        }
-
-        int durationToLeft = 0;
-        for (int i = 0; i < insertion; ++i)
-            durationToLeft += others[(size_t) i].length();
-        while (durationToLeft > dragged.getStart() && insertion > 0)
-            durationToLeft -= others[(size_t) --insertion].length();
-
-        int maximumEnd = dragged.getStart();
-        for (int i = insertion - 1; i >= 0; --i)
-        {
-            auto& b = others[(size_t) i];
-            if (b.end <= maximumEnd)
-                break;
-            draggedBlocks[b.path] = { maximumEnd - b.length(), maximumEnd };
-            maximumEnd -= b.length();
-        }
-
-        int minimumStart = dragged.getEnd();
-        for (int i = insertion; i < (int) others.size(); ++i)
-        {
-            auto& b = others[(size_t) i];
-            if (b.start >= minimumStart)
-                break;
-            draggedBlocks[b.path] = { minimumStart, minimumStart + b.length() };
-            minimumStart += b.length();
-        }
+        ProjectController::rescheduleBlocks (track, dragBlock, movingRight, draggedBlocks);
     }
 
     void TrackLanes::mouseUp (const juce::MouseEvent&)
@@ -1494,7 +1528,7 @@ namespace integra
 
     //==============================================================================
     ArrangeView::ArrangeView (AppContext& c)
-        : context (c), ruler (c, mapping), lanes (c, mapping)
+        : context (c), ruler (c, mapping), lanes (c, mapping), blockLibrary (c)
     {
         mapping.laneX = TrackLanes::headerWidth;
 
@@ -1507,12 +1541,19 @@ namespace integra
         horizontalScroll.setAutoHide (false);
         addAndMakeVisible (horizontalScroll);
 
-        zoomIn.onClick = [this] { zoom (1.5, (float) getWidth() * 0.5f); };
-        zoomOut.onClick = [this] { zoom (1.0 / 1.5, (float) getWidth() * 0.5f); };
+        zoomIn.onClick = [this] { zoom (1.5, (float) lanes.getWidth() * 0.5f); };
+        zoomOut.onClick = [this] { zoom (1.0 / 1.5, (float) lanes.getWidth() * 0.5f); };
         zoomIn.setTooltip ("Zoom in (Ctrl + mouse wheel)");
         zoomOut.setTooltip ("Zoom out");
         addAndMakeVisible (zoomIn);
         addAndMakeVisible (zoomOut);
+
+        if (auto* settings = context.properties.getUserSettings())
+            blockLibraryWidth = juce::jlimit ((int) BlockLibrary::minimumWidth, (int) BlockLibrary::maximumWidth,
+                                              settings->getIntValue ("blockLibraryWidth", BlockLibrary::defaultWidth));
+        blockLibrary.getPlayPosition = [this] { return lanes.playPosition; };
+        addAndMakeVisible (blockLibrary);
+        addAndMakeVisible (widthHandle);
 
         lanes.onOpenBlock = [this] (const juce::String& block) { if (onOpenBlock) onOpenBlock (block); };
         lanes.onSelectionChanged = [this] { ruler.repaint(); if (onSelectionChanged) onSelectionChanged(); };
@@ -1558,7 +1599,7 @@ namespace integra
 
             // follow the playhead while playing
             const float x = mapping.tickToX (tick);
-            if (x > (float) getWidth() - 40.0f && context.controller.isPlaying())
+            if (x > (float) lanes.getWidth() - 40.0f && context.controller.isPlaying())
             {
                 mapping.scrollTicks = tick - 40.0 / mapping.pixelsPerTick;
                 updateScrollBar (true);
@@ -1586,7 +1627,7 @@ namespace integra
     void ArrangeView::updateScrollBar (bool userChanged)
     {
         const int rate = juce::jmax (1, context.model.get().player.rate);
-        const double visibleTicks = (getWidth() - mapping.laneX) / mapping.pixelsPerTick;
+        const double visibleTicks = (lanes.getWidth() - mapping.laneX) / mapping.pixelsPerTick;
         const double total = juce::jmax ((double) context.model.get().getLength() + 30.0 * rate, mapping.scrollTicks + visibleTicks);
         horizontalScroll.setRangeLimits (0.0, total, juce::dontSendNotification);
         horizontalScroll.setCurrentRange (mapping.scrollTicks, visibleTicks, juce::dontSendNotification);
@@ -1638,9 +1679,26 @@ namespace integra
         g.fillAll (Theme::get().background);
     }
 
+    void ArrangeView::WidthHandle::mouseDrag (const juce::MouseEvent& e)
+    {
+        view.blockLibraryWidth = juce::jlimit ((int) BlockLibrary::minimumWidth, (int) BlockLibrary::maximumWidth,
+                                               startWidth - e.getDistanceFromDragStartX());
+        view.resized();
+    }
+
+    void ArrangeView::WidthHandle::mouseUp (const juce::MouseEvent&)
+    {
+        if (auto* settings = view.context.properties.getUserSettings())
+            settings->setValue ("blockLibraryWidth", view.blockLibraryWidth);
+    }
+
     void ArrangeView::resized()
     {
         auto area = getLocalBounds();
+
+        // the Block Library sits at the right, as in the Flex Arrange view
+        blockLibrary.setBounds (area.removeFromRight (juce::jmin (blockLibraryWidth, juce::jmax (0, getWidth() - 300))));
+        widthHandle.setBounds (area.removeFromRight (4));
         auto rulerArea = area.removeFromTop (TimelineRuler::sceneBarHeight + 24);
         ruler.setBounds (rulerArea);
         zoomOut.setBounds (TrackLanes::headerWidth - 58, TimelineRuler::sceneBarHeight + 2, 24, 20);

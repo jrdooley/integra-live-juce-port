@@ -27,7 +27,9 @@ Flex paths are relative to `GUI/src/components/`.
 | Feedback loops | `IntegraModel.canSetAudioLink` | Audio links that would create a cycle, or connect a module to itself, are refused. |
 | Locked (driven) controls | `ControlContainer.as` padlock | Controls driven by an envelope, learned MIDI or a routing show a padlock and can't be changed; the padlock's menu deletes the envelope or routing. |
 | File and folder widgets | `FileLoadDialogControl.as`, `LocateFolderDialogControl.as` | FileLoadDialog and LocateFolderDialog are real file/folder choosers instead of a slider; choosers start at the current file. *(No automated test.)* |
-| Module library tags | `ModuleLibrary.as` | The tag list is rebuilt when modules are installed. *(No automated test.)* |
+| Module library tags | `ModuleLibrary.as` | The tag list is rebuilt when modules are installed. |
+| Module library | `ModuleLibrary/`, `utils/libraries/Library.mxml` | Versions grouped by origin behind an expander with source headings; embedded and in-development modules listed; only modules with audio endpoints; Flex's sort order and tints; tag cloud sorted by use with AND filtering; search on labels; search and tags clear each other; clear buttons; Enter, Left/Right; Flex's info text in tooltips. On the right of the graph, as in Flex. |
+| Block Library | `BlockLibrary/`, `ArrangeViewTrack.as` drag handlers | Side panel with the shipped blocks (index.xml order) and user blocks; drag onto a track with a drop outline; double-click/Enter imports into the selected track at the playhead; remove user blocks; info tooltips; resizable width. Unlike Flex, an imported block never overlaps others: it starts after a block under its start and pushes later blocks along. |
 | Pin drag | — | The connection being dragged no longer points into the graph's module list, which is rebuilt on model changes. *(No automated test.)* |
 | Envelope curvature | `EnvelopeView.as`, `BlockView.as` | Curve mode button and menu item (stored per block, as Flex did), drag a segment to bend it, double-click to straighten it; curves drawn as libIntegra interpolates them. |
 | Module Manager | `ModuleManager/`, `SwitchModuleVersion.as`, `UpgradeModules.as`, `UninstallModules.as` | Install / Uninstall and Manage Versions tabs, Switch Versions, Upgrade All with a backup, Always Upgrade, the Upgrade Modules dialog after loading a project or installing modules, and installation / switch / upgrade reports. Version reports list endpoint differences more briefly than Flex's. |
@@ -48,8 +50,7 @@ Flex paths are relative to `GUI/src/components/`.
   picker (only 7 colours), import/export track, double-click below the tracks to add one,
   Ctrl+Shift+T.
 * Blocks: multi-select (Ctrl/Cmd-click) with group move/delete; moving only by the title strip; a new block
-  centred on a double-click that pushes later blocks; Ctrl+B / Ctrl+Shift+B; inline rename;
-  **Block Library panel** with drag onto a track.
+  centred on a double-click that pushes later blocks; Ctrl+B / Ctrl+Shift+B; inline rename.
 * Envelopes: envelope lock / Shift, click the line to select and add a point
   (now: pick from a menu, then double-click), double-click a point to delete it (now
   right-click), value/time readout while dragging, add/remove envelopes from the block
@@ -59,10 +60,8 @@ Flex paths are relative to `GUI/src/components/`.
 ## Module view
 
 **Missing / partial**
-* Library: grouping of versions with "Show alternative versions", source labels
-  (Shipped / 3rd Party / Embedded / In Development), embedded modules, multi-tag
-  filtering, clear buttons, Enter to add, a ghost preview while dragging, **dropping a
-  module onto a link to splice it in**.
+* Library: a ghost preview while dragging, a resizable tag cloud (it fits its tags,
+  up to half the library), **dropping a module onto a link to splice it in**.
 * Graph: multi-select and rubber-band selection with group move/delete; snapping to
   other modules' edges with snap lines; in-place rename by double-click; per-module
   "Live View" checkbox; right-click on empty space for Import Module; Change Track Colour;

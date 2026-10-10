@@ -4,116 +4,553 @@
 namespace integra
 {
     //==============================================================================
+    /** Flex TagCloud: toggle buttons for every tag, laid out like words in a paragraph. */
+    class ModuleLibrary::TagCloud  : public juce::Component
+    {
+    public:
+        explicit TagCloud (ModuleLibrary& l) : library (l) {}
+
+        void setTags (const juce::StringArray& t)
+        {
+            tags = t;
+            layout();
+        }
+
+        int getIdealHeight (int width)
+        {
+            setSize (width, getHeight());
+            layout();
+            return idealHeight;
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            auto& t = Theme::get();
+            g.setFont (juce::FontOptions (12.0f));
+            for (size_t i = 0; i < boxes.size(); ++i)
+            {
+                const bool on = library.selectedTags.contains (tags[(int) i]);
+                auto r = boxes[i].toFloat();
+                g.setColour (on ? t.accent : t.controlBackground);
+                g.fillRoundedRectangle (r, 3.0f);
+                g.setColour (on ? t.accentText : t.textDim);
+                g.drawText (tags[(int) i], boxes[i], juce::Justification::centred, false);
+            }
+        }
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            for (size_t i = 0; i < boxes.size(); ++i)
+                if (boxes[i].contains (e.getPosition()))
+                    return library.toggleTag (tags[(int) i]);
+        }
+
+        void resized() override     { layout(); }
+
+    private:
+        void layout()
+        {
+            // TagCloud.positionTagButtons
+            constexpr int edgeMargin = 2, innerMargin = 2, rowHeight = 18;
+            boxes.clear();
+            const juce::Font font (juce::FontOptions (12.0f));
+            int x = edgeMargin, y = edgeMargin;
+            for (auto& tag : tags)
+            {
+                const int w = juce::GlyphArrangement::getStringWidthInt (font, tag) + 10;
+                if (x + w > getWidth() - edgeMargin && x > edgeMargin)
+                {
+                    x = edgeMargin;
+                    y += rowHeight + innerMargin;
+                }
+                boxes.push_back ({ x, y, w, rowHeight });
+                x += w + innerMargin;
+            }
+            idealHeight = boxes.empty() ? 0 : boxes.back().getBottom() + edgeMargin;
+        }
+
+        ModuleLibrary& library;
+        juce::StringArray tags;
+        std::vector<juce::Rectangle<int>> boxes;
+        int idealHeight = 0;
+    };
+
+    //==============================================================================
+    namespace
+    {
+        bool hasAudioEndpoints (const ModuleCatalogue::Entry& e)
+        {
+            return e.numAudioInputs > 0 || e.numAudioOutputs > 0;
+        }
+
+        /** ModuleLibraryListEntry.compare: in development, shipped, 3rd party, embedded. */
+        int libraryPriority (IInterfaceDefinition::module_source source)
+        {
+            switch (source)
+            {
+                case IInterfaceDefinition::MODULE_IN_DEVELOPMENT:        return 3;
+                case IInterfaceDefinition::MODULE_SHIPPED_WITH_INTEGRA:  return 2;
+                case IInterfaceDefinition::MODULE_3RD_PARTY:             return 1;
+                case IInterfaceDefinition::MODULE_EMBEDDED:
+                default:                                                 return 0;
+            }
+        }
+    }
+
     ModuleLibrary::ModuleLibrary (AppContext& c) : context (c)
     {
         search.setTextToShowWhenEmpty ("Search modules", Theme::get().textDim);
-        search.onTextChange = [this] { refresh(); };
+        search.onTextChange = [this]
+        {
+            // ModuleLibrary.onSearchChange: searching clears the tag selection
+            if (search.getText().isNotEmpty())
+                selectedTags.clear();
+            refresh();
+        };
+        search.onEscapeKey = [this] { setSearchText ({}); };
         addAndMakeVisible (search);
 
-        tagFilter.onChange = [this] { refresh(); };
-        addAndMakeVisible (tagFilter);
+        clearSearch.setTooltip ("Clear the search");
+        clearSearch.onClick = [this] { setSearchText ({}); };
+        addChildComponent (clearSearch);
 
-        list.setRowHeight (24);
+        list.setRowHeight (22);
         list.setMultipleSelectionEnabled (false);
+        list.addKeyListener (this);
         addAndMakeVisible (list);
+
+        tagCloud = std::make_unique<TagCloud> (*this);
+        addAndMakeVisible (*tagCloud);
         refresh();
+    }
+
+    ModuleLibrary::~ModuleLibrary()
+    {
+        list.removeKeyListener (this);
+    }
+
+    juce::String ModuleLibrary::getSourceHeading (IInterfaceDefinition::module_source source)
+    {
+        // ModuleLibraryListLabel
+        switch (source)
+        {
+            case IInterfaceDefinition::MODULE_SHIPPED_WITH_INTEGRA:  return "LATEST OFFICIAL";
+            case IInterfaceDefinition::MODULE_3RD_PARTY:             return "THIRD PARTY";
+            case IInterfaceDefinition::MODULE_EMBEDDED:              return "EMBEDDED";
+            case IInterfaceDefinition::MODULE_IN_DEVELOPMENT:        return "IN DEVELOPMENT";
+            default:                                                 return "UNKNOWN";
+        }
+    }
+
+    juce::Colour ModuleLibrary::getSourceTint (IInterfaceDefinition::module_source source)
+    {
+        // ModuleLibraryListEntry tints: blue for 3rd party, purple embedded, red in development
+        switch (source)
+        {
+            case IInterfaceDefinition::MODULE_3RD_PARTY:        return juce::Colour (0xff3060c0).withAlpha (0.18f);
+            case IInterfaceDefinition::MODULE_EMBEDDED:         return juce::Colour (0xffa040a0).withAlpha (0.18f);
+            case IInterfaceDefinition::MODULE_IN_DEVELOPMENT:   return juce::Colour (0xffd03030).withAlpha (0.22f);
+            default:                                            return juce::Colours::transparentBlack;
+        }
+    }
+
+    juce::String ModuleLibrary::getInfoMarkdown (const ModuleCatalogue::Entry& e, bool isDefaultEntry)
+    {
+        // ModuleLibraryListEntry.makeInfo / InterfaceDefinition.makeExtendedInfoMarkdown
+        if (isDefaultEntry && e.source == IInterfaceDefinition::MODULE_SHIPPED_WITH_INTEGRA)
+            return e.description;
+
+        juce::String markdown = "#" + e.label + "\n##" + e.getSourceLabel() + "\n\n";
+        if (! isDefaultEntry)
+        {
+            markdown << "**Last modified:** " << (e.modified.toMilliseconds() > 0 ? e.modified.toString (true, false) : juce::String ("<unknown>")) << "\n\n";
+            markdown << "**Author:** " << (e.author.isEmpty() ? juce::String ("<unknown>") : e.author) << "\n\n";
+        }
+        return markdown + e.description;
+    }
+
+    juce::StringArray ModuleLibrary::getTags() const
+    {
+        // ModuleLibrary.updateTagList: tags of modules with audio endpoints, most used first
+        std::map<juce::String, int> uses;
+        for (auto& e : context.session.getCatalogue().getEntries())
+            if (hasAudioEndpoints (e))
+                for (auto& tag : e.tags)
+                    if (tag.isNotEmpty())
+                        ++uses[tag];
+
+        std::vector<std::pair<juce::String, int>> sorted (uses.begin(), uses.end());
+        std::stable_sort (sorted.begin(), sorted.end(), [] (auto& a, auto& b)
+        {
+            return a.second != b.second ? a.second > b.second : a.first.compare (b.first) < 0;
+        });
+
+        juce::StringArray tags;
+        for (auto& [tag, count] : sorted)
+            tags.add (tag);
+        return tags;
+    }
+
+    void ModuleLibrary::setSearchText (const juce::String& text)
+    {
+        search.setText (text, false);
+        if (text.isNotEmpty())
+            selectedTags.clear();
+        refresh();
+    }
+
+    void ModuleLibrary::toggleTag (const juce::String& tag)
+    {
+        // TagCloud.onClickTagButton; ModuleLibrary.onTagSelectionChanged clears the search
+        if (selectedTags.contains (tag))
+            selectedTags.removeString (tag);
+        else
+            selectedTags.add (tag);
+        search.setText ({}, false);
+        refresh();
+    }
+
+    void ModuleLibrary::clearTags()
+    {
+        selectedTags.clear();
+        refresh();
+    }
+
+    void ModuleLibrary::setExpanded (const GUID& origin, bool shouldExpand)
+    {
+        auto it = std::find_if (expandedOrigins.begin(), expandedOrigins.end(), [&] (const GUID& g) { return guidsEqual (g, origin); });
+        if (shouldExpand && it == expandedOrigins.end())
+            expandedOrigins.push_back (origin);
+        else if (! shouldExpand && it != expandedOrigins.end())
+            expandedOrigins.erase (it);
+        else
+            return;
+
+        // keep the selection on the same module line
+        const ModuleCatalogue::Entry* selected = nullptr;
+        if (auto row = list.getSelectedRow(); row >= 0 && row < (int) rows.size())
+            selected = rows[(size_t) row].entry;
+        refresh();
+        for (size_t i = 0; i < rows.size(); ++i)
+            if (rows[i].kind == Row::Kind::module && rows[i].entry != nullptr && guidsEqual (rows[i].entry->originGuid, origin))
+                if (selected == nullptr || ! shouldExpand || rows[i].entry == selected)
+                    { list.selectRow ((int) i); break; }
     }
 
     void ModuleLibrary::refresh()
     {
-        // rebuild the tag list when the catalogue's tags change (e.g. after installing a module)
-        const auto tags = context.session.getCatalogue().getAllTags();
-        juce::StringArray shownTags;
-        for (int i = 1; i < tagFilter.getNumItems(); ++i)
-            shownTags.add (tagFilter.getItemText (i));
-        if (tagFilter.getNumItems() == 0 || shownTags != juce::StringArray (tags))
-        {
-            const auto selected = tagFilter.getSelectedId() > 1 ? tagFilter.getText() : juce::String();
-            tagFilter.clear (juce::dontSendNotification);
-            tagFilter.addItem ("All modules", 1);
-            int id = 2;
-            for (auto& tag : tags)
-                tagFilter.addItem (tag, id++);
-            const int index = juce::StringArray (tags).indexOf (selected);
-            tagFilter.setSelectedId (index >= 0 ? index + 2 : 1, juce::dontSendNotification);
-        }
-
+        auto& catalogue = context.session.getCatalogue();
         const auto text = search.getText().trim();
-        const auto tag = tagFilter.getSelectedId() > 1 ? tagFilter.getText() : juce::String();
 
-        shown.clear();
-        for (auto* e : context.session.getCatalogue().getUserModules())
+        // prune tags that no longer exist (e.g. after uninstalling a module)
+        const auto tags = getTags();
+        for (int i = selectedTags.size(); --i >= 0;)
+            if (! tags.contains (selectedTags[i]))
+                selectedTags.remove (i);
+
+        auto include = [&] (const ModuleCatalogue::Entry& e)
         {
-            if (tag.isNotEmpty() && ! e->tags.contains (tag))
+            if (! hasAudioEndpoints (e))
+                return false;
+            if (text.isNotEmpty() && ! e.label.containsIgnoreCase (text))
+                return false;
+            for (auto& tag : selectedTags)
+                if (! e.tags.contains (tag))
+                    return false;
+            return true;
+        };
+
+        // ModuleLibrary.updateLibrary: one group per origin, its first version as default
+        std::vector<std::vector<const ModuleCatalogue::Entry*>> groups;
+        std::vector<GUID> seen;
+        for (auto& e : catalogue.getEntries())
+        {
+            if (! hasAudioEndpoints (e))
                 continue;
-            if (text.isNotEmpty() && ! e->label.containsIgnoreCase (text) && ! e->description.containsIgnoreCase (text)
-                 && ! e->tags.joinIntoString (" ").containsIgnoreCase (text))
+            if (std::any_of (seen.begin(), seen.end(), [&] (const GUID& g) { return guidsEqual (g, e.originGuid); }))
                 continue;
-            shown.push_back (e);
+            seen.push_back (e.originGuid);
+
+            std::vector<const ModuleCatalogue::Entry*> group;
+            for (auto* v : catalogue.getVersions (e.originGuid))
+                if (include (*v))
+                    group.push_back (v);
+            if (! group.empty())
+                groups.push_back (std::move (group));
         }
 
+        std::stable_sort (groups.begin(), groups.end(), [] (auto& ga, auto& gb)
+        {
+            auto* a = ga.front();
+            auto* b = gb.front();
+            if (libraryPriority (a->source) != libraryPriority (b->source))
+                return libraryPriority (a->source) > libraryPriority (b->source);
+            const auto la = a->label.toUpperCase(), lb = b->label.toUpperCase();
+            if (la != lb)
+                return la < lb;
+            return a->modified > b->modified;
+        });
+
+        const ModuleCatalogue::Entry* selected = nullptr;
+        if (auto row = list.getSelectedRow(); row >= 0 && row < (int) rows.size())
+            selected = rows[(size_t) row].entry;
+
+        rows.clear();
+        for (auto& group : groups)
+        {
+            Row top;
+            top.entry = group.front();
+            top.source = top.entry->source;
+            top.numVersions = (int) group.size();
+            top.expanded = group.size() > 1
+                           && std::any_of (expandedOrigins.begin(), expandedOrigins.end(), [&] (const GUID& g) { return guidsEqual (g, top.entry->originGuid); });
+            rows.push_back (top);
+
+            if (top.expanded)
+            {
+                // ModuleLibrary.insertLabels: a heading before each run of one source
+                bool first = true;
+                IInterfaceDefinition::module_source previous {};
+                for (auto* v : group)
+                {
+                    if (first || v->source != previous)
+                    {
+                        Row label;
+                        label.kind = Row::Kind::sourceLabel;
+                        label.source = v->source;
+                        rows.push_back (label);
+                    }
+                    first = false;
+                    previous = v->source;
+
+                    Row version;
+                    version.kind = Row::Kind::version;
+                    version.entry = v;
+                    version.source = v->source;
+                    rows.push_back (version);
+                }
+            }
+        }
+
+        tagCloud->setTags (tags);
+        clearSearch.setVisible (search.getText().isNotEmpty());
         list.updateContent();
+
+        int newSelection = -1;
+        for (size_t i = 0; i < rows.size() && selected != nullptr; ++i)
+            if (rows[i].entry == selected)
+                { newSelection = (int) i; break; }
+        if (newSelection >= 0)
+            list.selectRow (newSelection, true, true);
+        else
+            list.deselectAllRows();
+
         list.repaint();
+        resized();
+        repaint();
     }
 
     void ModuleLibrary::paint (juce::Graphics& g)
     {
-        g.fillAll (Theme::get().panelAlt);
+        auto& t = Theme::get();
+        g.fillAll (t.panelAlt);
+
+        // "Tags..." header with the clear button (TagCloud)
+        auto header = juce::Rectangle<int> (4, tagCloud->getY() - 20, getWidth() - 8, 18);
+        g.setColour (t.textDim);
+        g.setFont (juce::FontOptions (11.0f));
+        g.drawText (selectedTags.isEmpty() ? "Tags..." : "Tags: " + selectedTags.joinIntoString (" + "),
+                    header.withTrimmedRight (20), juce::Justification::centredLeft, true);
+        if (! selectedTags.isEmpty())
+        {
+            auto x = header.removeFromRight (14).withSizeKeepingCentre (8, 8).toFloat();
+            g.drawLine ({ x.getTopLeft(), x.getBottomRight() }, 1.5f);
+            g.drawLine ({ x.getTopRight(), x.getBottomLeft() }, 1.5f);
+        }
+
+        // ModuleLibrary.updateSearchBox: show when the filters leave nothing
+        if (rows.empty())
+        {
+            g.setColour (t.textDim);
+            g.setFont (juce::FontOptions (12.0f, juce::Font::italic));
+            g.drawFittedText ("No modules match the search and tags", list.getBounds().reduced (8).removeFromTop (40),
+                              juce::Justification::centred, 2);
+        }
+    }
+
+    void ModuleLibrary::mouseDown (const juce::MouseEvent& e)
+    {
+        auto header = juce::Rectangle<int> (4, tagCloud->getY() - 20, getWidth() - 8, 18);
+        if (! selectedTags.isEmpty() && header.removeFromRight (18).contains (e.getPosition()))
+            clearTags();
     }
 
     void ModuleLibrary::resized()
     {
         auto area = getLocalBounds().reduced (4);
-        search.setBounds (area.removeFromTop (26));
+        auto searchRow = area.removeFromTop (26);
+        if (clearSearch.isVisible())
+            clearSearch.setBounds (searchRow.removeFromRight (24).reduced (1));
+        search.setBounds (searchRow);
         area.removeFromTop (4);
-        tagFilter.setBounds (area.removeFromTop (24));
-        area.removeFromTop (4);
+
+        // the tag cloud fits its tags, up to half the library (ModuleLibrary.onResize)
+        const int cloudHeight = juce::jmin (tagCloud->getIdealHeight (area.getWidth()), getHeight() / 2);
+        tagCloud->setBounds (area.removeFromBottom (cloudHeight));
+        area.removeFromBottom (22);
         list.setBounds (area);
     }
 
-    int ModuleLibrary::getNumRows()     { return (int) shown.size(); }
-
-    void ModuleLibrary::paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected)
+    juce::Rectangle<int> ModuleLibrary::expanderBounds (int width, int height) const
     {
-        if (row < 0 || row >= (int) shown.size())
+        return { width - 22, 0, 22, height };
+    }
+
+    int ModuleLibrary::getNumRows()     { return (int) rows.size(); }
+
+    void ModuleLibrary::paintListBoxItem (int rowNumber, juce::Graphics& g, int width, int height, bool selected)
+    {
+        if (rowNumber < 0 || rowNumber >= (int) rows.size())
             return;
 
         auto& t = Theme::get();
+        auto& row = rows[(size_t) rowNumber];
+
+        if (row.kind == Row::Kind::sourceLabel)
+        {
+            g.setColour (t.textDim);
+            g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+            g.drawText (getSourceHeading (row.source), 18, 0, width - 20, height, juce::Justification::bottomLeft, true);
+            return;
+        }
+
+        g.fillAll (getSourceTint (row.source));
         if (selected)
             g.fillAll (t.selection);
 
-        auto* e = shown[(size_t) row];
+        auto* e = row.entry;
+        const int indent = row.kind == Row::Kind::version ? 24 : 8;
+        const bool hasExpander = row.kind == Row::Kind::module && row.numVersions > 1;
+        const int right = hasExpander ? 22 : 4;
+
+        juce::String text = e->label;
+        if (row.kind == Row::Kind::version)
+            text << "  (" << (e->modified.toMilliseconds() > 0 ? e->modified.toString (true, false) : e->getSourceLabel()) << ")";
+
         g.setColour (t.text);
-        g.setFont (juce::FontOptions (13.0f));
-        g.drawText (e->label, 8, 0, width - 60, height, juce::Justification::centredLeft, true);
+        g.setFont (juce::FontOptions (row.kind == Row::Kind::version ? 12.0f : 13.0f));
+        g.drawText (text, indent, 0, width - indent - right - 40, height, juce::Justification::centredLeft, true);
 
         g.setColour (t.textDim);
         g.setFont (juce::FontOptions (11.0f));
         juce::String pins;
-        if (e->numAudioInputs > 0 || e->numAudioOutputs > 0)
-            pins << e->numAudioInputs << " > " << e->numAudioOutputs;
-        g.drawText (pins, width - 56, 0, 50, height, juce::Justification::centredRight);
+        pins << e->numAudioInputs << " > " << e->numAudioOutputs;
+        g.drawText (pins, width - right - 40, 0, 38, height, juce::Justification::centredRight);
+
+        if (hasExpander)
+        {
+            // "Show Alternative Versions"
+            auto r = expanderBounds (width, height).toFloat().withSizeKeepingCentre (8.0f, 8.0f);
+            juce::Path p;
+            if (row.expanded)
+                p.addTriangle (r.getTopLeft(), r.getTopRight(), { r.getCentreX(), r.getBottom() });
+            else
+                p.addTriangle (r.getTopLeft(), r.getBottomLeft(), { r.getRight(), r.getCentreY() });
+            g.fillPath (p);
+        }
+    }
+
+    void ModuleLibrary::listBoxItemClicked (int row, const juce::MouseEvent& e)
+    {
+        if (row < 0 || row >= (int) rows.size())
+            return;
+        auto& r = rows[(size_t) row];
+        if (r.kind == Row::Kind::module && r.numVersions > 1 && expanderBounds (list.getVisibleRowWidth(), list.getRowHeight()).contains (e.getPosition()))
+            setExpanded (r.entry->originGuid, ! r.expanded);
     }
 
     void ModuleLibrary::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
     {
-        if (row >= 0 && row < (int) shown.size() && onModuleChosen)
-            onModuleChosen (*shown[(size_t) row]);
+        selectRow (row);
+        chooseSelected();
     }
 
-    juce::var ModuleLibrary::getDragSourceDescription (const juce::SparseSet<int>& rows)
+    void ModuleLibrary::returnKeyPressed (int)
     {
-        if (rows.isEmpty() || rows[0] >= (int) shown.size())
+        chooseSelected();
+    }
+
+    void ModuleLibrary::selectRow (int row)
+    {
+        list.selectRow (row);
+    }
+
+    void ModuleLibrary::chooseSelected()
+    {
+        const int row = list.getSelectedRow();
+        if (row >= 0 && row < (int) rows.size() && rows[(size_t) row].entry != nullptr && onModuleChosen)
+            onModuleChosen (*rows[(size_t) row].entry);
+    }
+
+    void ModuleLibrary::selectedRowsChanged (int row)
+    {
+        // source headings aren't selectable (Library.getNextSelectableLine)
+        if (row >= 0 && row < (int) rows.size() && rows[(size_t) row].kind == Row::Kind::sourceLabel)
+        {
+            const int step = row >= lastSelectedRow ? 1 : -1;
+            int next = row + step;
+            if (next < 0 || next >= (int) rows.size())
+                next = row - step;
+            list.selectRow (next);
+            return;
+        }
+        lastSelectedRow = row;
+    }
+
+    bool ModuleLibrary::keyPressed (const juce::KeyPress& key, juce::Component*)
+    {
+        return handleKey (key);
+    }
+
+    bool ModuleLibrary::handleKey (const juce::KeyPress& key)
+    {
+        // Library.onKeyDown: Left/Right expand or collapse the selected module
+        if (key.getKeyCode() != juce::KeyPress::leftKey && key.getKeyCode() != juce::KeyPress::rightKey)
+            return false;
+
+        const int row = list.getSelectedRow();
+        if (row < 0 || row >= (int) rows.size() || rows[(size_t) row].entry == nullptr)
+            return false;
+
+        auto* entry = rows[(size_t) row].entry;
+        int top = row;
+        while (top > 0 && rows[(size_t) top].kind != Row::Kind::module)
+            --top;
+        if (rows[(size_t) top].numVersions < 2)
+            return true;
+
+        const bool expand = key.getKeyCode() == juce::KeyPress::rightKey;
+        setExpanded (entry->originGuid, expand);
+        return true;
+    }
+
+    juce::var ModuleLibrary::getDragSourceDescription (const juce::SparseSet<int>& selection)
+    {
+        if (selection.isEmpty() || selection[0] >= (int) rows.size() || rows[(size_t) selection[0]].entry == nullptr)
             return {};
-        return juce::String (dragPrefix) + toString (shown[(size_t) rows[0]]->guid);
+        return juce::String (dragPrefix) + toString (rows[(size_t) selection[0]].entry->guid);
     }
 
     juce::String ModuleLibrary::getTooltipForRow (int row)
     {
-        if (row < 0 || row >= (int) shown.size())
+        if (row < 0 || row >= (int) rows.size() || rows[(size_t) row].entry == nullptr)
             return {};
-        auto* e = shown[(size_t) row];
-        return e->label + "\n" + e->description + "\nTags: " + e->tags.joinIntoString (", ");
+        auto& r = rows[(size_t) row];
+        auto text = getInfoMarkdown (*r.entry, r.kind == Row::Kind::module);
+        text = text.replace ("**", "").replace ("##", "").replace ("#", "");
+        if (! r.entry->tags.isEmpty())
+            text << "\n\nTags: " << r.entry->tags.joinIntoString (", ");
+        return text.trim();
     }
 
     //==============================================================================
@@ -651,7 +1088,7 @@ namespace integra
         top.removeFromLeft (10);
         breadcrumb.setBounds (top);
 
-        library.setBounds (area.removeFromLeft (220));
+        library.setBounds (area.removeFromRight (220));    // Flex: the library is right of the graph
 
         juce::Component* comps[] = { &graphViewport, divider.get(), &properties };
         verticalLayout.layOutComponents (comps, 3, area.getX(), area.getY(), area.getWidth(), area.getHeight(), true, true);

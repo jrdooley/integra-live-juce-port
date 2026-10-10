@@ -6,34 +6,88 @@
 
 namespace integra
 {
-    /** Searchable list of modules that can be dragged into a block (Flex: ModuleLibrary.as). */
+    /**
+        The module library (Flex: views/ModuleLibrary/). Lists every module with audio
+        endpoints, one line per module (its best version), sorted in-development first,
+        then shipped, 3rd party and embedded, then by label. Modules with several loaded
+        versions have an expander showing all of them under source headings.
+
+        Filtering: the search box matches labels; the tag cloud underneath, sorted by how
+        many modules use each tag, filters on all selected tags. Using one clears the other.
+        Double-click, Enter or drag onto the graph adds the module; Left/Right expand.
+    */
     class ModuleLibrary  : public juce::Component,
-                           private juce::ListBoxModel
+                           private juce::ListBoxModel,
+                           private juce::KeyListener
     {
     public:
         explicit ModuleLibrary (AppContext&);
+        ~ModuleLibrary() override;
 
         void refresh();
         void paint (juce::Graphics&) override;
         void resized() override;
+        void mouseDown (const juce::MouseEvent&) override;
 
         /** Called when a module is double-clicked (adds it to the current block). */
         std::function<void (const ModuleCatalogue::Entry&)> onModuleChosen;
 
         static constexpr const char* dragPrefix = "integra-module:";
 
+        struct Row
+        {
+            enum class Kind { module, sourceLabel, version } kind = Kind::module;
+            const ModuleCatalogue::Entry* entry = nullptr;      // null for source labels
+            IInterfaceDefinition::module_source source = IInterfaceDefinition::MODULE_SHIPPED_WITH_INTEGRA;
+            int numVersions = 1;                                // module rows: shown versions
+            bool expanded = false;
+        };
+
+        const std::vector<Row>& getRows() const noexcept        { return rows; }
+        void setSearchText (const juce::String&);               // clears the selected tags
+        void toggleTag (const juce::String&);                   // clears the search text
+        void clearTags();
+        juce::StringArray getTags() const;                      // in tag cloud order
+        juce::StringArray getSelectedTags() const               { return selectedTags; }
+        void setExpanded (const GUID& originGuid, bool);
+        void selectRow (int row);
+        int getSelectedRow() const                              { return list.getSelectedRow(); }
+        void chooseSelected();
+        juce::ListBox& getList() noexcept                       { return list; }
+        /** Left/Right on the list: collapse or expand the selected module's versions. */
+        bool handleKey (const juce::KeyPress&);
+
+        /** The Flex info text: the description for the default line of a shipped module,
+            otherwise label, source, (modified date and author for version lines) and description. */
+        static juce::String getInfoMarkdown (const ModuleCatalogue::Entry&, bool isDefaultEntry);
+        static juce::String getSourceHeading (IInterfaceDefinition::module_source);   // "LATEST OFFICIAL"...
+        static juce::Colour getSourceTint (IInterfaceDefinition::module_source);
+
     private:
+        class TagCloud;
+
         int getNumRows() override;
         void paintListBoxItem (int row, juce::Graphics&, int width, int height, bool selected) override;
+        void listBoxItemClicked (int row, const juce::MouseEvent&) override;
         void listBoxItemDoubleClicked (int row, const juce::MouseEvent&) override;
+        void returnKeyPressed (int row) override;
+        void selectedRowsChanged (int lastRowSelected) override;
         juce::var getDragSourceDescription (const juce::SparseSet<int>&) override;
         juce::String getTooltipForRow (int row) override;
+        bool keyPressed (const juce::KeyPress&, juce::Component*) override;
+        juce::Rectangle<int> expanderBounds (int width, int height) const;
 
         AppContext& context;
         juce::TextEditor search;
-        juce::ComboBox tagFilter;
+        juce::TextButton clearSearch { "x" };
         juce::ListBox list { "modules", this };
-        std::vector<const ModuleCatalogue::Entry*> shown;
+        std::unique_ptr<TagCloud> tagCloud;
+        juce::StringArray selectedTags;
+        std::vector<GUID> expandedOrigins;
+        std::vector<Row> rows;
+        int lastSelectedRow = -1;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ModuleLibrary)
     };
 
     //==============================================================================

@@ -71,6 +71,19 @@ namespace integra
         }
     }
 
+    /** With INTEGRA_GUI_TEST_SHOTS set to a folder, saves a PNG of a component there
+        (used for the screenshots in docs/). */
+    static void saveShot (juce::Component& c, const juce::String& name)
+    {
+        auto dir = juce::SystemStats::getEnvironmentVariable ("INTEGRA_GUI_TEST_SHOTS", {});
+        if (dir.isEmpty())
+            return;
+        auto file = juce::File (dir).getChildFile (name);
+        file.deleteFile();      // FileOutputStream appends to an existing file
+        if (auto stream = file.createOutputStream())
+            juce::PNGImageFormat().writeImageToStream (c.createComponentSnapshot (c.getLocalBounds()), *stream);
+    }
+
     int runGuiTest (MainComponent& main, AppContext& context, juce::String& log)
     {
         Checker t { log };
@@ -87,6 +100,11 @@ namespace integra
         const auto track = p.tracks.at (0).path;
         const int rowMiddle = juce::jlimit (40, 600, p.tracks[0].userData.arrangeViewHeight) / 2;
         const int rate = p.player.rate;
+
+        // the Block Library takes the right of the Arrange view: zoom out so the blocks
+        // dragged below stay inside the lanes
+        arrange.zoom (0.7, (float) mapping.laneX);
+        pump();
 
         // --- Arrange view ---------------------------------------------------------
         doubleClick (lanes, { mapping.tickToX (1200), (float) rowMiddle });
@@ -539,9 +557,7 @@ namespace integra
                 t.check (lists[1]->getModel()->getNumRows() == 1, "...and its 3rd party version as the alternative");
                 lists[1]->selectRow (0);
                 pump();
-                if (auto dir = juce::SystemStats::getEnvironmentVariable ("INTEGRA_GUI_TEST_SHOTS", {}); dir.isNotEmpty())
-                    juce::PNGImageFormat().writeImageToStream (manager.createComponentSnapshot (manager.getLocalBounds()),
-                                                               *juce::File (dir).getChildFile ("module-manager-versions.png").createOutputStream());
+                saveShot (manager, "module-manager-versions.png");
                 t.check (clickButton (manager, "Switch Versions") && guidsEqual (guidOf (delayPath), altGuid),
                          "Switch Versions switches the project's TapDelay");
                 t.check (findDialog ("Module Switch Report") != nullptr, "a switch report is shown");
@@ -574,13 +590,213 @@ namespace integra
             if (lists.size() == 2)
                 lists[0]->selectRow (0);
             pump();
-            if (auto dir = juce::SystemStats::getEnvironmentVariable ("INTEGRA_GUI_TEST_SHOTS", {}); dir.isNotEmpty())
-                juce::PNGImageFormat().writeImageToStream (manager.createComponentSnapshot (manager.getLocalBounds()),
-                                                           *juce::File (dir).getChildFile ("module-manager-install.png").createOutputStream());
+            saveShot (manager, "module-manager-install.png");
             t.check (lists.size() == 2 && lists[0]->getModel()->getNumRows() >= 1, "Install / Uninstall lists the installed 3rd party module");
+            // --- Module library: versions, source headings, filters -------------------
+            {
+                main.getModuleView().setBlock (block1);
+                auto& library = main.getModuleView().getLibrary();
+                library.setSearchText ({});
+                library.clearTags();
+                pump();
+
+                auto& rows = library.getRows();
+                bool allAudio = ! rows.empty();
+                for (auto& r : rows)
+                    if (r.entry != nullptr)
+                        allAudio &= r.entry->numAudioInputs + r.entry->numAudioOutputs > 0;
+                t.check (allAudio, "the module library lists only modules with audio endpoints");
+
+                int delayRow = -1;
+                for (size_t i = 0; i < rows.size(); ++i)
+                    if (rows[i].kind == ModuleLibrary::Row::Kind::module && rows[i].entry->name == "TapDelay")
+                        delayRow = (int) i;
+                t.check (delayRow >= 0 && rows[(size_t) delayRow].numVersions == 2 && guidsEqual (rows[(size_t) delayRow].entry->guid, shippedGuid),
+                         "TapDelay shows once, as its shipped version, with 2 versions");
+
+                bool sorted = true;
+                for (size_t i = 1; i < rows.size(); ++i)
+                    if (rows[i].kind == ModuleLibrary::Row::Kind::module && rows[i - 1].kind == ModuleLibrary::Row::Kind::module
+                         && rows[i].source == rows[i - 1].source && rows[i].entry->label.toUpperCase() < rows[i - 1].entry->label.toUpperCase())
+                        sorted = false;
+                t.check (sorted, "library lines are sorted by label");
+
+                if (delayRow >= 0)
+                {
+                    library.selectRow (delayRow);
+                    library.handleKey (juce::KeyPress (juce::KeyPress::rightKey));
+                    pump();
+                    juce::StringArray headings;
+                    int versionRows = 0, altRow = -1;
+                    for (size_t i = 0; i < rows.size(); ++i)
+                    {
+                        if (rows[i].kind == ModuleLibrary::Row::Kind::sourceLabel)
+                            headings.add (ModuleLibrary::getSourceHeading (rows[i].source));
+                        if (rows[i].kind == ModuleLibrary::Row::Kind::version)
+                        {
+                            ++versionRows;
+                            if (guidsEqual (rows[i].entry->guid, altGuid))
+                                altRow = (int) i;
+                        }
+                    }
+                    t.check (versionRows == 2 && headings == juce::StringArray ("LATEST OFFICIAL", "THIRD PARTY"),
+                             "Right expands the versions under source headings (" + headings.joinIntoString (", ") + ")");
+                    t.check (altRow >= 0 && ModuleLibrary::getInfoMarkdown (*rows[(size_t) altRow].entry, false).contains ("##3rd Party")
+                                && ModuleLibrary::getInfoMarkdown (*rows[(size_t) altRow].entry, false).contains ("**Author:**"),
+                             "a version's info names its source, date and author");
+
+                    if (altRow >= 0)
+                    {
+                        library.selectRow (altRow - 1);     // a heading: selection moves on to a module line
+                        pump();
+                        t.check (library.getSelectedRow() >= 0 && rows[(size_t) library.getSelectedRow()].kind != ModuleLibrary::Row::Kind::sourceLabel,
+                                 "source headings can't be selected");
+                        library.selectRow (altRow);
+                        const auto before = p.findBlock (block1) != nullptr ? p.findBlock (block1)->modules.size() : 0;
+                        library.getList().keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
+                        pump();
+                        bool added = false;
+                        if (auto* b = p.findBlock (block1))
+                            for (auto& m : b->modules)
+                                added |= m.entry != nullptr && guidsEqual (m.entry->guid, altGuid);
+                        t.check (added && p.findBlock (block1)->modules.size() == before + 1, "Enter on a version line adds that version");
+                    }
+
+                    library.selectRow (delayRow);
+                    library.handleKey (juce::KeyPress (juce::KeyPress::leftKey));
+                    pump();
+                    t.check (std::none_of (rows.begin(), rows.end(), [] (auto& r) { return r.kind == ModuleLibrary::Row::Kind::version; }),
+                             "Left collapses them again");
+                }
+
+                const auto all = rows.size();
+                library.setSearchText ("delay");
+                pump();
+                bool matches = ! rows.empty() && rows.size() < all;
+                for (auto& r : rows)
+                    matches &= r.entry == nullptr || r.entry->label.containsIgnoreCase ("delay");
+                t.check (matches, "searching filters on module labels");
+
+                const auto tags = library.getTags();
+                library.toggleTag (tags[0]);
+                pump();
+                bool tagged = ! rows.empty();
+                for (auto& r : rows)
+                    tagged &= r.entry == nullptr || r.entry->tags.contains (tags[0]);
+                t.check (tagged && library.getSelectedTags() == juce::StringArray (tags[0]), "selecting a tag filters on it and clears the search");
+                const auto oneTag = rows.size();
+                library.toggleTag (tags[1]);
+                pump();
+                bool both = true;
+                for (auto& r : rows)
+                    both &= r.entry == nullptr || (r.entry->tags.contains (tags[0]) && r.entry->tags.contains (tags[1]));
+                t.check (both && rows.size() <= oneTag, "several tags filter on all of them");
+                library.setSearchText ("a");
+                pump();
+                t.check (library.getSelectedTags().isEmpty(), "searching clears the tags");
+                library.setSearchText ({});
+                pump();
+                t.check (rows.size() == all, "clearing the filters lists every module again");
+
+                if (juce::SystemStats::getEnvironmentVariable ("INTEGRA_GUI_TEST_SHOTS", {}).isNotEmpty())
+                {
+                    main.showView ("module");
+                    library.setSearchText ("delay");
+                    if (auto* delay = catalogue.findByGuid (shippedGuid))
+                        library.setExpanded (delay->originGuid, true);
+                    pump();
+                    saveShot (main, "module-library.png");
+                    library.setSearchText ({});
+                    main.showView ("arrange");
+                }
+            }
+
             t.check (context.controller.uninstallModule (altGuid, true).wasOk() && catalogue.getVersions (catalogue.findByGuid (shippedGuid)->originGuid).size() == 1,
                      "uninstall it again");
             pump();
+        }
+
+        // --- Block Library ----------------------------------------------------------------
+        {
+            context.controller.newProject();
+            main.showView ("arrange");
+            pump();
+            auto& library = arrange.getBlockLibrary();
+            library.refresh();
+            auto& entries = library.getEntries();
+            t.check (entries.size() >= 6 && entries[0].title == "AudioThru" && ! entries[0].isUserBlock,
+                     "the Block Library lists the shipped blocks in index.xml order");
+            int basicDelay = -1;
+            for (size_t i = 0; i < entries.size(); ++i)
+                if (entries[i].title == "BasicDelay")
+                    basicDelay = (int) i;
+            t.check (basicDelay >= 0 && entries[(size_t) basicDelay].info.contains ("TapDelay"), "a block's info text is read from the file");
+
+            const auto& tr = p.tracks.at (0);
+            const auto trackPath = tr.path;
+            const int y = juce::jlimit (40, 600, tr.userData.arrangeViewHeight) / 2;
+            const int blockTicks = ProjectController::newBlockSeconds * rate;
+            const auto firstEnd = tr.blocks.empty() ? 0 : tr.blocks[0].end;
+            const auto file = entries[(size_t) juce::jmax (0, basicDelay)].file;
+
+            juce::DragAndDropTarget::SourceDetails details (juce::String (BlockLibrary::dragPrefix) + file.getFullPathName(), &library.getList(),
+                                                            { juce::roundToInt (mapping.tickToX (firstEnd + blockTicks)), y });
+            t.check (lanes.isInterestedInDragSource (details), "tracks accept Block Library drags");
+            lanes.itemDragEnter (details);
+            t.check (std::abs (lanes.getDropOutline().getWidth() - (float) (blockTicks * mapping.pixelsPerTick)) < 1.0f,
+                     "dragging over a track outlines a new block");
+            lanes.itemDropped (details);
+            pump();
+            t.check (lanes.getDropOutline().isEmpty() && p.tracks[0].blocks.size() == 2
+                        && p.tracks[0].blocks[1].start == firstEnd + blockTicks - blockTicks / 2 && p.tracks[0].blocks[1].length() == blockTicks,
+                     "dropping imports the block centred on the drop point");
+
+            // dropped over the first block: starts at its end, later blocks are pushed along
+            const auto secondStart = p.tracks[0].blocks[1].start;
+            auto result = lanes.importBlockAt (file, { juce::roundToInt (mapping.tickToX (firstEnd)), y });
+            pump();
+            bool noOverlap = true;
+            auto& blocks = p.tracks[0].blocks;
+            for (size_t i = 0; i < blocks.size(); ++i)
+                for (size_t j = i + 1; j < blocks.size(); ++j)
+                    noOverlap &= blocks[i].end <= blocks[j].start || blocks[j].end <= blocks[i].start;
+            t.check (result.wasOk() && blocks.size() == 3 && noOverlap
+                        && std::any_of (blocks.begin(), blocks.end(), [&] (auto& b) { return b.start == firstEnd; })
+                        && std::none_of (blocks.begin(), blocks.end(), [&] (auto& b) { return b.start == secondStart; }),
+                     "a block dropped onto others starts after them and pushes later blocks along (" + [&]
+                     {
+                         juce::StringArray ranges;
+                         for (auto& b : blocks)
+                             ranges.add (juce::String (b.start) + ".." + juce::String (b.end));
+                         return ranges.joinIntoString (", ") + "; first end " + juce::String (firstEnd) + ")";
+                     }());
+            context.controller.getUndoManager().undo();
+            model.rebuild();
+            pump();
+            t.check (p.tracks[0].blocks.size() == 2 && p.tracks[0].blocks[1].start == secondStart, "one undo removes the import and puts the blocks back");
+
+            model.selectedTrack = trackPath;
+            lanes.playPosition = 0;
+            library.getList().selectRow (0);
+            library.getList().keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
+            pump();
+            t.check (p.tracks[0].blocks.size() == 3, "Enter imports the selected block into the selected track");
+
+            // user blocks: saved with "Add to Block Library", removed from its menu
+            auto userFile = context.session.getLocations().userBlockLibrary.getChildFile ("Gui Test Block.integra");
+            t.check (context.controller.exportNode (p.tracks[0].blocks[0].path, userFile).wasOk(), "save a block to the user Block Library");
+            library.refresh();
+            int userRow = -1;
+            for (size_t i = 0; i < entries.size(); ++i)
+                if (entries[i].file == userFile)
+                    userRow = (int) i;
+            t.check (userRow == (int) entries.size() - 1 && entries[(size_t) userRow].isUserBlock, "user blocks are listed after the shipped ones");
+            t.check (! library.removeEntry (0) && library.removeEntry (userRow) && ! userFile.exists(),
+                     "only user blocks can be removed from the library");
+
+            library.getList().selectRow (1);
+            pump();
+            saveShot (main, "block-library.png");
         }
 
         main.showView ("arrange");

@@ -110,7 +110,15 @@ namespace integra
             then repositions every block in `ranges` (keyed by path before the move). */
         void repositionBlocks (juce::String blockPath, juce::String trackPath, const std::map<juce::String, juce::Range<int>>& ranges);
 
-        /** Imports a saved block (.integra) into a track at the given time. */
+        /** ArrangeView.doBlockRescheduling: with ranges[blockPath] set to where a block is
+            going, pushes the other blocks of the track out of its way, keeping their order,
+            and adds their new ranges to `ranges`. */
+        static void rescheduleBlocks (const model::Track&, const juce::String& blockPath, bool movingRight,
+                                      std::map<juce::String, juce::Range<int>>& ranges);
+
+        /** Imports a saved block (.integra) into a track at the given time. A start inside
+            another block moves to that block's end, and later blocks are pushed right (as
+            the Flex GUI's createBlock did for new blocks). */
         juce::Result importBlock (const juce::File&, juce::String trackPath, int startTick, juce::String* newBlockPath = nullptr);
         juce::Result exportNode (juce::String path, const juce::File&);
 

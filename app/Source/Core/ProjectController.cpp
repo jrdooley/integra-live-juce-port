@@ -643,6 +643,55 @@ namespace integra
         });
     }
 
+    void ProjectController::rescheduleBlocks (const model::Track& track, const juce::String& dragBlock, bool movingRight,
+                                              std::map<juce::String, juce::Range<int>>& draggedBlocks)
+    {
+        const auto dragged = draggedBlocks[dragBlock];
+
+        struct Span { juce::String path; int start, end; int length() const { return end - start; } };
+        std::vector<Span> others;
+        for (auto& b : track.blocks)
+            if (b.path != dragBlock)
+                others.push_back ({ b.path, b.start, b.end });
+        std::stable_sort (others.begin(), others.end(), [] (const Span& a, const Span& b) { return a.start + a.end < b.start + b.end; });
+
+        int insertion = (int) others.size();
+        for (int i = 0; i < (int) others.size(); ++i)
+        {
+            if (movingRight ? others[(size_t) i].end > dragged.getStart() : others[(size_t) i].start >= dragged.getEnd())
+            {
+                insertion = i;
+                break;
+            }
+        }
+
+        int durationToLeft = 0;
+        for (int i = 0; i < insertion; ++i)
+            durationToLeft += others[(size_t) i].length();
+        while (durationToLeft > dragged.getStart() && insertion > 0)
+            durationToLeft -= others[(size_t) --insertion].length();
+
+        int maximumEnd = dragged.getStart();
+        for (int i = insertion - 1; i >= 0; --i)
+        {
+            auto& b = others[(size_t) i];
+            if (b.end <= maximumEnd)
+                break;
+            draggedBlocks[b.path] = { maximumEnd - b.length(), maximumEnd };
+            maximumEnd -= b.length();
+        }
+
+        int minimumStart = dragged.getEnd();
+        for (int i = insertion; i < (int) others.size(); ++i)
+        {
+            auto& b = others[(size_t) i];
+            if (b.start >= minimumStart)
+                break;
+            draggedBlocks[b.path] = { minimumStart, minimumStart + b.length() };
+            minimumStart += b.length();
+        }
+    }
+
     //==============================================================================
     namespace
     {
@@ -1072,6 +1121,11 @@ namespace integra
         if (model.get().findTrack (trackPath) == nullptr)
             return juce::Result::fail ("No track selected");
 
+        for (auto& b : model.get().findTrack (trackPath)->blocks)
+            if (b.start <= startTick && b.end > startTick)
+                startTick = b.end;
+        startTick = juce::jmax (0, startTick);
+
         auto before = session.getChildNames (trackPath);
 
         return transaction ("Import Block", [&]
@@ -1107,6 +1161,14 @@ namespace integra
             int length = newBlockSeconds * model.get().player.rate;
             model.rebuild();
             addBlockEnvelope (trackPath, imported, startTick, startTick + length);
+            model.rebuild();
+
+            std::map<juce::String, juce::Range<int>> ranges { { imported, { startTick, startTick + length } } };
+            if (auto* track = model.get().findTrack (trackPath))
+                rescheduleBlocks (*track, imported, true, ranges);
+            ranges.erase (imported);
+            for (auto& [path, range] : ranges)
+                repositionBlock (path, range.getStart(), range.getEnd());
 
             model.rebuild();
             model.selectedTrack = trackPath;

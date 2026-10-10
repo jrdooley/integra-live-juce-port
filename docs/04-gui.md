@@ -44,6 +44,19 @@ automated interaction test.
   in the block's `curvatureMode` userData as in Flex): drag a segment to bend it,
   double-click it to make it straight again. Curvature is drawn exactly as
   libIntegra interpolates it, `t^(2^-curvature)` (`EnvelopeView.drawCurvedTransition`).
+* **Block Library** (right of the timeline, `BlockLibrary.{h,cpp}`, Flex
+  `views/BlockLibrary/`): the shipped demo blocks in `index.xml` order, then
+  the user's blocks saved with *Add to Block Library* (tinted). Drag a block
+  onto a track (an outline shows where the new block will go, centred on the
+  mouse, as `ArrangeViewTrack.onDragEnter`) or double-click it / press Enter
+  to import it into the selected track at the playhead. A block dropped onto
+  another starts at that block's end and later blocks are pushed along, so
+  imports never overlap. `.integra` files dragged from the desktop onto a
+  track are imported the same way. Right-click a user block to remove it from
+  the library (it goes to the trash). Tooltips show the block's info text. The
+  panel's width can be dragged (100–400 px) and is remembered.
+
+  ![Block Library](images/block-library.png)
 * Zoom with Ctrl+wheel or the +/- buttons, scroll with the scrollbar or
   shift+wheel; zoom/scroll persist in the project (`timelineZoom`,
   `timelineScroll` userData, same units as Flex).
@@ -60,8 +73,21 @@ automated interaction test.
 
 ![Module view](images/module-view.png)
 
-* **Module library**: search box, tag filter, pin counts; drag a module onto
-  the graph or double-click it to add it.
+* **Module library** (right of the graph, as in Flex's `ModuleLibrary.as`):
+  every module with audio endpoints, including embedded and in-development
+  ones, one line per module showing its best version, sorted in-development /
+  shipped / 3rd party / embedded, then by label; 3rd party, embedded and
+  in-development lines are tinted. A module with several loaded versions has an
+  expander (click the triangle, or Left/Right) listing them under *LATEST
+  OFFICIAL* / *THIRD PARTY* / *EMBEDDED* / *IN DEVELOPMENT* headings, so a
+  specific version can be added. The search box matches labels (with a clear
+  button); the tag cloud below, sorted by how many modules use each tag,
+  filters on all selected tags; searching clears the tags and selecting a tag
+  clears the search, as in Flex. Drag a module onto the graph, double-click it
+  or press Enter to add it. Tooltips show Flex's info text (source, modified
+  date and author for version lines).
+
+![Module library with TapDelay's versions expanded](images/module-library.png)
 * **Module graph**: modules at their stored grid positions (Flex grid units,
   one unit = one text row = 18 px), audio pins on each side; drag a module to
   move it (half-unit snapping), drag from an output pin to an input pin (or
@@ -184,7 +210,7 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (55 checks, all
+keyboard events and checks the resulting project state (80 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,
@@ -196,7 +222,10 @@ persist its position, the module's 7 widgets appear, moving a knob sets the
 endpoint and the knob follows external changes, LIVE and ENV toggles, the
 Live view shows the control of the playing block, scene key binding,
 Delete key removes a module together with its envelope and live control, and
-one undo restores all of it.
+one undo restores all of it; the module library's version expander, headings,
+search and tag filters, and Enter to add a specific version; dragging blocks
+from the Block Library onto a track, imports pushing later blocks along (one
+undo), and adding / removing user blocks.
 
 Bugs it found and that are fixed:
 
@@ -212,11 +241,7 @@ Bugs it found and that are fixed:
 A full feature-by-feature comparison with the Flex GUI is in
 [08-flex-parity.md](08-flex-parity.md).
 
-* Module Manager dialog for **upgrading/switching module versions** in a
-  project (installing third-party modules *is* supported).
-* Block library side panel (blocks are imported through menus instead),
-  multi-selection / area selection in the module graph, track collapsing.
-* Envelope curvature editing (curvature is honoured on playback and stored,
-  but has no editing gesture yet) and envelope lock.
+* Multi-selection / area selection in the module graph, track collapsing.
+* Envelope lock.
 * Hover-driven *Info* view for modules/endpoints (tooltips show the
   descriptions instead), crash reporter, update checker.

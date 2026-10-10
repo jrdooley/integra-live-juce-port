@@ -6,6 +6,7 @@
 #include <vector>
 #include "Core/AppContext.h"
 #include "Core/EndpointInfo.h"
+#include "BlockLibrary.h"
 
 namespace integra
 {
@@ -72,10 +73,28 @@ namespace integra
 
     //==============================================================================
     /** Track headers and block lanes (Flex: ArrangeView.as, ArrangeViewTrack.as, BlockView.as, EnvelopeView.as). */
-    class TrackLanes  : public juce::Component
+    class TrackLanes  : public juce::Component,
+                        public juce::DragAndDropTarget,
+                        public juce::FileDragAndDropTarget
     {
     public:
         TrackLanes (AppContext&, TimelineMapping&);
+
+        // Block Library drags and .integra files dropped on a track (ArrangeViewTrack.onDragDrop)
+        bool isInterestedInDragSource (const SourceDetails&) override;
+        void itemDragEnter (const SourceDetails& d) override        { updateDropOutline (d.localPosition); }
+        void itemDragMove (const SourceDetails& d) override         { updateDropOutline (d.localPosition); }
+        void itemDragExit (const SourceDetails&) override           { updateDropOutline (std::nullopt); }
+        void itemDropped (const SourceDetails&) override;
+        bool isInterestedInFileDrag (const juce::StringArray&) override;
+        void fileDragEnter (const juce::StringArray&, int x, int y) override   { updateDropOutline (juce::Point<int> (x, y)); }
+        void fileDragMove (const juce::StringArray&, int x, int y) override    { updateDropOutline (juce::Point<int> (x, y)); }
+        void fileDragExit (const juce::StringArray&) override                  { updateDropOutline (std::nullopt); }
+        void filesDropped (const juce::StringArray&, int x, int y) override;
+
+        /** Imports a block file centred on a point of a track, as a drop does. */
+        juce::Result importBlockAt (const juce::File&, juce::Point<int>);
+        juce::Rectangle<float> getDropOutline() const noexcept      { return dropOutline; }
 
         void paint (juce::Graphics&) override;
         void mouseMove (const juce::MouseEvent&) override;
@@ -151,6 +170,9 @@ namespace integra
         static constexpr float blockResizeAreaWidth = 10.0f;   // BlockView resize areas
         static constexpr int minimumBlockLength = 10;          // Block._minimumBlockLength (ticks)
 
+        void updateDropOutline (std::optional<juce::Point<int>>);
+        juce::Rectangle<float> dropOutline;
+
         juce::Range<int> displayedRange (const model::Block&) const;
         void updateBlockDrag (const juce::MouseEvent&);
         void rescheduleBlocks (const model::Track&, bool movingRight);
@@ -162,6 +184,7 @@ namespace integra
 
     //==============================================================================
     class ArrangeView  : public juce::Component,
+                         public juce::DragAndDropContainer,
                          private juce::ChangeListener,
                          private juce::Timer,
                          private juce::ScrollBar::Listener
@@ -182,6 +205,7 @@ namespace integra
         TrackLanes& getLanes() noexcept                 { return lanes; }
         TimelineRuler& getRuler() noexcept              { return ruler; }
         juce::Viewport& getViewport() noexcept          { return viewport; }
+        BlockLibrary& getBlockLibrary() noexcept        { return blockLibrary; }
 
     private:
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
@@ -197,6 +221,19 @@ namespace integra
         juce::Viewport viewport;
         juce::ScrollBar horizontalScroll { false };
         juce::TextButton zoomIn { "+" }, zoomOut { "-" };
+        BlockLibrary blockLibrary;
+
+        /** Drags the Block Library's left edge (Flex ViewHolder changeWidthFromLeft). */
+        struct WidthHandle  : public juce::Component
+        {
+            explicit WidthHandle (ArrangeView& v) : view (v)    { setMouseCursor (juce::MouseCursor::LeftRightResizeCursor); }
+            void mouseDown (const juce::MouseEvent&) override   { startWidth = view.blockLibraryWidth; }
+            void mouseDrag (const juce::MouseEvent&) override;
+            void mouseUp (const juce::MouseEvent&) override;
+            ArrangeView& view;
+            int startWidth = 0;
+        } widthHandle { *this };
+        int blockLibraryWidth = BlockLibrary::defaultWidth;
         bool timelineStateDirty = false;
         juce::uint32 lastTimelineChange = 0;
     };
