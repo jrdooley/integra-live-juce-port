@@ -1,5 +1,6 @@
 #include "StressTest.h"
 #include "EndpointInfo.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 
 namespace integra
 {
@@ -450,19 +451,51 @@ namespace integra
         return t.failures;
     }
 
-    juce::String fingerprintModules (IntegraSession& session, ProjectModel& model, ProjectController& controller, AudioHost& host)
+    juce::String fingerprintModules (IntegraSession& session, ProjectModel& model, ProjectController& controller, AudioHost& host, const juce::String& only)
     {
-        // every module at its defaults between the block's input and output, fed a fixed
-        // signal (a 220 Hz sine plus a click every 0.5 s) for 2 s; RMS and peak of the
-        // last second, so two builds (e.g. two Pd versions) can be compared
+        // Every module at its defaults, its audio input fed a fixed signal (220, 440 and
+        // 1320 Hz partials plus a click every 0.5 s) for 2 s, with the engine driven only
+        // by this test. Modules that need more to make a sound get it: a "test" bang every
+        // 0.25 s (synths), a generated sound file in their file inputs, then play and loop
+        // (players), auto-panning on. All audio outputs are summed. Prints RMS and peak of
+        // the last second, then every value the module reported back, so two builds (e.g.
+        // two Pd versions) can be compared.
         host.stopNoDeviceThread();
         host.configure (2, 2, 44100);
         juce::String out;
         auto& p = model.get();
 
+        // sound files: 2 s of a 330 Hz tone with a decaying 990 Hz partial, 16-bit, with as
+        // many channels as the module has outputs (the multichannel players want that);
+        // channel n is the tone scaled by 1/(n+1), so summed outputs never cancel
+        auto soundFileFor = [] (int channels)
+        {
+            const auto f = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("integra_fingerprint_" + juce::String (channels) + "ch.wav");
+            if (! f.existsAsFile())
+            {
+                juce::AudioBuffer<float> tone (channels, 88200);
+                for (int i = 0; i < tone.getNumSamples(); ++i)
+                {
+                    const double t = i / 44100.0;
+                    const float v = (float) (0.4 * std::sin (juce::MathConstants<double>::twoPi * 330.0 * t)
+                                             + 0.2 * std::exp (-3.0 * t) * std::sin (juce::MathConstants<double>::twoPi * 990.0 * t));
+                    for (int c = 0; c < channels; ++c)
+                        tone.setSample (c, i, v / (float) (c + 1));
+                }
+                juce::WavAudioFormat wav;
+                if (auto stream = std::unique_ptr<juce::OutputStream> (f.createOutputStream()))
+                    if (auto writer = std::unique_ptr<juce::AudioFormatWriter> (wav.createWriterFor (stream.get(), 44100, (unsigned int) channels, 16, {}, 0)))
+                    {
+                        stream.release();
+                        writer->writeFromAudioSampleBuffer (tone, 0, tone.getNumSamples());
+                    }
+            }
+            return f;
+        };
+
         for (auto* entry : session.getCatalogue().getUserModules())
         {
-            if (! entry->hasImplementation || entry->definition == nullptr)
+            if (! entry->hasImplementation || entry->definition == nullptr || (only.isNotEmpty() && entry->name != only))
                 continue;
             controller.newProject();
             model.rebuild();
@@ -470,15 +503,22 @@ namespace integra
             auto module = controller.addModule (block, entry->guid, { 20.0f, 2.0f });
             model.rebuild();
 
-            juce::String audioIn, audioOut;
+            juce::String audioIn, testBang;
+            juce::StringArray audioOuts, fileInputs;
+            bool hasPlay = false, hasLoop = false, hasAuto = false;
             for (auto* ep : entry->definition->get_endpoint_definitions())
             {
                 auto info = EndpointInfo::fromDefinition (*ep);
-                if (info.isAudioStream && info.isAudioInput && audioIn.isEmpty())    audioIn = info.name;
-                if (info.isAudioStream && ! info.isAudioInput && audioOut.isEmpty()) audioOut = info.name;
+                if (info.isAudioStream && info.isAudioInput && audioIn.isEmpty())  audioIn = info.name;
+                if (info.isAudioStream && ! info.isAudioInput)                     audioOuts.add (info.name);
+                if (info.kind == EndpointInfo::Kind::bang && info.name == "test")  testBang = info.name;
+                if (info.isInputFile)                                              fileInputs.add (info.name);
+                hasPlay = hasPlay || (info.name == "play" && info.isNumeric());
+                hasLoop = hasLoop || (info.name == "loop" && info.isNumeric());
+                hasAuto = hasAuto || (info.name == "auto" && info.isNumeric());
             }
-            if (audioOut.isNotEmpty())
-                controller.connect (block, module + "." + audioOut, block + ".StereoAudioOut1.in1");
+            for (auto& o : audioOuts)
+                controller.connect (block, module + "." + o, block + ".StereoAudioOut1.in1");
             if (audioIn.isNotEmpty())
                 controller.connect (block, block + ".AudioIn1.out", module + "." + audioIn);
             controller.setPlayPosition (0);
@@ -486,19 +526,42 @@ namespace integra
 
             const int numSamples = 100, channels = 2, callbacks = 882;
             juce::AudioBuffer<float> in (channels, numSamples), buf (channels, numSamples);
+
+            if (! fileInputs.isEmpty())
+            {
+                // files are copied and read on other threads in real time: give them a
+                // moment, ticking the engine (silently) so Pd sees them finish
+                const int fileChannels = audioOuts.size() > 4 ? 8 : audioOuts.size() > 2 ? 4 : audioOuts.size() > 1 ? 2 : 1;
+                for (auto& f : fileInputs)
+                    controller.setValue (module + "." + f, soundFileFor (fileChannels).getFullPathName(), false);
+                in.clear();
+                for (int i = 0; i < 150; ++i)
+                {
+                    host.audioDeviceIOCallbackWithContext (in.getArrayOfReadPointers(), channels, buf.getArrayOfWritePointers(), channels, numSamples, {});
+                    juce::Thread::sleep (10);
+                }
+            }
+            if (hasLoop) controller.setValue (module + ".loop", 1, false);
+            if (hasPlay) controller.setValue (module + ".play", 1, false);
+            if (hasAuto) controller.setValue (module + ".auto", 1, false);
             double sum = 0, peak = 0;
             int counted = 0;
             long sampleIndex = 0;
             for (int cb = 0; cb < callbacks; ++cb)
             {
+                if (testBang.isNotEmpty() && cb % 110 == 0)
+                    controller.bang (module + "." + testBang);
                 for (int i = 0; i < numSamples; ++i, ++sampleIndex)
                 {
-                    float v = 0.3f * (float) std::sin (juce::MathConstants<double>::twoPi * 220.0 * (double) sampleIndex / 44100.0);
+                    const double t = (double) sampleIndex / 44100.0, w = juce::MathConstants<double>::twoPi;
+                    float v = (float) (0.3 * std::sin (w * 220.0 * t) + 0.15 * std::sin (w * 440.0 * t) + 0.1 * std::sin (w * 1320.0 * t));
                     if (sampleIndex % 22050 == 0) v = 0.9f;
                     in.setSample (0, i, v);
                     in.setSample (1, i, v);
                 }
                 host.audioDeviceIOCallbackWithContext (in.getArrayOfReadPointers(), channels, buf.getArrayOfWritePointers(), channels, numSamples, {});
+                if (! fileInputs.isEmpty())
+                    juce::Thread::sleep (2);    // players stream from disk on a thread: keep roughly to real time
                 if (cb >= callbacks / 2)
                     for (int i = 0; i < numSamples; ++i)
                     {
@@ -523,7 +586,46 @@ namespace integra
                 }
             }
         }
+        // the demo blocks as saved (including their sound files), played from the start in
+        // real time (their players stream from disk): RMS and peak of seconds 1-3
+        if (only.isEmpty())
+            for (auto& file : demoProjects())
+            {
+                if (controller.openProject (file).failed())
+                    continue;
+                controller.setPlayPosition (0);
+                controller.play (true);
+                const int numSamples = 100, channels = 2, callbacks = 1323;
+                juce::AudioBuffer<float> in (channels, numSamples), buf (channels, numSamples);
+                double sum = 0, peak = 0;
+                int counted = 0;
+                long sampleIndex = 0;
+                for (int cb = 0; cb < callbacks; ++cb)
+                {
+                    for (int i = 0; i < numSamples; ++i, ++sampleIndex)
+                    {
+                        const float v = 0.3f * (float) std::sin (juce::MathConstants<double>::twoPi * 220.0 * (double) sampleIndex / 44100.0);
+                        in.setSample (0, i, v);
+                        in.setSample (1, i, v);
+                    }
+                    host.audioDeviceIOCallbackWithContext (in.getArrayOfReadPointers(), channels, buf.getArrayOfWritePointers(), channels, numSamples, {});
+                    juce::Thread::sleep (2);
+                    if (cb >= callbacks / 3)
+                        for (int i = 0; i < numSamples; ++i)
+                        {
+                            const double v = buf.getSample (0, i);
+                            sum += v * v;
+                            peak = juce::jmax (peak, std::abs (v));
+                            ++counted;
+                        }
+                }
+                controller.play (false);
+                out << "fd " << file.getFileNameWithoutExtension() << " " << juce::String (std::sqrt (sum / juce::jmax (1, counted)), 5) << " " << juce::String (peak, 5) << "\n";
+            }
+
         controller.newProject();
+        for (int channels : { 1, 2, 4, 8 })
+            soundFileFor (channels).deleteFile();
         return out;
     }
 }

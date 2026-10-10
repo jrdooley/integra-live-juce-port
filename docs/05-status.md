@@ -53,7 +53,11 @@ real MIDI devices.
   harmless; see doc 02).
 * Some module patches print Pd console errors with silent input or no files loaded (pre-existing
   module behaviour; see doc 02).
-* Pd was upgraded to 0.56-5 (libpd 0.16.1); see [10-pd-upgrade.md](10-pd-upgrade.md).
+* Pd was upgraded to 0.56-5 (libpd 0.16.1); see [10-pd-upgrade.md](10-pd-upgrade.md). PhaseVocoder
+  comes out about 9% louder than on Pd 0.43 (cause not found yet), and QuadSoundfiler and
+  Octosoundfiler stayed silent in the fingerprint test on both versions (not investigated).
+* Sound file playback (`fsplay~`) did not work in this port until the fix described in doc 10;
+  it now does, but has only been tested offline, not on audio hardware.
 
 ## Next steps
 

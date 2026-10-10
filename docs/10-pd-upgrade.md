@@ -57,20 +57,45 @@ also prints, harmlessly:
 ## Verification
 
 - All six ctest suites pass, on the normal build and under ASan + UBSan.
-- **Module fingerprints** (`integra-live --fingerprint-modules`): every module at its
-  defaults is wired between the block's input and output, fed the same signal (a 220 Hz
-  sine plus a click every 0.5 s) for 2 s with the engine driven only by the test, and its
-  output RMS and peak are printed, followed by every control value it reported back. The
-  same code was built against Pd 0.43 (the previous commit) and Pd 0.56:
+- **Module fingerprints** (`integra-live --fingerprint-modules [module]`): every module at
+  its defaults is wired between the block's input and output and fed the same signal (220,
+  440 and 1320 Hz partials plus a click every 0.5 s) for 2 s, with the engine driven only by
+  the test so runs are repeatable. Modules that need more get it: synths are banged
+  (`test`) every 0.25 s, file inputs get a generated WAV with one channel per output (then
+  `play` and `loop`), the auto-panner's `auto` is on, and all audio outputs are summed.
+  Players stream from disk on a thread, so modules with files run in real time. The RMS
+  and peak of the last second are printed, then every control value the module reported
+  back, then the same for each demo block played from the start. The same code was built
+  against Pd 0.43 (the previous commit) and Pd 0.56:
 
   | | Pd 0.43 vs Pd 0.56 |
   |---|---|
-  | Audio output (66 modules, RMS and peak to 5 digits) | **65 identical**; PianoReverbMSP differs by 0.005% in RMS |
+  | Audio output (66 modules, RMS and peak to 5 digits) | **63 identical** (StereoGranularSynthesizer and SpectralVocoder load their file on a thread, so a full run can catch them at a different moment; run on their own three times each they match exactly); PianoReverbMSP 0.01% and Convolution 0.1% apart (Convolution varies run to run by as much on either version); **PhaseVocoder 9% louder in RMS (peak 5% lower) — see below** |
   | Reported values (609 endpoints: analyser readings, levels, states) | **all identical** |
+  | Demo blocks (6, played from the start) | **all identical** (ScriptedFreezer 0.01% in peak) |
 
   The analysers' readings are real (e.g. BrightnessAnalyser reports 220 for the 220 Hz
   input). The Pd 0.43 output is kept in
   [data/module-fingerprints-pd0.43.txt](data/module-fingerprints-pd0.43.txt) for later
-  comparisons. Modules that stay silent with this input on both versions (synths and
-  players that need a note or a file, the quad panners' other outputs) are covered by the
-  stress test's value sweep rather than by this comparison.
+  comparisons.
+
+  Silent on both versions with this input: the 11 analysers and Metronome (they report
+  values, not audio — compared above), HarmonicFilter, and QuadSoundfiler/Octosoundfiler,
+  whose players never receive the file in this test; not investigated further.
+
+  **PhaseVocoder** is consistently 9% louder on Pd 0.56 (0.2218 vs 0.2033 RMS). Ruled out
+  by testing each on both Pd versions with the same input: `rfft~`/`rifft~`, `sqrt~`,
+  `rsqrt~`, `tabsend~`/`tabreceive~`, `tabread4~`, `[soundfiler] read`, `expr` (including
+  `size("$s1")`) and `[sin]`. One difference found, `samplerate~` before DSP starts (0 on
+  Pd 0.43, the real rate on 0.56), is not reached in the module's path here. Worth a
+  listen when testing on real hardware.
+
+### Found along the way: no sound file playback
+
+The fingerprints showed that **`fsplay~` could open no file at all in this port** — on Pd
+0.43 as well — so Soundfiler, StereoSoundfiler and the demo blocks that use them played
+silence. `fsp_libsndfile.cpp` registers the libsndfile reader through a global's
+initialiser; built into a static library with nothing referencing that object file, the
+linker left it out. `fsplay::Setup` now references the global. All six demo blocks play
+since (four were silent). Also fixed: the app never set `EndpointInfo::isInputFile`
+(libIntegra's public API had no way to ask; `IStateInfo::get_is_input_file()` added).

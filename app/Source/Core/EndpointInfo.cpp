@@ -36,6 +36,7 @@ namespace integra
         }
 
         info.defaultValue = toVar (&state->get_default_value());
+        info.isInputFile = state->get_is_input_file();
 
         if (auto* range = state->get_constraint().get_value_range())
         {

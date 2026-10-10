@@ -831,8 +831,17 @@ static void *idlefun(void *,...)
 }
 #endif
 
+// Integra Live port: fsp_libsndfile.cpp registers the libsndfile reader through this
+// global's initialiser. Linked from a static library, nothing referenced that object
+// file, so the linker left it out and fsplay~ could open no file at all (the Soundfiler
+// modules played silence). Referencing it here pulls it in.
+extern bool loaded_libsndfile;
+
 void fsplay::Setup(t_classid c)
 {
+    if(!loaded_libsndfile)
+        post("fsplay~: no sound file reader");
+
     // cache some symbols
     sym_loop = MakeSymbol("loop");
     sym_eof = MakeSymbol("eof");

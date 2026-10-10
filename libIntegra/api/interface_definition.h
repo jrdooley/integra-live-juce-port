@@ -366,6 +366,11 @@ namespace integra_api
 			 \return true if value's type matches type of this state, and value adheres to constraint
 			*/
 			virtual bool test_constraint( const CValue &value ) const = 0;
+
+			/** \brief Whether the endpoint's value is a file the module loads (libIntegra
+			copies it into the node's data directory)
+			*/
+			virtual bool get_is_input_file() const = 0;
 	};
 
 

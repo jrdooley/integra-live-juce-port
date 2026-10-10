@@ -102,7 +102,9 @@ namespace integra
 
             if (args.contains ("--fingerprint-modules"))
             {
-                std::cout << fingerprintModules (context.session, context.model, context.controller, context.audioHost) << std::flush;
+                const int at = args.indexOf ("--fingerprint-modules");
+                const auto only = at + 1 < args.size() && ! args[at + 1].startsWith ("--") ? args[at + 1] : juce::String();
+                std::cout << fingerprintModules (context.session, context.model, context.controller, context.audioHost, only) << std::flush;
                 quit();
                 return;
             }

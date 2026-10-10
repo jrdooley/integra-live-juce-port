@@ -214,7 +214,7 @@ namespace integra_internal
 			const IValueScale *get_value_scale() const;
 			const value_map &get_state_labels() const { return m_state_labels; }
 			bool get_is_saved_to_file() const { return m_is_saved_to_file; }
-			bool get_is_input_file() const { return m_is_input_file; }
+			bool get_is_input_file() const override { return m_is_input_file; }
 
 			bool test_constraint( const CValue &value ) const;
 
