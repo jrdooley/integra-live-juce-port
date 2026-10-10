@@ -1,184 +1,99 @@
-#include "LiveView.h"
+#include "LiveViewParts.h"
 #include "IntegraLookAndFeel.h"
 
 namespace integra
 {
     namespace
     {
-        class ResizeCorner  : public juce::ResizableCornerComponent
+        constexpr int snapThreshold = 10;     // LiveViewBlock.maximumSnapThreshold
+
+        /** The closest of `candidates` to `value` within the snap threshold. */
+        std::optional<int> closest (int value, const std::vector<int>& candidates, int& bestDistance)
         {
-        public:
-            using juce::ResizableCornerComponent::ResizableCornerComponent;
-            std::function<void()> onResizeEnd;
-
-            void mouseUp (const juce::MouseEvent& e) override
+            std::optional<int> best;
+            for (int c : candidates)
             {
-                juce::ResizableCornerComponent::mouseUp (e);
-                if (onResizeEnd)
-                    onResizeEnd();
-            }
-        };
-
-        /** A live-view control: the widget plus a grab strip for moving and a resize corner. */
-        class LiveControl  : public juce::Component
-        {
-        public:
-            LiveControl (AppContext& c, const juce::String& modulePath, const WidgetSpec& spec)
-                : context (c), module (modulePath), label (spec.label)
-            {
-                widget = IntegraWidget::create (c, modulePath, spec);
-                if (widget != nullptr)
-                    addAndMakeVisible (*widget);
-                addAndMakeVisible (resizer);
-                resizer.onResizeEnd = [this] { store(); };
-                constrainer.setMinimumSize (50, 60);
-            }
-
-            void paint (juce::Graphics& g) override
-            {
-                auto& t = Theme::get();
-                auto r = getLocalBounds().toFloat().reduced (1.0f);
-                g.setColour (t.panel);
-                g.fillRoundedRectangle (r, 5.0f);
-                g.setColour (t.outline.withAlpha (0.7f));
-                g.drawRoundedRectangle (r, 5.0f, 1.0f);
-
-                auto strip = getLocalBounds().removeFromTop (stripHeight).reduced (6, 0);
-                g.setColour (t.textDim);
-                g.setFont (juce::FontOptions (10.0f));
-                g.drawText (lastElement (module), strip, juce::Justification::centredLeft);
-            }
-
-            void resized() override
-            {
-                auto area = getLocalBounds();
-                area.removeFromTop (stripHeight);
-                if (widget != nullptr)
-                    widget->setBounds (area);
-                resizer.setBounds (getWidth() - 12, getHeight() - 12, 12, 12);
-            }
-
-            void mouseDown (const juce::MouseEvent& e) override
-            {
-                dragStartBounds = getBounds();
-                dragStartInParent = getParentComponent() != nullptr ? e.getEventRelativeTo (getParentComponent()).position : e.position;
-            }
-
-            void mouseDrag (const juce::MouseEvent& e) override
-            {
-                if (getParentComponent() == nullptr)
-                    return;
-                const auto delta = (e.getEventRelativeTo (getParentComponent()).position - dragStartInParent).roundToInt();
-                // keep the control inside the block area (LiveViewBlock clamps to >= 0)
-                setTopLeftPosition (juce::jmax (0, dragStartBounds.getX() + delta.x), juce::jmax (topMargin, dragStartBounds.getY() + delta.y));
-            }
-            void mouseUp (const juce::MouseEvent&) override         { store(); }
-
-            static constexpr int stripHeight = 14;
-
-            /** y offset of the block area within the track panel (its header). */
-            int topMargin = 0;
-
-        private:
-            void store()
-            {
-                // stored relative to the block area, as placed by TrackPanel
-                auto bounds = getBounds().translated (0, -topMargin).toFloat();
-                const auto moduleName = lastElement (module);
-                const auto widgetLabel = label;
-                context.controller.updateBlockUserData (parentPath (module), [&] (BlockUserData& d)
+                const int d = std::abs (c - value);
+                if (d < bestDistance)
                 {
-                    for (auto& c : d.liveViewControls)
-                        if (c.moduleName == moduleName && c.widgetLabel == widgetLabel)
-                            c.bounds = bounds;
-                });
+                    bestDistance = d;
+                    best = c;
+                }
             }
-
-            AppContext& context;
-            juce::String module, label;
-            std::unique_ptr<IntegraWidget> widget;
-            juce::Rectangle<int> dragStartBounds;
-            juce::Point<float> dragStartInParent;
-            juce::ComponentBoundsConstrainer constrainer;
-            ResizeCorner resizer { this, &constrainer };
-        };
+            return best;
+        }
     }
 
     //==============================================================================
-    class LiveView::TrackPanel  : public juce::Component
+    juce::Rectangle<int> LiveView::LiveControl::snapped (juce::Rectangle<int> r, bool move, bool left, bool right, bool top, bool bottom)
     {
-    public:
-        TrackPanel (AppContext& c, const model::Track& track, const juce::String& blockPath)
-            : context (c), trackName (track.name), colour (track.userData.getColour()), block (blockPath)
+        auto* panel = dynamic_cast<TrackPanel*> (getParentComponent());
+        std::vector<int> xs, ys;
+        if (panel != nullptr)
         {
-            auto* b = context.model.get().findBlock (blockPath);
-            if (b == nullptr)
-                return;
-
-            blockName = b->name;
-            for (auto& lvc : b->userData.liveViewControls)
+            for (auto* other : panel->getControls())
             {
-                const auto modulePath = blockPath + "." + lvc.moduleName;
-                for (auto& spec : WidgetSpec::forModule (context.session, modulePath))
-                {
-                    if (spec.label != lvc.widgetLabel)
-                        continue;
-
-                    auto* control = controls.add (new LiveControl (c, modulePath, spec));
-                    auto bounds = lvc.bounds;
-                    if (bounds.isEmpty())
-                        bounds = { 10.0f, 10.0f, spec.position.getWidth(), spec.position.getHeight() + LiveControl::stripHeight };
-                    control->topMargin = headerHeight;
-                    control->setBounds (bounds.toNearestInt().translated (0, headerHeight));
-                    addAndMakeVisible (control);
-                }
+                if (other == this)
+                    continue;
+                auto o = other->getBounds();
+                xs.insert (xs.end(), { o.getX(), o.getRight() });
+                ys.insert (ys.end(), { o.getY(), o.getBottom() });
             }
         }
 
-        int getContentHeight() const
+        std::vector<int> snapX, snapY;
+        if (move)
         {
-            int bottom = headerHeight + 60;
-            for (auto* c : controls)
-                bottom = juce::jmax (bottom, c->getBottom() + 10);
-            return bottom;
+            // doXMoveSnap / doYMoveSnap: either edge snaps, the size stays
+            int dx = snapThreshold, dy = snapThreshold;
+            int bestX = r.getX(), bestY = r.getY();
+            if (auto s = closest (r.getX(), xs, dx))          bestX = *s;
+            if (auto s = closest (r.getRight(), xs, dx))      bestX = *s - r.getWidth();
+            if (auto s = closest (r.getY(), ys, dy))          bestY = *s;
+            if (auto s = closest (r.getBottom(), ys, dy))     bestY = *s - r.getHeight();
+            r.setPosition (juce::jmax (0, bestX), juce::jmax (topMargin, bestY));
+        }
+        else
+        {
+            // doXResizeSnap / doYResizeSnap on the edges being dragged
+            int d = snapThreshold;
+            if (left)   if (auto s = closest (r.getX(), xs, d))       r.setLeft (juce::jmin (*s, r.getRight() - 40));
+            d = snapThreshold;
+            if (right)  if (auto s = closest (r.getRight(), xs, d))   r.setRight (juce::jmax (*s, r.getX() + 40));
+            d = snapThreshold;
+            if (top)    if (auto s = closest (r.getY(), ys, d))       r.setTop (juce::jmin (*s, r.getBottom() - 40));
+            d = snapThreshold;
+            if (bottom) if (auto s = closest (r.getBottom(), ys, d))  r.setBottom (juce::jmax (*s, r.getY() + 40));
+            if (r.getX() < 0)           r.setLeft (0);
+            if (r.getY() < topMargin)   r.setTop (topMargin);
         }
 
-        void paint (juce::Graphics& g) override
+        // the lines the control now touches
+        for (int x : xs)
+            if (x == r.getX() || x == r.getRight())
+                snapX.push_back (x);
+        for (int y : ys)
+            if (y == r.getY() || y == r.getBottom())
+                snapY.push_back (y);
+
+        if (panel != nullptr && (panel->snapX != snapX || panel->snapY != snapY))
         {
-            auto& t = Theme::get();
-            g.fillAll (t.panel.interpolatedWith (colour, 0.06f));
-            auto header = getLocalBounds().removeFromTop (headerHeight);
-            g.setColour (colour);
-            g.fillRect (header.removeFromLeft (8));
-            g.setColour (t.text);
-            g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
-            g.drawText (trackName, header.reduced (8, 0), juce::Justification::centredLeft);
-            g.setColour (t.textDim);
-            g.setFont (juce::FontOptions (13.0f));
-            g.drawText (blockName.isEmpty() ? juce::String ("(no block)") : blockName, header.reduced (8, 0).withTrimmedLeft (160),
-                        juce::Justification::centredLeft);
-
-            if (controls.isEmpty())
-            {
-                g.setFont (juce::FontOptions (12.0f));
-                g.drawText (blockName.isEmpty() ? juce::String()
-                                                : juce::String ("No live controls - use the LIVE toggle on a module's controls in the Module View"),
-                            getLocalBounds().withTrimmedTop (headerHeight), juce::Justification::centred);
-            }
-
-            g.setColour (t.outline);
-            g.drawHorizontalLine (getHeight() - 1, 0.0f, (float) getWidth());
+            panel->snapX = snapX;
+            panel->snapY = snapY;
+            panel->repaint();
         }
+        return r;
+    }
 
-        static constexpr int headerHeight = 28;
-
-    private:
-        AppContext& context;
-        juce::String trackName, blockName;
-        juce::Colour colour;
-        juce::String block;
-        juce::OwnedArray<LiveControl> controls;
-    };
+    void LiveView::LiveControl::clearSnapLines()
+    {
+        if (auto* panel = dynamic_cast<TrackPanel*> (getParentComponent()))
+        {
+            panel->snapX.clear();
+            panel->snapY.clear();
+            panel->repaint();
+        }
+    }
 
     //==============================================================================
     LiveView::LiveView (AppContext& c) : context (c)
@@ -187,6 +102,18 @@ namespace integra
         viewport.setViewedComponent (&content, false);
         viewport.setScrollBarsShown (true, true);
         addAndMakeVisible (viewport);
+        addAndMakeVisible (projectActive);
+        addAndMakeVisible (projectMeter);
+        projectActive.onChange = [this] { for (auto* p : panels) p->repaint(); };
+        addAndMakeVisible (keybindings);
+
+        if (auto* settings = context.properties.getUserSettings())
+        {
+            keybindingsCollapsed = settings->getBoolValue ("keybindingViewCollapsed", false);
+            keybindingsHeight = juce::jlimit (KeybindingView::minimumHeight, KeybindingView::maximumHeight,
+                                              settings->getIntValue ("keybindingViewHeight", KeybindingView::defaultHeight));
+        }
+
         context.model.addChangeListener (this);
         rebuild();
         startTimerHz (10);
@@ -199,6 +126,14 @@ namespace integra
         context.model.removeChangeListener (this);
     }
 
+    LiveView::TrackPanel* LiveView::getPanel (const juce::String& trackPath) const
+    {
+        for (auto* p : panels)
+            if (p->getTrackPath() == trackPath)
+                return p;
+        return nullptr;
+    }
+
     juce::String LiveView::blockToShow (const model::Track& track) const
     {
         // as LiveViewTrack: only the block under the playhead is shown
@@ -209,10 +144,50 @@ namespace integra
         return {};
     }
 
+    juce::String LiveView::describeContent() const
+    {
+        // everything the view shows that comes from the model
+        auto& p = context.model.get();
+        juce::String d;
+        d << p.path << "|";
+        for (auto& s : p.scenes)
+            d << s.name << ":" << s.userData.keybinding << ",";
+        d << "|";
+        for (auto& t : p.tracks)
+        {
+            d << t.path << ":" << t.name << ":" << t.userData.getColour().toString() << ":";
+            if (auto* b = p.findBlock (blockToShow (t)))
+            {
+                d << b->path << "{";
+                for (auto& m : b->modules)
+                    d << m.name << "=" << (m.entry != nullptr ? toString (m.entry->guid) : juce::String()) << ",";
+                for (auto& c : b->userData.liveViewControls)
+                    d << c.moduleName << "." << c.widgetLabel << "@" << c.bounds.toString() << ",";
+                d << "}";
+            }
+            d << ";";
+        }
+        return d;
+    }
+
     void LiveView::changeListenerCallback (juce::ChangeBroadcaster*)
     {
-        shownSignature = {};
-        rebuild();
+        rebuildIfChanged();
+    }
+
+    void LiveView::rebuildIfChanged()
+    {
+        // never pull the controls out from under the mouse (LiveViewBlock ignores
+        // SetLiveViewControls while repositioning)
+        if (content.isMouseButtonDown (true))
+        {
+            rebuildPending = true;
+            return;
+        }
+        rebuildPending = false;
+
+        if (describeContent() != shownContent)
+            rebuild();
     }
 
     void LiveView::timerCallback()
@@ -221,18 +196,13 @@ namespace integra
             return;
 
         playPosition = context.controller.getPlayPosition();
-
-        // rebuild only when the set of shown blocks changes
-        juce::String signature;
-        for (auto& t : context.model.get().tracks)
-            signature << blockToShow (t) << ";";
-        if (signature != shownSignature)
-            rebuild();
+        rebuildIfChanged();     // e.g. the playhead moved into another block
 
         // highlight the current scene
         auto& p = context.model.get();
+        const auto current = p.player.path.isNotEmpty() ? context.session.getValue (p.player.path + ".scene").toString() : juce::String();
         for (int i = 0; i < sceneButtons.size() && i < (int) p.scenes.size(); ++i)
-            sceneButtons[i]->setToggleState (p.player.currentScene == p.scenes[(size_t) i].name, juce::dontSendNotification);
+            sceneButtons[i]->setToggleState (current == p.scenes[(size_t) i].name, juce::dontSendNotification);
     }
 
     void LiveView::parentHierarchyChanged()
@@ -261,7 +231,7 @@ namespace integra
         updateKeyTarget();
         if (isVisible())
         {
-            shownSignature = {};
+            playPosition = context.controller.getPlayPosition();
             rebuild();
         }
     }
@@ -269,7 +239,7 @@ namespace integra
     void LiveView::rebuild()
     {
         auto& p = context.model.get();
-        playPosition = context.controller.getPlayPosition();
+        ++numRebuilds;
 
         sceneButtons.clear();
         for (auto& s : p.scenes)
@@ -281,19 +251,22 @@ namespace integra
             addAndMakeVisible (b);
         }
 
+        projectActive.setContainer (p.path);
+        projectMeter.setContainer (p.path);
+
+        const auto viewPosition = viewport.getViewPosition();
         panels.clear();
-        shownSignature = {};
         int y = 0;
         for (auto& t : p.tracks)
         {
-            const auto block = blockToShow (t);
-            shownSignature << block << ";";
-            auto* panel = panels.add (new TrackPanel (context, t, block));
+            auto* panel = panels.add (new TrackPanel (context, t, blockToShow (t)));
             panel->setBounds (0, y, juce::jmax (600, viewport.getMaximumVisibleWidth()), panel->getContentHeight());
             content.addAndMakeVisible (panel);
             y += panel->getHeight();
         }
         content.setSize (juce::jmax (600, viewport.getMaximumVisibleWidth()), y);
+        viewport.setViewPosition (viewPosition);
+        shownContent = describeContent();
 
         resized();
         repaint();
@@ -326,34 +299,95 @@ namespace integra
             if (s.userData.keybinding.isNotEmpty() && s.userData.keybinding.toUpperCase() == c)
             {
                 context.controller.activateScene (s.path);
+                keybindings.repaint();
                 return true;
             }
         }
         return false;
     }
 
+    juce::Rectangle<int> LiveView::keybindingHeaderBounds() const
+    {
+        return keybindingHeader;
+    }
+
+    void LiveView::setKeybindingViewCollapsed (bool shouldCollapse)
+    {
+        keybindingsCollapsed = shouldCollapse;
+        if (auto* settings = context.properties.getUserSettings())
+            settings->setValue ("keybindingViewCollapsed", keybindingsCollapsed);
+        resized();
+        repaint();
+    }
+
+    void LiveView::mouseDown (const juce::MouseEvent& e)
+    {
+        // the Scene Shortcuts title bar: click the arrow to collapse, drag to resize
+        resizingKeybindings = false;
+        if (! keybindingHeader.contains (e.getPosition()))
+            return;
+        if (e.x < 30)
+            setKeybindingViewCollapsed (! keybindingsCollapsed);
+        else
+            resizingKeybindings = ! keybindingsCollapsed;
+        dragStartHeight = keybindings.getHeight();
+    }
+
+    void LiveView::mouseDrag (const juce::MouseEvent& e)
+    {
+        if (! resizingKeybindings)
+            return;
+        keybindingsHeight = juce::jlimit (KeybindingView::minimumHeight, KeybindingView::maximumHeight, dragStartHeight - e.getDistanceFromDragStartY());
+        if (auto* settings = context.properties.getUserSettings())
+            settings->setValue ("keybindingViewHeight", keybindingsHeight);
+        resized();
+        repaint();
+    }
+
     void LiveView::paint (juce::Graphics& g)
     {
-        g.fillAll (Theme::get().background);
+        auto& t = Theme::get();
+        g.fillAll (t.background);
         if (context.model.get().tracks.empty())
         {
-            g.setColour (Theme::get().textDim);
-            g.drawText ("No tracks", getLocalBounds(), juce::Justification::centred);
+            g.setColour (t.textDim);
+            g.drawText ("No tracks", viewport.getBounds(), juce::Justification::centred);
         }
+
+        auto header = keybindingHeaderBounds();
+        g.setColour (t.header);
+        g.fillRect (header);
+        g.setColour (t.textDim);
+        juce::Path arrow;
+        auto a = header.removeFromLeft (30).toFloat().withSizeKeepingCentre (9.0f, 9.0f);
+        if (keybindingsCollapsed)
+            arrow.addTriangle (a.getTopLeft(), a.getBottomLeft(), { a.getRight(), a.getCentreY() });
+        else
+            arrow.addTriangle (a.getTopLeft(), a.getTopRight(), { a.getCentreX(), a.getBottom() });
+        g.fillPath (arrow);
+        g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+        g.drawText ("Scene Shortcuts", header, juce::Justification::centredLeft);
     }
 
     void LiveView::resized()
     {
         auto area = getLocalBounds();
-        if (! sceneButtons.isEmpty())
+
+        auto bar = area.removeFromTop (36).reduced (6, 5);
+        projectMeter.setBounds (bar.removeFromRight (128).withSizeKeepingCentre (128, 6));
+        bar.removeFromRight (8);
+        projectActive.setBounds (bar.removeFromRight (20).withSizeKeepingCentre (20, 20));
+        bar.removeFromRight (12);
+        for (auto* b : sceneButtons)
         {
-            auto bar = area.removeFromTop (36).reduced (6, 5);
-            for (auto* b : sceneButtons)
-            {
-                b->setBounds (bar.removeFromLeft (juce::jmin (160, juce::jmax (90, bar.getWidth() / juce::jmax (1, sceneButtons.size())))));
-                bar.removeFromLeft (6);
-            }
+            b->setBounds (bar.removeFromLeft (juce::jmin (160, juce::jmax (90, bar.getWidth() / juce::jmax (1, sceneButtons.size())))));
+            bar.removeFromLeft (6);
         }
+
+        keybindings.setVisible (! keybindingsCollapsed);
+        if (! keybindingsCollapsed)
+            keybindings.setBounds (area.removeFromBottom (juce::jmin (keybindingsHeight, area.getHeight() / 2)));
+        keybindingHeader = area.removeFromBottom (keybindingHeaderHeight);
         viewport.setBounds (area);
     }
 }

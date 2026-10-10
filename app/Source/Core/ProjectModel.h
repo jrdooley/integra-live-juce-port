@@ -194,6 +194,9 @@ namespace integra
 
         // Selection is GUI state (persisted through userData by ProjectController).
         juce::String selectedTrack, selectedBlock, selectedModule, selectedConnection;
+        /** The current scene was clicked: the properties panel shows it while no track or
+            block is selected (Flex: ProjectUserData.showSceneInTitlebar). */
+        bool sceneInProperties = false;
 
     private:
         void endpointsChanged (const std::vector<NotificationHub::Change>&) override;

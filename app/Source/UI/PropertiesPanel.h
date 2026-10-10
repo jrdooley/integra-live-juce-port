@@ -25,7 +25,16 @@ namespace integra
 
         /** Re-targets the panel at the current selection. */
         void selectionChanged();
+        /** The selected block, track, scene (when sceneInProperties) or the project. */
         juce::String getContainerPath() const;
+        juce::String getSelectedScene() const;
+
+        /** The title bar row: scene state / key / MIDI for a scene, previous / next scene
+            MIDI for the project (Flex: ScenePropertiesTitlebar, ProjectPropertiesTitlebar). */
+        juce::Component* getTitlebar() const noexcept   { return titlebar.get(); }
+        juce::TabbedComponent& getTabs() noexcept       { return tabs; }
+
+        class MidiLearnRow;
 
         void paint (juce::Graphics&) override;
         void resized() override;
@@ -36,15 +45,21 @@ namespace integra
         class ScriptingTab;
         class MidiTab;
 
+        class SceneTitlebar;
+        class ProjectTitlebar;
+
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
+        void showTabs (bool sceneOnly);
 
         AppContext& context;
         juce::Label title;
         juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
-        InfoTab* info = nullptr;
-        RoutingTab* routing = nullptr;
-        ScriptingTab* scripting = nullptr;
-        MidiTab* midi = nullptr;
-        juce::String shownContainer;
+        std::unique_ptr<InfoTab> info;
+        std::unique_ptr<RoutingTab> routing;
+        std::unique_ptr<ScriptingTab> scripting;
+        std::unique_ptr<MidiTab> midi;
+        std::unique_ptr<juce::Component> titlebar;
+        juce::String shownContainer, titlebarFor, watchedPlayer;
+        int shownTabs = -1;
     };
 }

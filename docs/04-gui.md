@@ -26,6 +26,13 @@ automated interaction test.
   (hold/play/loop), rename, key binding, delete.
 * **Tracks**: coloured headers (right-click: rename, colour from the Flex
   palette, height, move up/down, import block, delete); "+ Add track".
+  Each header has the track's **active button** (switches the track off and
+  on, one undo step) and a **VU meter**; the project's are in the top-left
+  corner (Flex: the active buttons and `AggregateVUContainer` in the title
+  bars). A meter shows the latest level of any audio output module
+  (AudioOut, StereoAudioOut, QuadAudioOut) inside the container. Inactive
+  tracks, and everything when the project is off, are drawn grey
+  (`ContainerControls.{h,cpp}`).
 * **Blocks** positioned by their block envelopes: double-click an empty lane to
   add a block (up to the next block), drag to move (also vertically to another
   track), drag either edge (10 px handles) to resize, double-click to open in
@@ -61,7 +68,17 @@ automated interaction test.
   shift+wheel; zoom/scroll persist in the project (`timelineZoom`,
   `timelineScroll` userData, same units as Flex).
 * **Properties panel** (below, resizable) for the innermost selection
-  (block → track → project), with tabs:
+  (block → track → scene → project). Clicking a scene in the scene bar shows
+  the scene: its title bar has **State** (hold / play / loop), **Key** and
+  **MIDI learn** for the scene (a MIDI input in the project routed to the
+  scene's `activate`, as `ScenePropertiesTitlebar.as`), and an Info tab. The
+  project's title bar has MIDI learn for **Prev Scene** and **Next Scene**
+  (`ProjectPropertiesTitlebar.as`). Learn adds a MIDI input that waits for a
+  controller; clicking Learn again while it waits cancels it, and x removes
+  a learned assignment. Tabs:
+
+  ![Scene properties](images/scene-properties.png)
+
   * *Info* – Markdown rendering of the `info` endpoint with an editor
   * *Routing* – scaled connections (`Connection → Scaler → Connection`):
     source / target endpoint pickers, input & output ranges and scale types
@@ -88,6 +105,8 @@ automated interaction test.
   date and author for version lines).
 
 ![Module library with TapDelay's versions expanded](images/module-library.png)
+* **Title bar**: the block's active button and VU meter, right of the
+  breadcrumbs (Flex: the module graph's title bar).
 * **Module graph**: modules at their stored grid positions (Flex grid units,
   one unit = one text row = 18 px), audio pins on each side; drag a module to
   move it (half-unit snapping), drag from an output pin to an input pin (or
@@ -111,13 +130,29 @@ Dark colour scheme (per project, as in Flex; Settings → Dark colour scheme):
 ![Live view](images/live-view.png)
 
 Each track shows the live-view controls of the block currently under the
-playhead (nothing when no block is, as in Flex). Controls appear where they were placed —
-the demo block *LiveViewControls* above was laid out in the Flex GUI and
-opens unchanged. Drag a control's title strip to move it, its corner to
-resize it; the layout is stored in the block's `userData` relative to the
-block area, as Flex stored it. Scene buttons across the top select scenes,
-and each scene's key binding (0-9 or A-Z, stored upper-case as in Flex) works
-anywhere in the window while the Live view is shown, except in text fields.
+playhead (nothing when no block is, as in Flex), with the track's active
+button and VU meter in its header; the project's are at the top right.
+Controls appear where they were placed — the demo block *LiveViewControls*
+above was laid out in the Flex GUI and opens unchanged. Drag a control's
+title strip to move it and any edge or corner to resize it; edges snap to
+the other controls' edges within 10 px, with snap lines, and controls stay
+inside the block area (`LiveViewBlock.as`). Right-click the block area for a
+menu of each module's controls (ticked when shown): choosing one adds it at
+the click point, or removes it. The layout is stored in the block's
+`userData` relative to the block area, as Flex stored it.
+
+Scene buttons across the top select scenes, and each scene's key binding
+(0-9 or A-Z, stored upper-case as in Flex) works anywhere in the window while
+the Live view is shown, except in text fields. **Scene Shortcuts**
+(`KeybindingView.{h,cpp}`, Flex `KeybindingView.as`) is an on-screen keyboard
+below: keys show their scene, the current scene's key is highlighted,
+clicking a key selects its scene and dragging a scene's key onto a free key
+rebinds it. Its title bar collapses it (click the arrow) or resizes it
+(drag, 100–400 px); both are remembered.
+
+The view is rebuilt only when something it shows changes (tracks, the block
+under the playhead, its modules or live controls, scenes), and never while a
+mouse button is down in it, so model changes no longer interrupt a drag.
 
 ### Module Manager — `ModuleManager.{h,cpp}` (Flex: `ModuleManager/`, `UpgradeDialog.as`)
 
@@ -210,7 +245,7 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (80 checks, all
+keyboard events and checks the resulting project state (104 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,
@@ -225,7 +260,13 @@ Delete key removes a module together with its envelope and live control, and
 one undo restores all of it; the module library's version expander, headings,
 search and tag filters, and Enter to add a specific version; dragging blocks
 from the Block Library onto a track, imports pushing later blocks along (one
-undo), and adding / removing user blocks.
+undo), and adding / removing user blocks; track and project active buttons,
+track and project meters following a test tone, the block's active button in
+the Module View; scene properties (State, Key, MIDI learn and its removal),
+project Next Scene MIDI learn; Scene Shortcuts (select, drag to rebind,
+collapse); the Live view's track active button, not rebuilding on unrelated
+changes, adding a control at the right-clicked point, snapping, resizing from
+the left edge and removing a control.
 
 Bugs it found and that are fixed:
 
@@ -233,6 +274,8 @@ Bugs it found and that are fixed:
   into the model snapshot, which the same method then rebuilt — a
   use-after-free. Controller methods now take paths by value.
 * Live-view key bindings ignored key events that carry only a key code.
+* The properties panel looked for scenes under the project; they live under
+  the Player.
 * (test harness) JUCE's Linux run loop can lose a quit message posted from
   inside a pumped callback; the test quits from a fresh timer dispatch.
 

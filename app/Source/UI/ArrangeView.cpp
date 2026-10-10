@@ -544,6 +544,65 @@ namespace integra
         setWantsKeyboardFocus (true);
     }
 
+    TrackLanes::~TrackLanes()
+    {
+        context.watcher.removeAll (this);
+    }
+
+    void TrackLanes::syncTrackControls()
+    {
+        // one level per track, and repaint when a track (or the project) is switched on/off
+        context.watcher.removeAll (this);
+        auto& project = context.model.get();
+        auto repaintHeaders = [this] (const juce::String&, CCommandSource) { repaint(); };
+        if (project.path.isNotEmpty())
+            context.watcher.watch (project.path + ".active", this, repaintHeaders);
+
+        std::map<juce::String, std::unique_ptr<AggregateLevel>> levels;
+        for (auto& t : project.tracks)
+        {
+            context.watcher.watch (t.path + ".active", this, repaintHeaders);
+            auto it = trackLevels.find (t.path);
+            if (it != trackLevels.end())
+                levels[t.path] = std::move (it->second);
+            else
+            {
+                auto level = std::make_unique<AggregateLevel> (context, t.path);
+                const auto path = t.path;
+                level->onChange = [this, path]
+                {
+                    auto r = getMeterBounds (path);
+                    if (! r.isEmpty())
+                        repaint (r.expanded (1.0f).toNearestInt());
+                };
+                levels[t.path] = std::move (level);
+            }
+        }
+        trackLevels = std::move (levels);
+    }
+
+    juce::Rectangle<float> TrackLanes::getActiveButtonBounds (const juce::String& trackPath) const
+    {
+        for (auto& r : rows())
+            if (r.track->path == trackPath)
+                return { (float) mapping.laneX - 26.0f, (float) r.bounds.getY() + 7.0f, 18.0f, 18.0f };
+        return {};
+    }
+
+    juce::Rectangle<float> TrackLanes::getMeterBounds (const juce::String& trackPath) const
+    {
+        for (auto& r : rows())
+            if (r.track->path == trackPath)
+                return { 16.0f, (float) r.bounds.getBottom() - 10.0f, (float) mapping.laneX - 26.0f, 5.0f };
+        return {};
+    }
+
+    AggregateLevel* TrackLanes::getTrackLevel (const juce::String& trackPath)
+    {
+        auto it = trackLevels.find (trackPath);
+        return it != trackLevels.end() ? it->second.get() : nullptr;
+    }
+
     std::vector<TrackLanes::TrackRow> TrackLanes::rows() const
     {
         std::vector<TrackRow> result;
@@ -790,7 +849,8 @@ namespace integra
         {
             auto& track = *row.track;
             const bool trackSelected = model.selectedTrack == track.path;
-            auto colour = track.userData.getColour();
+            const bool trackActive = ActiveButton::isEffectivelyActive (context, track.path);
+            auto colour = trackActive ? track.userData.getColour() : juce::Colour (0xff9a9a9a);   // greyed when off
 
             // lane background and grid
             auto lane = row.bounds.withTrimmedLeft (mapping.laneX);
@@ -848,13 +908,20 @@ namespace integra
             g.fillRect (header);
             g.setColour (colour);
             g.fillRect (header.removeFromLeft (8));
-            g.setColour (t.text);
+            g.setColour (trackActive ? t.text : t.textDim);
             g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
-            g.drawFittedText (track.name, header.reduced (8, 6).removeFromTop (20), juce::Justification::centredLeft, 1);
+            g.drawFittedText (track.name, header.reduced (8, 6).removeFromTop (20).withTrimmedRight (24), juce::Justification::centredLeft, 1);
             g.setColour (t.textDim);
             g.setFont (juce::FontOptions (11.0f));
-            g.drawFittedText (juce::String ((int) track.blocks.size()) + (track.blocks.size() == 1 ? " block" : " blocks"),
-                              header.reduced (8, 6).withTrimmedTop (20), juce::Justification::topLeft, 1);
+            if (row.bounds.getHeight() >= 56)
+                g.drawFittedText (juce::String ((int) track.blocks.size()) + (track.blocks.size() == 1 ? " block" : " blocks"),
+                                  header.reduced (8, 6).withTrimmedTop (20), juce::Justification::topLeft, 1);
+
+            // active button and VU meter (ArrangeViewTrack title bar)
+            ActiveButton::paintIcon (g, getActiveButtonBounds (track.path), (int) context.session.getValue (track.path + ".active") != 0,
+                                     track.userData.getColour());
+            if (auto it = trackLevels.find (track.path); it != trackLevels.end())
+                ContainerMeter::paintMeter (g, getMeterBounds (track.path), it->second->getLevel(), colour);
 
             g.setColour (t.outline);
             g.drawHorizontalLine (row.bounds.getBottom() - 1, 0.0f, (float) getWidth());
@@ -1006,6 +1073,7 @@ namespace integra
         grabKeyboardFocus();
         drag = Drag::none;
         auto& model = context.model;
+        model.sceneInProperties = false;
 
         // add track
         if (e.y >= getTotalHeight() - addTrackHeight && e.x < mapping.laneX)
@@ -1013,6 +1081,17 @@ namespace integra
             context.controller.addTrack();
             if (onSelectionChanged) onSelectionChanged();
             return;
+        }
+
+        // track active buttons
+        if (e.x < mapping.laneX && ! e.mods.isPopupMenu())
+        {
+            if (auto* t = trackAt (e.y); t != nullptr && getActiveButtonBounds (t->path).expanded (2.0f).contains (e.position))
+            {
+                ActiveButton::setActive (context, t->path, (int) context.session.getValue (t->path + ".active") == 0);
+                repaint();
+                return;
+            }
         }
 
         // envelope editing inside the selected block
@@ -1554,10 +1633,22 @@ namespace integra
         blockLibrary.getPlayPosition = [this] { return lanes.playPosition; };
         addAndMakeVisible (blockLibrary);
         addAndMakeVisible (widthHandle);
+        addAndMakeVisible (projectActive);
+        addAndMakeVisible (projectMeter);
+        projectActive.onChange = [this] { lanes.repaint(); ruler.repaint(); };
 
         lanes.onOpenBlock = [this] (const juce::String& block) { if (onOpenBlock) onOpenBlock (block); };
         lanes.onSelectionChanged = [this] { ruler.repaint(); if (onSelectionChanged) onSelectionChanged(); };
         ruler.onSnapLinesChanged = [this] { lanes.repaint(); };
+        ruler.onSceneSelected = [this] (const juce::String&)
+        {
+            // SelectScene( showInTitlebar = true ): the properties panel shows the scene
+            context.model.selectedTrack = {};
+            context.model.selectedBlock = {};
+            context.model.sceneInProperties = true;
+            lanes.repaint();
+            if (onSelectionChanged) onSelectionChanged();
+        };
         lanes.onSnapLinesChanged = [this] { ruler.repaint(); };
         ruler.onAutoScroll = [this] (double deltaTicks)
         {
@@ -1578,6 +1669,9 @@ namespace integra
 
     void ArrangeView::changeListenerCallback (juce::ChangeBroadcaster*)
     {
+        lanes.syncTrackControls();
+        projectActive.setContainer (context.model.get().path);
+        projectMeter.setContainer (context.model.get().path);
         auto& ud = context.model.get().userData;
         if (! timelineStateDirty)
         {
@@ -1701,6 +1795,9 @@ namespace integra
         widthHandle.setBounds (area.removeFromRight (4));
         auto rulerArea = area.removeFromTop (TimelineRuler::sceneBarHeight + 24);
         ruler.setBounds (rulerArea);
+        // project active button and VU meter in the corner (Flex: the Arrange view's title bar)
+        projectActive.setBounds (TrackLanes::headerWidth - 26, (TimelineRuler::sceneBarHeight - 18) / 2, 18, 18);
+        projectMeter.setBounds (60, TimelineRuler::sceneBarHeight / 2 - 3, TrackLanes::headerWidth - 92, 6);
         zoomOut.setBounds (TrackLanes::headerWidth - 58, TimelineRuler::sceneBarHeight + 2, 24, 20);
         zoomIn.setBounds (TrackLanes::headerWidth - 30, TimelineRuler::sceneBarHeight + 2, 24, 20);
 

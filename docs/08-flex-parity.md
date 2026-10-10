@@ -33,19 +33,19 @@ Flex paths are relative to `GUI/src/components/`.
 | Pin drag | — | The connection being dragged no longer points into the graph's module list, which is rebuilt on model changes. *(No automated test.)* |
 | Envelope curvature | `EnvelopeView.as`, `BlockView.as` | Curve mode button and menu item (stored per block, as Flex did), drag a segment to bend it, double-click to straighten it; curves drawn as libIntegra interpolates them. |
 | Module Manager | `ModuleManager/`, `SwitchModuleVersion.as`, `UpgradeModules.as`, `UninstallModules.as` | Install / Uninstall and Manage Versions tabs, Switch Versions, Upgrade All with a backup, Always Upgrade, the Upgrade Modules dialog after loading a project or installing modules, and installation / switch / upgrade reports. Version reports list endpoint differences more briefly than Flex's. |
+| Active buttons and VU meters | `ViewHolder.as`, `ArrangeViewTrack.as`, `LiveViewTrack.as`, `ModuleGraph.as`, `AggregateVUContainer.as` | Project, track and block active buttons (Arrange view corner and track headers, Live view top bar and track headers, Module View title bar) and meters showing the latest VU of the container's audio outputs. Inactive containers are greyed. |
+| Scene properties | `ScenePropertiesTitlebar.as`, `ProjectPropertiesTitlebar.as`, `SelectScene.as` | Clicking a scene shows it in the properties panel with State, Key, MIDI learn (routed to `activate`) and Info; the project's title bar has Prev / Next Scene MIDI learn. |
+| Scene Shortcuts | `KeybindingView.as`, `KeyIcon.as` | On-screen keyboard under the Live view: scene names on keys, current scene highlighted, click to select, drag to a free key to rebind, collapsible and resizable. |
+| Live view editing | `LiveViewBlock.as` | Right-click menu to add a module's control at the click point or remove it; resize from every edge; snapping to the other controls' edges with snap lines; clamped to the block area; no rebuilds during a drag, and only when what is shown changes. |
 | MIDI indicator | `MidiInputIndicator.as` | Lights for every incoming message, including repeats of the same message. *(No automated test.)* |
 
 ## Arrange view and timeline
 
 **Missing / partial**
-* Scene properties: selecting a scene doesn't show scene properties (there is no scene
-  page in the properties panel yet).
-* Scenes: inline rename by double-click; Backspace to delete; scene properties title bar
-  (state combo, key binding combo, **MIDI learn for a scene**); project MIDI learn for
-  next/previous scene.
+* Scenes: inline rename by double-click (and in the properties title); Backspace to delete.
 * Timeline: the drag-to-zoom/scroll strip at the top of the ruler (drag sideways to
   scroll, up/down to zoom, Shift locks an axis).
-* Tracks: collapse button, active (mute) toggle, VU meter, drag the bottom edge to
+* Tracks: collapse button, drag the bottom edge to
   resize (only 4 preset heights), drag headers to reorder (only move up/down), full colour
   picker (only 7 colours), import/export track, double-click below the tracks to add one,
   Ctrl+Shift+T.
@@ -76,13 +76,11 @@ Flex paths are relative to `GUI/src/components/`.
 ## Live view
 
 **Missing / partial**
-* Right-click on the canvas to add/remove a module's control at that point (new controls
-  all land at the top left); resize from every edge; snapping to neighbours; clamping.
-* Per-track collapse, project/track **active (mute) buttons**, project/track/block VU
-  meters.
-* Read-only timeline above the Live view; the on-screen **keyboard map** for scene
-  bindings with drag-to-rebind.
-* Live view is rebuilt on every structural change, interrupting drags.
+* Per-track collapse.
+* Read-only timeline above the Live view.
+* Snapping while resizing diagonally uses each edge's own snap (Flex's
+  `doDiagonalReposition` keeps the aspect of the drag); the maximum control sizes of
+  `ControlMeasurer` aren't applied.
 
 ## Application
 

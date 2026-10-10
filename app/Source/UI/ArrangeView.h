@@ -7,6 +7,7 @@
 #include "Core/AppContext.h"
 #include "Core/EndpointInfo.h"
 #include "BlockLibrary.h"
+#include "ContainerControls.h"
 
 namespace integra
 {
@@ -79,6 +80,13 @@ namespace integra
     {
     public:
         TrackLanes (AppContext&, TimelineMapping&);
+        ~TrackLanes() override;
+
+        /** Track active buttons and VU meters (Flex: ArrangeViewTrack's title bar). */
+        void syncTrackControls();
+        juce::Rectangle<float> getActiveButtonBounds (const juce::String& trackPath) const;
+        juce::Rectangle<float> getMeterBounds (const juce::String& trackPath) const;
+        AggregateLevel* getTrackLevel (const juce::String& trackPath);
 
         // Block Library drags and .integra files dropped on a track (ArrangeViewTrack.onDragDrop)
         bool isInterestedInDragSource (const SourceDetails&) override;
@@ -170,6 +178,8 @@ namespace integra
         static constexpr float blockResizeAreaWidth = 10.0f;   // BlockView resize areas
         static constexpr int minimumBlockLength = 10;          // Block._minimumBlockLength (ticks)
 
+        std::map<juce::String, std::unique_ptr<AggregateLevel>> trackLevels;
+
         void updateDropOutline (std::optional<juce::Point<int>>);
         juce::Rectangle<float> dropOutline;
 
@@ -206,6 +216,8 @@ namespace integra
         TimelineRuler& getRuler() noexcept              { return ruler; }
         juce::Viewport& getViewport() noexcept          { return viewport; }
         BlockLibrary& getBlockLibrary() noexcept        { return blockLibrary; }
+        ActiveButton& getProjectActiveButton() noexcept { return projectActive; }
+        ContainerMeter& getProjectMeter() noexcept      { return projectMeter; }
 
     private:
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
@@ -222,6 +234,8 @@ namespace integra
         juce::ScrollBar horizontalScroll { false };
         juce::TextButton zoomIn { "+" }, zoomOut { "-" };
         BlockLibrary blockLibrary;
+        ActiveButton projectActive { context };     // Flex: the Arrange view's title bar
+        ContainerMeter projectMeter { context };
 
         /** Drags the Block Library's left edge (Flex ViewHolder changeWidthFromLeft). */
         struct WidthHandle  : public juce::Component

@@ -1,6 +1,7 @@
 #include "GuiTest.h"
 #include "Widgets/IntegraWidgets.h"
 #include "ModuleManager.h"
+#include "LiveViewParts.h"
 #include "Core/SelfTest.h"
 
 namespace integra
@@ -797,6 +798,249 @@ namespace integra
             library.getList().selectRow (1);
             pump();
             saveShot (main, "block-library.png");
+        }
+
+        // --- Active buttons and VU meters ----------------------------------------------
+        {
+            context.controller.newProject();
+            main.showView ("arrange");
+            pump();
+            const auto trackPath = p.tracks.at (0).path;
+            const auto blockPath = p.tracks[0].blocks.empty() ? juce::String() : p.tracks[0].blocks[0].path;
+            auto activeOf = [&] (const juce::String& path) { return (int) context.session.getValue (path + ".active") != 0; };
+
+            auto button = lanes.getActiveButtonBounds (trackPath);
+            click (lanes, button.getCentre());
+            pump();
+            t.check (! activeOf (trackPath) && ! ActiveButton::isEffectivelyActive (context, blockPath),
+                     "the track's active button switches the track (and its blocks) off");
+            click (lanes, button.getCentre());
+            pump();
+            t.check (activeOf (trackPath), "...and on again");
+
+            arrange.getProjectActiveButton().toggle();
+            pump();
+            t.check (! activeOf (p.path) && ! ActiveButton::isEffectivelyActive (context, trackPath), "the project's active button switches everything off");
+            arrange.getProjectActiveButton().toggle();
+            pump();
+            t.check (activeOf (p.path), "...and on again");
+
+            // a level reported by the block's audio output shows on the track's meter
+            juce::String output;
+            if (auto* b = p.findBlock (blockPath))
+                for (auto& m : b->modules)
+                    if (m.entry != nullptr && m.entry->name == "StereoAudioOut")
+                        output = m.path.isNotEmpty() ? m.path : blockPath + "." + m.name;
+            if (output.isEmpty() && p.findBlock (blockPath) != nullptr)
+                for (auto& m : p.findBlock (blockPath)->modules)
+                    if (m.entry != nullptr && m.entry->name == "StereoAudioOut")
+                        output = blockPath + "." + m.name;
+            // feed the output a test tone
+            if (auto* tone = context.session.getCatalogue().findByName ("TestSource"))
+            {
+                auto source = context.controller.addModule (blockPath, tone->guid, { 1.0f, 8.0f });
+                context.controller.connect (blockPath, source + ".out1", output + ".in1");
+            }
+            context.controller.setPlayPosition (10);
+            pump (800);
+            auto* level = lanes.getTrackLevel (trackPath);
+            t.check (level != nullptr && level->getLevel() > 0.5f,
+                     "the track meter follows its audio outputs' VU (" + juce::String (level != nullptr ? level->getLevel() : -1.0f, 2) + ")");
+            t.check (arrange.getProjectMeter().getLevel().getLevel() > 0.5f, "...and so does the project meter");
+
+            main.getModuleView().setBlock (blockPath);
+            t.check (main.getModuleView().getBlockActiveButton().isActive(), "the Module View has the block's active button");
+        }
+
+        // --- Scene properties -------------------------------------------------------------
+        {
+            auto& ruler = arrange.getRuler();
+            auto& properties = main.getProperties();
+            const auto scene = context.controller.addScene (rate * 2, rate * 4);
+            pump();
+            const float sceneX = mapping.tickToX (rate * 4);
+            click (ruler, { sceneX, (float) TimelineRuler::sceneBarHeight / 2 });
+            pump();
+            t.check (properties.getContainerPath() == scene && properties.getTabs().getNumTabs() == 1 && properties.getTitlebar() != nullptr,
+                     "clicking a scene shows its properties (" + properties.getContainerPath() + ")");
+
+            std::vector<juce::ComboBox*> combos;
+            if (auto* bar = properties.getTitlebar())
+                findAll (*bar, combos);
+            if (combos.size() == 2)
+            {
+                for (int i = 0; i < combos[1]->getNumItems(); ++i)
+                    if (combos[1]->getItemText (i) == "Q")
+                        combos[1]->setSelectedItemIndex (i, juce::sendNotificationSync);
+                for (int i = 0; i < combos[0]->getNumItems(); ++i)
+                    if (combos[0]->getItemText (i) == "loop")
+                        combos[0]->setSelectedItemIndex (i, juce::sendNotificationSync);
+                pump();
+            }
+            auto* sc = p.findScene (scene);
+            t.check (combos.size() == 2 && sc != nullptr && sc->userData.keybinding == "Q" && sc->mode == "loop",
+                     "the scene's State and Key can be set in its title bar");
+            saveShot (main, "scene-properties.png");
+
+            auto findMidi = [&] (const juce::String& endpoint) -> const model::MidiControlInput*
+            {
+                for (auto& sca : p.scalers)
+                    if (sca.targetPath == endpoint)
+                        for (auto& m : p.midiControlInputs)
+                            if (m.outputConnection == sca.upstreamConnection)
+                                return &m;
+                return nullptr;
+            };
+            auto clickButtonIn = [&] (juce::Component* root, const juce::String& text, int index = 0)
+            {
+                std::vector<juce::TextButton*> buttons;
+                if (root != nullptr)
+                    findAll (*root, buttons);
+                for (auto* b : buttons)
+                    if (b->getButtonText() == text && index-- == 0)
+                    {
+                        b->triggerClick();
+                        pump();
+                        return true;
+                    }
+                return false;
+            };
+            clickButtonIn (properties.getTitlebar(), "Learn");
+            auto* learning = findMidi (scene + ".activate");
+            t.check (learning != nullptr && learning->autoLearn, "MIDI learn for a scene adds a learning MIDI input routed to its activate");
+            clickButtonIn (properties.getTitlebar(), "x");
+            t.check (findMidi (scene + ".activate") == nullptr, "...and x removes it");
+
+            click (lanes, { mapping.tickToX (rate * 60), (float) lanes.getTotalHeight() - 10.0f });   // below the tracks
+            pump();
+            t.check (properties.getContainerPath() == p.path && properties.getTabs().getNumTabs() == 4 && properties.getTitlebar() != nullptr,
+                     "clicking the lanes shows the project again, with its title bar");
+            clickButtonIn (properties.getTitlebar(), "Learn", 1);
+            auto* next = findMidi (p.player.path + ".next");
+            t.check (next != nullptr && next->autoLearn, "the project's title bar learns MIDI for Next Scene");
+            clickButtonIn (properties.getTitlebar(), "Learn", 1);
+            t.check (findMidi (p.player.path + ".next") == nullptr, "...clicking Learn again while learning cancels it");
+        }
+
+        // --- Live view: scene shortcuts, controls ---------------------------------------
+        {
+            main.showView ("live");
+            pump();
+            auto& live = main.getLiveView();
+            auto& keys = live.getKeybindingView();
+            live.setKeybindingViewCollapsed (false);
+            pump();
+            const auto scene = p.scenes.empty() ? juce::String() : p.scenes[0].path;
+            context.controller.activateScene ({});
+            pump();
+
+            t.check (keys.isVisible() && keys.getSceneForKey ('Q') == scene, "the Scene Shortcuts keyboard shows the scene on its key");
+            click (keys, keys.getKeyBounds ('Q').getCentre());
+            pump();
+            t.check (context.session.getValue (p.player.path + ".scene").toString() == lastElement (scene), "clicking a key selects its scene");
+            drag (keys, keys.getKeyBounds ('Q').getCentre(), keys.getKeyBounds ('W').getCentre());
+            pump();
+            t.check (p.findScene (scene) != nullptr && p.findScene (scene)->userData.keybinding == "W", "dragging a scene's key onto a free key rebinds it");
+            live.setKeybindingViewCollapsed (true);
+            pump();
+            t.check (! keys.isVisible(), "Scene Shortcuts can be collapsed");
+            live.setKeybindingViewCollapsed (false);
+
+            // track header: active button and meter
+            context.controller.activateScene ({});
+            const auto trackPath = p.tracks.at (0).path;
+            const auto blockPath = p.tracks[0].blocks.at (0).path;
+            context.controller.setPlayPosition (p.tracks[0].blocks[0].start + 1);
+            pump (300);
+            auto* panel = live.getPanel (trackPath);
+            t.check (panel != nullptr && panel->getBlock() == blockPath, "the Live view shows the block under the playhead");
+            if (panel != nullptr)
+            {
+                panel->getActiveButton().toggle();
+                pump();
+                t.check ((int) context.session.getValue (trackPath + ".active") == 0, "the Live view track header switches the track off");
+                panel->getActiveButton().toggle();
+                pump();
+            }
+
+            // only changes to what is shown rebuild it
+            const int rebuilds = live.getNumRebuilds();
+            context.controller.setValue (blockPath + ".info", "changed info");
+            pump (300);
+            t.check (live.getNumRebuilds() == rebuilds, "unrelated model changes don't rebuild the Live view");
+
+            // right-click: add a control at the click point
+            panel = live.getPanel (trackPath);
+            juce::String modulePath, widgetLabel;
+            if (auto* b = p.findBlock (blockPath))
+                for (auto& m : b->modules)
+                    for (auto& spec : WidgetSpec::forModule (context.session, blockPath + "." + m.name))
+                        if (modulePath.isEmpty() && spec.type == "Slider" || (modulePath.isEmpty() && spec.type == "Knob"))
+                            modulePath = blockPath + "." + m.name, widgetLabel = spec.label;
+            if (panel != nullptr && modulePath.isNotEmpty())
+            {
+                for (auto& c : p.findBlock (blockPath)->userData.liveViewControls)
+                    context.controller.setLiveViewControl (blockPath + "." + c.moduleName, c.widgetLabel, false);
+                pump (300);
+                panel = live.getPanel (trackPath);
+                panel->toggleControl (modulePath, widgetLabel, { 200, LiveView::TrackPanel::headerHeight + 40 });
+                pump (300);
+                auto& controls = p.findBlock (blockPath)->userData.liveViewControls;
+                t.check (controls.size() == 1 && juce::approximatelyEqual (controls[0].bounds.getX(), 200.0f) && juce::approximatelyEqual (controls[0].bounds.getY(), 40.0f),
+                         "a control added from the menu appears where the block was right-clicked");
+
+                // a second control, snapping and resizing from the left edge
+                juce::String secondLabel;
+                for (auto& spec : WidgetSpec::forModule (context.session, modulePath))
+                    if (spec.label != widgetLabel && secondLabel.isEmpty() && spec.type != "VuMeter")
+                        secondLabel = spec.label;
+                panel = live.getPanel (trackPath);
+                if (secondLabel.isNotEmpty() && panel != nullptr)
+                {
+                    panel->toggleControl (modulePath, secondLabel, { 500, LiveView::TrackPanel::headerHeight + 40 });
+                    pump (300);
+                    panel = live.getPanel (trackPath);
+                    auto& cs = panel->getControls();
+                    if (cs.size() == 2)
+                    {
+                        auto* first = cs[0];
+                        auto* second = cs[1];
+                        auto snapped = second->snapped (second->getBounds().withX (first->getRight() + 6), true, true, true, true, true);
+                        t.check (snapped.getX() == first->getRight(), "a moved control snaps to its neighbour's edge");
+                        second->clearSnapLines();
+
+                        std::vector<juce::ResizableBorderComponent*> borders;
+                        findAll (*second, borders);
+                        const auto before = second->getBounds();
+                        if (! borders.empty())
+                            drag (*borders[0], { 2.0f, (float) before.getHeight() / 2 }, { -38.0f, (float) before.getHeight() / 2 });
+                        pump (300);
+                        auto* stored = [&]() -> const BlockUserData::LiveViewControl*
+                        {
+                            for (auto& c : p.findBlock (blockPath)->userData.liveViewControls)
+                                if (c.widgetLabel == secondLabel)
+                                    return &c;
+                            return nullptr;
+                        }();
+                        t.check (stored != nullptr && stored->bounds.getX() < (float) before.getX() - 20.0f
+                                    && juce::approximatelyEqual (stored->bounds.getRight(), (float) before.getRight()),
+                                 "dragging a control's left edge resizes it, keeping its right edge");
+                    }
+                }
+
+                panel = live.getPanel (trackPath);
+                if (panel != nullptr)
+                    panel->toggleControl (modulePath, widgetLabel, {});
+                pump (300);
+                bool removed = true;
+                for (auto& c : p.findBlock (blockPath)->userData.liveViewControls)
+                    removed &= c.widgetLabel != widgetLabel;
+                t.check (removed, "choosing a shown control in the menu removes it");
+            }
+
+            saveShot (main, "live-view.png");
+            main.showView ("arrange");
+            pump();
         }
 
         main.showView ("arrange");

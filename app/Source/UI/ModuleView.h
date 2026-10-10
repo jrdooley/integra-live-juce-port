@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "ModuleProperties.h"
+#include "ContainerControls.h"
 
 namespace integra
 {
@@ -207,11 +208,14 @@ namespace integra
         ModuleGraph& getGraph() noexcept                    { return graph; }
         ModuleProperties& getProperties() noexcept          { return properties; }
         ModuleLibrary& getLibrary() noexcept                { return library; }
+        ActiveButton& getBlockActiveButton() noexcept       { return blockActive; }
 
     private:
         AppContext& context;
         juce::TextButton backButton { "< Arrange" };
         juce::Label breadcrumb;
+        ActiveButton blockActive { context };   // Flex: the module graph's title bar
+        ContainerMeter blockMeter { context };
         ModuleLibrary library;
         ModuleGraph graph;
         juce::Viewport graphViewport;

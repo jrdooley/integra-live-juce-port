@@ -1048,6 +1048,9 @@ namespace integra
         addAndMakeVisible (*divider);
 
         graph.onModuleSelected = [this] (const juce::String& module) { properties.setModule (module); };
+        addAndMakeVisible (blockActive);
+        addAndMakeVisible (blockMeter);
+        blockActive.onChange = [this] { graph.repaint(); };
 
         library.onModuleChosen = [this] (const ModuleCatalogue::Entry& entry)
         {
@@ -1073,6 +1076,14 @@ namespace integra
 
         auto crumbs = juce::StringArray::fromTokens (blockPath, ".", {});
         breadcrumb.setText (crumbs.joinIntoString ("  >  "), juce::dontSendNotification);
+
+        blockActive.setContainer (blockPath);
+        blockMeter.setContainer (blockPath);
+        if (auto* track = context.model.get().findTrackOfBlock (blockPath))
+        {
+            blockMeter.setColour (track->userData.getColour());
+            blockActive.setColour (track->userData.getColour());
+        }
     }
 
     void ModuleView::paint (juce::Graphics& g)
@@ -1086,6 +1097,9 @@ namespace integra
         auto top = area.removeFromTop (32).reduced (4);
         backButton.setBounds (top.removeFromLeft (100));
         top.removeFromLeft (10);
+        blockMeter.setBounds (top.removeFromRight (128).withSizeKeepingCentre (128, 6));
+        top.removeFromRight (6);
+        blockActive.setBounds (top.removeFromRight (20).withSizeKeepingCentre (20, 20));
         breadcrumb.setBounds (top);
 
         library.setBounds (area.removeFromRight (220));    // Flex: the library is right of the graph

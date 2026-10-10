@@ -655,24 +655,246 @@ namespace integra
     };
 
     //==============================================================================
+    //==============================================================================
+    namespace
+    {
+        /** MidiControlInput.getAsString */
+        juce::String describeMidi (const model::MidiControlInput& m)
+        {
+            if (m.autoLearn)
+                return "Autolearning...";
+
+            auto device = m.device.length() > 20 ? m.device.substring (0, 20) + "..." : m.device;
+            juce::String text = device.isEmpty() ? juce::String() : device + " ";
+            text << (m.channel == 0 ? juce::String ("all channels") : "chn" + juce::String (m.channel)) << " ";
+            if (m.messageType == "noteon")
+                text << "note " << juce::MidiMessage::getMidiNoteName (m.noteOrController, true, true, 3);
+            else
+                text << "cc" << m.noteOrController;
+            return text;
+        }
+    }
+
+    /**
+        MIDI learn for one endpoint, as Flex's scene and project title bars: the learn
+        button adds a MidiControlInput in learn mode routed (through a scaler) to the
+        endpoint, or switches learning off again; the label shows what was learned and
+        the x removes it. The MIDI input lives in the project, as in Flex.
+    */
+    class PropertiesPanel::MidiLearnRow  : public juce::Component
+    {
+    public:
+        MidiLearnRow (AppContext& c, const juce::String& labelText, const juce::String& endpointPath)
+            : context (c), endpoint (endpointPath)
+        {
+            label.setText (labelText, juce::dontSendNotification);
+            label.setColour (juce::Label::textColourId, Theme::get().textDim);
+            addAndMakeVisible (label);
+
+            learn.setClickingTogglesState (false);
+            learn.setTooltip ("MIDI learn: move a MIDI control to assign it");
+            learn.onClick = [this] { toggleLearn(); };
+            addAndMakeVisible (learn);
+
+            setting.setColour (juce::Label::textColourId, Theme::get().textDim);
+            addAndMakeVisible (setting);
+
+            removeButton.setTooltip ("Remove the MIDI assignment");
+            removeButton.onClick = [this] { removeMidi(); };
+            addChildComponent (removeButton);
+            refresh();
+        }
+
+        /** The project's MIDI input driving the endpoint, and its scaler. */
+        std::pair<const model::MidiControlInput*, const model::Scaler*> find() const
+        {
+            auto& p = context.model.get();
+            for (auto& s : p.scalers)
+            {
+                if (s.targetPath != endpoint)
+                    continue;
+                for (auto& m : p.midiControlInputs)
+                    if (m.outputConnection.isNotEmpty() && m.outputConnection == s.upstreamConnection)
+                        return { &m, &s };
+            }
+            return { nullptr, nullptr };
+        }
+
+        void refresh()
+        {
+            auto [midi, scaler] = find();
+            learn.setToggleState (midi != nullptr && midi->autoLearn, juce::dontSendNotification);
+            setting.setText (midi != nullptr ? describeMidi (*midi) : juce::String(), juce::dontSendNotification);
+            removeButton.setVisible (midi != nullptr);
+        }
+
+        void toggleLearn()
+        {
+            // ScenePropertiesTitlebar.onMidiLearnButton
+            auto [midi, scaler] = find();
+            if (midi != nullptr)
+            {
+                if (midi->autoLearn)
+                    removeMidi();
+                else
+                    context.controller.setValue (midi->path + ".autoLearn", 1);
+            }
+            else
+            {
+                context.controller.addMidiControl (context.model.get().path, endpoint, true);
+            }
+            refresh();
+        }
+
+        void removeMidi()
+        {
+            auto [midi, scaler] = find();
+            if (midi == nullptr)
+                return;
+            juce::StringArray paths { midi->path };
+            if (scaler != nullptr)
+                paths.add (scaler->path);
+            context.controller.remove (paths);
+            refresh();
+        }
+
+        int getIdealWidth() const   { return 60 + 50 + 150 + 24; }
+
+        void resized() override
+        {
+            auto area = getLocalBounds();
+            label.setBounds (area.removeFromLeft (juce::jmax (40, juce::GlyphArrangement::getStringWidthInt (label.getFont(), label.getText()) + 12)));
+            learn.setBounds (area.removeFromLeft (50).reduced (0, 2));
+            removeButton.setBounds (area.removeFromRight (22).reduced (0, 2));
+            setting.setBounds (area);
+        }
+
+        juce::TextButton learn { "Learn" };
+        juce::TextButton removeButton { "x" };
+        juce::Label label, setting;
+
+    private:
+        AppContext& context;
+        juce::String endpoint;
+    };
+
+    //==============================================================================
+    /** ScenePropertiesTitlebar: State, Key and MIDI of the selected scene. */
+    class PropertiesPanel::SceneTitlebar  : public juce::Component
+    {
+    public:
+        SceneTitlebar (AppContext& c, const juce::String& path)
+            : context (c), scene (path), midiRow (c, "MIDI", path + ".activate")
+        {
+            for (auto* l : { &stateLabel, &keyLabel })
+            {
+                l->setColour (juce::Label::textColourId, Theme::get().textDim);
+                addAndMakeVisible (*l);
+            }
+
+            // populateModesCombo: the Scene interface's allowed modes
+            auto modes = EndpointInfo::find (context.session, scene + ".mode").allowedStates;
+            if (modes.isEmpty())
+                modes = { "hold", "play", "loop" };
+            int id = 1;
+            for (auto& m : modes)
+                state.addItem (m, id++);
+            state.onChange = [this] { setMode(); };
+            addAndMakeVisible (state);
+
+            key.addItem ("<none>", 1);
+            const juce::String keys (SceneUserData::keybindings);
+            for (int i = 0; i < keys.length(); ++i)
+                key.addItem (keys.substring (i, i + 1), i + 2);
+            key.onChange = [this]
+            {
+                context.controller.setSceneKeybinding (scene, key.getSelectedId() <= 1 ? juce::String() : key.getText());
+            };
+            addAndMakeVisible (key);
+            addAndMakeVisible (midiRow);
+            refresh();
+        }
+
+        void refresh()
+        {
+            if (auto* s = context.model.get().findScene (scene))
+            {
+                for (int i = 0; i < state.getNumItems(); ++i)
+                    if (state.getItemText (i) == s->mode)
+                        state.setSelectedItemIndex (i, juce::dontSendNotification);
+                const auto k = s->userData.keybinding.toUpperCase();
+                key.setSelectedId (k.isEmpty() ? 1 : juce::String (SceneUserData::keybindings).indexOf (k) + 2, juce::dontSendNotification);
+            }
+            midiRow.refresh();
+        }
+
+        void resized() override
+        {
+            auto area = getLocalBounds().reduced (8, 3);
+            stateLabel.setBounds (area.removeFromLeft (44));
+            state.setBounds (area.removeFromLeft (80));
+            area.removeFromLeft (14);
+            keyLabel.setBounds (area.removeFromLeft (32));
+            key.setBounds (area.removeFromLeft (80));
+            area.removeFromLeft (14);
+            midiRow.setBounds (area.removeFromLeft (juce::jmin (area.getWidth(), 320)));
+        }
+
+        juce::ComboBox state, key;
+        MidiLearnRow midiRow;
+
+    private:
+        void setMode()
+        {
+            if (auto* s = context.model.get().findScene (scene))
+                context.controller.setScene (scene, s->start, s->length, state.getText());
+        }
+
+        AppContext& context;
+        juce::String scene;
+        juce::Label stateLabel { {}, "State" }, keyLabel { {}, "Key" };
+    };
+
+    //==============================================================================
+    /** ProjectPropertiesTitlebar: MIDI learn for the player's previous / next scene. */
+    class PropertiesPanel::ProjectTitlebar  : public juce::Component
+    {
+    public:
+        ProjectTitlebar (AppContext& c, const juce::String& playerPath)
+            : prev (c, "Prev Scene", playerPath + ".prev"), next (c, "Next Scene", playerPath + ".next")
+        {
+            addAndMakeVisible (prev);
+            addAndMakeVisible (next);
+        }
+
+        void refresh()  { prev.refresh(); next.refresh(); }
+
+        void resized() override
+        {
+            auto area = getLocalBounds().reduced (8, 3);
+            prev.setBounds (area.removeFromLeft (juce::jmin (330, area.getWidth() / 2)));
+            area.removeFromLeft (14);
+            next.setBounds (area.removeFromLeft (juce::jmin (330, area.getWidth())));
+        }
+
+        MidiLearnRow prev, next;
+    };
+
+    //==============================================================================
     PropertiesPanel::PropertiesPanel (AppContext& c) : context (c)
     {
         title.setFont (juce::FontOptions (14.0f, juce::Font::bold));
         addAndMakeVisible (title);
 
-        info = new InfoTab (c);
-        routing = new RoutingTab (c);
-        scripting = new ScriptingTab (c);
-        midi = new MidiTab (c);
+        info = std::make_unique<InfoTab> (c);
+        routing = std::make_unique<RoutingTab> (c);
+        scripting = std::make_unique<ScriptingTab> (c);
+        midi = std::make_unique<MidiTab> (c);
 
-        auto tabColour = Theme::get().panelAlt;
-        tabs.addTab ("Info", tabColour, info, true);
-        tabs.addTab ("Routing", tabColour, routing, true);
-        tabs.addTab ("Scripting", tabColour, scripting, true);
-        tabs.addTab ("MIDI", tabColour, midi, true);
         tabs.setTabBarDepth (28);
         tabs.setOutline (0);
         addAndMakeVisible (tabs);
+        showTabs (false);
 
         context.model.addChangeListener (this);
         selectionChanged();
@@ -680,7 +902,41 @@ namespace integra
 
     PropertiesPanel::~PropertiesPanel()
     {
+        context.watcher.removeAll (this);
         context.model.removeChangeListener (this);
+        tabs.clearTabs();
+    }
+
+    void PropertiesPanel::showTabs (bool sceneOnly)
+    {
+        // a scene has only info (ArrangeViewPropertiesViewStack)
+        if (shownTabs == (sceneOnly ? 1 : 0))
+            return;
+        shownTabs = sceneOnly ? 1 : 0;
+
+        auto tabColour = Theme::get().panelAlt;
+        tabs.clearTabs();
+        tabs.addTab ("Info", tabColour, info.get(), false);
+        if (! sceneOnly)
+        {
+            tabs.addTab ("Routing", tabColour, routing.get(), false);
+            tabs.addTab ("Scripting", tabColour, scripting.get(), false);
+            tabs.addTab ("MIDI", tabColour, midi.get(), false);
+        }
+        tabs.setCurrentTabIndex (0);
+    }
+
+    juce::String PropertiesPanel::getSelectedScene() const
+    {
+        auto& m = context.model;
+        auto& p = m.get();
+        if (! m.sceneInProperties || p.findBlock (m.selectedBlock) != nullptr || p.findTrack (m.selectedTrack) != nullptr || p.player.path.isEmpty())
+            return {};
+        const auto name = context.session.getValue (p.player.path + ".scene").toString();
+        if (name.isEmpty())
+            return {};
+        auto* scene = p.findScene (p.player.path + "." + name);
+        return scene != nullptr ? scene->path : juce::String();
     }
 
     juce::String PropertiesPanel::getContainerPath() const
@@ -688,6 +944,7 @@ namespace integra
         auto& m = context.model;
         if (m.get().findBlock (m.selectedBlock) != nullptr)  return m.selectedBlock;
         if (m.get().findTrack (m.selectedTrack) != nullptr)  return m.selectedTrack;
+        if (auto scene = getSelectedScene(); scene.isNotEmpty())  return scene;
         return m.get().valid ? m.get().path : juce::String();
     }
 
@@ -696,22 +953,52 @@ namespace integra
         const auto container = getContainerPath();
         auto& p = context.model.get();
 
-        juce::String kind = container == p.path ? "Project" : p.findTrack (container) != nullptr ? "Track" : "Block";
+        // the player's current scene changes without a model rebuild
+        if (watchedPlayer != p.player.path)
+        {
+            context.watcher.removeAll (this);
+            watchedPlayer = p.player.path;
+            if (watchedPlayer.isNotEmpty())
+                context.watcher.watch (watchedPlayer + ".scene", this, [this] (const juce::String&, CCommandSource) { selectionChanged(); });
+        }
+
+        const bool isScene = p.findScene (container) != nullptr;
+        juce::String kind = container == p.path ? "Project" : isScene ? "Scene" : p.findTrack (container) != nullptr ? "Track" : "Block";
         title.setText (container.isEmpty() ? juce::String() : kind + ":  " + container.replace (".", "  >  "), juce::dontSendNotification);
 
+        // title bar row
+        const auto titlebarKey = isScene ? "scene:" + container : container == p.path && p.player.path.isNotEmpty() ? "project:" + p.player.path : juce::String();
+        if (titlebarKey != titlebarFor)
+        {
+            titlebarFor = titlebarKey;
+            titlebar.reset();
+            if (isScene)
+                titlebar = std::make_unique<SceneTitlebar> (context, container);
+            else if (titlebarKey.isNotEmpty())
+                titlebar = std::make_unique<ProjectTitlebar> (context, p.player.path);
+            if (titlebar != nullptr)
+                addAndMakeVisible (*titlebar);
+            resized();
+        }
+
+        showTabs (isScene);
         if (container != shownContainer)
         {
             shownContainer = container;
             info->setTarget (container);
-            routing->setTarget (container);
-            scripting->setTarget (container);
-            midi->setTarget (container);
+            routing->setTarget (isScene ? juce::String() : container);
+            scripting->setTarget (isScene ? juce::String() : container);
+            midi->setTarget (isScene ? juce::String() : container);
         }
     }
 
     void PropertiesPanel::changeListenerCallback (juce::ChangeBroadcaster*)
     {
         selectionChanged();
+        if (auto* s = dynamic_cast<SceneTitlebar*> (titlebar.get()))
+            s->refresh();
+        if (auto* pt = dynamic_cast<ProjectTitlebar*> (titlebar.get()))
+            pt->refresh();
         info->refresh();
         routing->refresh();
         scripting->refresh();
@@ -726,7 +1013,10 @@ namespace integra
     void PropertiesPanel::resized()
     {
         auto area = getLocalBounds();
-        title.setBounds (area.removeFromTop (26).reduced (8, 2));
+        auto top = area.removeFromTop (26);
+        if (titlebar != nullptr)
+            titlebar->setBounds (top.removeFromRight (juce::jmin (720, top.getWidth() * 2 / 3)));
+        title.setBounds (top.reduced (8, 2));
         tabs.setBounds (area);
     }
 }

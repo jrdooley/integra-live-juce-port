@@ -1,18 +1,22 @@
 #pragma once
 
 #include "Widgets/IntegraWidgets.h"
+#include "ContainerControls.h"
+#include "KeybindingView.h"
 
 namespace integra
 {
     /**
-        Performance view (Flex: LiveView.as, LiveViewTrack.as, KeybindingView.as).
+        Performance view (Flex: LiveView.as, LiveViewTrack.as, LiveViewBlock.as, KeybindingView.as).
 
         Each track shows the live-view controls of the block under the playhead (nothing
-        when the playhead is outside every block, as in Flex).
-        Controls sit where they were placed and can be moved/resized by dragging their
-        title strip / corner; the layout is stored in the block's userData exactly where
-        the Flex GUI kept it. Scene buttons along the top select scenes; their key
-        bindings work anywhere in the window while this view is shown.
+        when the playhead is outside every block, as in Flex), with the track's active
+        button and VU meter in its header; the project's are at the top right. Controls can
+        be moved by their title strip and resized from any edge, snapping to the other
+        controls' edges; right-click the block area to add or remove a module's controls at
+        that point. Scene buttons along the top and the Scene Shortcuts keyboard at the
+        bottom select scenes; scene keys work anywhere in the window while this view is
+        shown. The view is rebuilt only when what it shows changes, and never during a drag.
     */
     class LiveView  : public juce::Component,
                       private juce::ChangeListener,
@@ -28,24 +32,50 @@ namespace integra
         bool keyPressed (const juce::KeyPress&) override;
         void visibilityChanged() override;
         void parentHierarchyChanged() override;
+        void mouseDown (const juce::MouseEvent&) override;
+        void mouseDrag (const juce::MouseEvent&) override;
+
+        class TrackPanel;
+        class LiveControl;
+
+        // for tests
+        int getNumRebuilds() const noexcept                 { return numRebuilds; }
+        TrackPanel* getPanel (const juce::String& trackPath) const;
+        KeybindingView& getKeybindingView() noexcept        { return keybindings; }
+        ActiveButton& getProjectActiveButton() noexcept     { return projectActive; }
+        bool isKeybindingViewCollapsed() const noexcept     { return keybindingsCollapsed; }
+        void setKeybindingViewCollapsed (bool);
+
+        static constexpr int keybindingHeaderHeight = 22;
 
     private:
-        class TrackPanel;
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
         void timerCallback() override;
         void rebuild();
+        void rebuildIfChanged();
+        juce::String describeContent() const;
         bool keyPressed (const juce::KeyPress&, juce::Component*) override;
         bool handleSceneKey (const juce::KeyPress&);
         void updateKeyTarget();
         juce::String blockToShow (const model::Track&) const;
+        juce::Rectangle<int> keybindingHeaderBounds() const;
 
         AppContext& context;
         juce::OwnedArray<juce::TextButton> sceneButtons;
+        ActiveButton projectActive { context };
+        ContainerMeter projectMeter { context };
         juce::Viewport viewport;
         juce::Component content;
         juce::OwnedArray<TrackPanel> panels;
+        KeybindingView keybindings { context };
+        bool keybindingsCollapsed = false;
+        int keybindingsHeight = KeybindingView::defaultHeight, dragStartHeight = 0;
+        juce::Rectangle<int> keybindingHeader;
+        bool resizingKeybindings = false;
         int playPosition = -1;
-        juce::String shownSignature;
+        juce::String shownContent;
+        bool rebuildPending = false;
+        int numRebuilds = 0;
         juce::Component::SafePointer<juce::Component> keyTarget;   // top-level component we listen to
     };
 }
