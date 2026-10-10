@@ -31,7 +31,18 @@ namespace integra
         void showView (const juce::String& name);
         void openBlock (const juce::String& blockPath);
 
+        /** Opens a project (.integra / .ixd), or installs modules (.module / .bundle), as
+            the Flex GUI did for files it was asked to open (doAutoloadIfNecessary). */
         void openFile (const juce::File&);
+        /** Loads a project behind a "Loading..." message (no unsaved-changes check). */
+        void loadProject (const juce::File&);
+        /** Installs .module and .bundle files and reports what was installed. */
+        void installFiles (const juce::Array<juce::File>&);
+        /** Runs work after showing a progress message over the window (Flex: displayProgressPopup). */
+        void runWithProgressMessage (const juce::String& message, std::function<void()> work);
+        bool isShowingProgressMessage() const noexcept      { return progress != nullptr && progress->isVisible(); }
+        /** Where file dialogs start: the current project's folder, else the last one used. */
+        juce::File getDialogFolder() const;
         /** Asks to save unsaved changes, then calls proceed (unless cancelled). */
         void requestQuit (std::function<void()> proceed);
 
@@ -85,6 +96,9 @@ namespace integra
         std::unique_ptr<juce::StretchableLayoutResizerBar> arrangeDivider;
         juce::TooltipWindow tooltips { this, 600 };
         std::unique_ptr<juce::FileChooser> chooser;
+        std::unique_ptr<juce::Component> progress;
+        void rememberFolder (const juce::File&);
+        void projectLoaded (const juce::Result&);
         juce::String currentView = "arrange";
         juce::String appliedScheme;
 

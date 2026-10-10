@@ -116,7 +116,7 @@ namespace integra
                 if (r.failed())
                     juce::Logger::writeToLog (r.getErrorMessage());
             }
-            else if (toOpen.existsAsFile())
+            else if (toOpen.existsAsFile() && ! toOpen.hasFileExtension ("module;bundle"))
             {
                 auto r = context.controller.openProject (toOpen);
                 if (r.failed())
@@ -156,6 +156,15 @@ namespace integra
             }
 
             mainWindow = std::make_unique<MainWindow> (context);
+
+            // a module or bundle given on the command line is installed (doAutoloadIfNecessary)
+            if (toOpen.existsAsFile() && toOpen.hasFileExtension ("module;bundle"))
+                juce::MessageManager::callAsync ([this, toOpen]
+                {
+                    if (mainWindow != nullptr)
+                        if (auto* main = mainWindow->getMainComponent())
+                            main->installFiles ({ toOpen });
+                });
 
             if (args.contains ("--gui-test"))
             {

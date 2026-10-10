@@ -258,6 +258,45 @@ namespace integra
         return juce::Result::ok();
     }
 
+    juce::String ProjectController::projectNameFromFile (const juce::File& file)
+    {
+        auto name = file.getFileNameWithoutExtension()
+                        .retainCharacters ("0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        while (name.isNotEmpty() && juce::CharacterFunctions::isDigit (name[0]))
+            name = name.substring (1);
+        return name.isEmpty() ? juce::String (projectDefaultName) : name;
+    }
+
+    juce::Result ProjectController::saveProjectAs (const juce::File& file)
+    {
+        if (! model.get().valid)
+            return juce::Result::fail ("No project to save");
+
+        const auto target = file.withFileExtension ("integra");
+        const auto name = projectNameFromFile (target);
+        const auto oldName = model.get().path;
+        if (name != oldName)
+        {
+            // keep the GUI's selection, which is held as paths
+            auto remap = [&] (juce::String path)
+            {
+                return path == oldName ? name : path.startsWith (oldName + ".") ? name + path.substring (oldName.length()) : path;
+            };
+            const auto track = remap (model.selectedTrack), block = remap (model.selectedBlock),
+                       module = remap (model.selectedModule), connection = remap (model.selectedConnection);
+
+            auto renamed = rename (oldName, name);
+            if (renamed.failed())
+                return renamed;
+
+            model.selectedTrack = track;
+            model.selectedBlock = block;
+            model.selectedModule = module;
+            model.selectedConnection = connection;
+        }
+        return saveProject (target);
+    }
+
     //==============================================================================
     void ProjectController::setValue (juce::String endpointPath, const juce::var& value, bool undoable)
     {
@@ -1014,6 +1053,62 @@ namespace integra
         session.refreshCatalogue();
         model.rebuild();
         return juce::Result::ok();
+    }
+
+    juce::Result ProjectController::installModules (const juce::Array<juce::File>& files, juce::StringArray& installed)
+    {
+        juce::StringArray errors;
+        auto install = [&] (const juce::File& moduleFile, const juce::String& title)
+        {
+            auto r = installModule (moduleFile);
+            if (r.wasOk())
+                installed.add (title);
+            else
+                errors.add (r.getErrorMessage());
+        };
+
+        for (auto& file : files)
+        {
+            if (file.hasFileExtension ("module"))
+            {
+                install (file, file.getFileNameWithoutExtension());
+            }
+            else if (file.hasFileExtension ("bundle"))
+            {
+                // InstallModules.unpackBundleFile: every .module in the zip
+                juce::ZipFile zip (file);
+                if (zip.getNumEntries() == 0)
+                {
+                    errors.add (file.getFileName() + " is not a module bundle");
+                    continue;
+                }
+                auto folder = juce::File::createTempFile ("bundle");
+                folder.createDirectory();
+                for (int i = 0; i < zip.getNumEntries(); ++i)
+                {
+                    auto* entry = zip.getEntry (i);
+                    if (entry == nullptr || ! entry->filename.endsWithIgnoreCase (".module"))
+                        continue;
+                    const auto entryName = entry->filename.fromLastOccurrenceOf ("/", false, false);
+                    auto target = folder.getChildFile (entryName);
+                    std::unique_ptr<juce::InputStream> in (zip.createStreamForEntry (i));
+                    if (in == nullptr)
+                        continue;
+                    {
+                        juce::FileOutputStream out (target);
+                        out.writeFromInputStream (*in, -1);
+                    }
+                    install (target, entryName.upToLastOccurrenceOf (".", false, false));
+                }
+                folder.deleteRecursively();
+            }
+            else
+            {
+                errors.add (file.getFileName() + " is not a module or module bundle");
+            }
+        }
+
+        return errors.isEmpty() ? juce::Result::ok() : juce::Result::fail (errors.joinIntoString ("\n"));
     }
 
     juce::Result ProjectController::installEmbeddedModule (const GUID& guid)

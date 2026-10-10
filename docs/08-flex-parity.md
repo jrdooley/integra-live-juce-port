@@ -42,6 +42,7 @@ Flex paths are relative to `GUI/src/components/`.
 | Track height and order | `ViewHolder.as`, `ViewTree.as`, `SetTrackHeight`, `SetTrackOrder` | Drag a track header's bottom edge (grip in the corner) to resize it, drag the header to move the track; one undo step each. |
 | Multi-selection | `ArrangeView.as`, `ModuleGraph.as`, `Utilities.as` (Cmd on macOS, Ctrl elsewhere) | Ctrl/Cmd-click adds or removes blocks and modules; dragging one moves them all (blocks keep their time and track offsets, and push other blocks aside); Delete removes them all; a plain click on one of a group selects just it. Rubber-band selection on empty space in the module graph (Ctrl/Cmd toggles). |
 | Envelope editing | `BlockView.as`, `EnvelopeView.as` | Clicking within 8 px of an envelope selects it; clicking the selected envelope adds a point there and drags it; points are hit 4 px either side; double-click a point to delete it (not the first); envelope lock button (blocks with several envelopes, Shift inverts); "seconds, value" readout while dragging. |
+| Files | `IntegraLive.mxml` (saveAs, doLoad, onSelectFileToSave, doAutoloadIfNecessary, displayProgressPopup), `InstallModules.as` | Save As renames the project after the file (illegal characters and leading digits dropped) and always writes `.integra`; Open starts in the project's folder (else the last one used) and accepts bare `.ixd` files; opening a `.module` or `.bundle` file (command line, Finder / Explorer) installs it; Install takes several `.module` and `.bundle` files (a bundle is a zip of modules); "Loading: name..." / "Starting new Project..." messages while a project loads. |
 | MIDI indicator | `MidiInputIndicator.as` | Lights for every incoming message, including repeats of the same message. *(No automated test.)* |
 
 ## Arrange view and timeline
@@ -93,9 +94,6 @@ Flex paths are relative to `GUI/src/components/`.
   Ctrl+0).
 * Shortcuts that differ: plain ←/→ for scenes (Ctrl+←/→ in the port), Enter for
   return-to-start (Home in the port), Ctrl+3 is Module view instead of Info view.
-* Files: Save As doesn't rename the project node; the Open dialog doesn't start in the
-  current folder; `.ixd` isn't accepted; opening `.module`/`.bundle` files doesn't install
-  them; Install accepts `.module` only (no `.bundle`); no "Loading…" indicator.
 * Preferences: Reset to Defaults; MIDI device lists don't refresh; panel sizes, last
   folders and font size aren't persisted.
 * About box (licence/acknowledgements), update check. The crash reporter is mostly

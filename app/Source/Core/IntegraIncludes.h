@@ -47,7 +47,8 @@ namespace integra
         return parts.joinIntoString (".");
     }
 
-    inline juce::String parentPath (const juce::String& path)  { return path.upToLastOccurrenceOf (".", false, false); }
+    /** "A.B.C" -> "A.B"; a top-level path ("A") has no parent: "". */
+    inline juce::String parentPath (const juce::String& path)  { return path.containsChar ('.') ? path.upToLastOccurrenceOf (".", false, false) : juce::String(); }
     inline juce::String lastElement (const juce::String& path) { return path.fromLastOccurrenceOf (".", false, false); }
 
     /** CValue -> juce::var (int / double / String). Null CValue gives a void var. */

@@ -244,6 +244,15 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
   Track, Add Scene), Transport (Space play/pause, Home, Ctrl+←/→ scenes), View
   (Ctrl+1/2/3 for Arrange/Live/Module, Settings), Help (Open Demo Project,
   About). Unsaved-changes prompts on New/Open/Quit.
+* **Files** (Flex `IntegraLive.mxml`): Open starts in the current project's
+  folder (else the last folder used) and accepts `.integra` projects and bare
+  `.ixd` files; Save As names the project after the file (the name loses
+  characters Integra doesn't allow and leading digits) and always writes
+  `.integra`; *Install Third-Party Module* takes several `.module` files and
+  `.bundle` files (zips of modules); `.module` / `.bundle` files given on the
+  command line or opened from the desktop are installed rather than opened. A
+  "Loading: name..." message covers the window while a project loads (also
+  "Starting new Project..." and for the demo project).
 * **Settings**: JUCE's audio device selector (ALSA/JACK on Linux, CoreAudio,
   WASAPI/ASIO on Windows) — the device the libpd engine runs on; MIDI
   input/output devices through libIntegra's `MidiSettings` module (PortMidi);
@@ -263,7 +272,7 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (137 checks, all
+keyboard events and checks the resulting project state (139 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,

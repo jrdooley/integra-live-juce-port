@@ -109,7 +109,8 @@ namespace integra
 
     //==============================================================================
     RenameNodeAction::RenameNodeAction (IntegraSession& s, const juce::String& path, const juce::String& n)
-        : IntegraAction (s), parent (parentPath (path)), oldName (path.contains (".") ? lastElement (path) : path), newName (n)
+        : IntegraAction (s), parent (path.contains (".") ? parentPath (path) : juce::String()),     // the project is top level
+          oldName (path.contains (".") ? lastElement (path) : path), newName (n)
     {
     }
 
@@ -125,7 +126,8 @@ namespace integra
 
     //==============================================================================
     MoveNodeAction::MoveNodeAction (IntegraSession& s, const juce::String& path, const juce::String& p)
-        : IntegraAction (s), name (path.contains (".") ? lastElement (path) : path), oldParent (parentPath (path)), newParent (p)
+        : IntegraAction (s), name (path.contains (".") ? lastElement (path) : path),
+          oldParent (path.contains (".") ? parentPath (path) : juce::String()), newParent (p)
     {
     }
 

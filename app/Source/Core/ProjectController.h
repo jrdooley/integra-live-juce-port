@@ -35,6 +35,12 @@ namespace integra
         juce::Result newProject();
         juce::Result openProject (const juce::File&);
         juce::Result saveProject (const juce::File&);
+        /** Save As: the project is renamed after the file first, as the Flex GUI did
+            (onSelectFileToSave). Files always get the .integra extension. */
+        juce::Result saveProjectAs (const juce::File&);
+        /** IntegraLive.getProjectNameFromFilename: the file name without extension, illegal
+            characters and leading digits ("Untitled" if nothing is left). */
+        static juce::String projectNameFromFile (const juce::File&);
 
         /** A new project with every block from the block library imported, one per
             track - a quick tour of the shipped demo blocks. */
@@ -97,6 +103,9 @@ namespace integra
         UpgradeResult upgradeAll();
         /** Installs a 3rd party .module file (IModuleManager::install_module). */
         juce::Result installModule (const juce::File& moduleFile);
+        /** Installs .module files and .bundle files (zips of .module files, as
+            InstallModules.unpackBundleFile). `installed` gets the names of the modules installed. */
+        juce::Result installModules (const juce::Array<juce::File>& files, juce::StringArray& installed);
         /** Copies a module embedded in the project to the 3rd party modules directory. */
         juce::Result installEmbeddedModule (const GUID&);
         /** Uninstalls a 3rd party module. Instances in the project are deleted when

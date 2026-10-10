@@ -1340,6 +1340,16 @@ namespace integra
             saveShot (main, "envelope-editing.png");
         }
 
+        // --- "Loading..." message ------------------------------------------------------
+        {
+            bool ran = false;
+            main.runWithProgressMessage ("Loading: test...", [&] { ran = true; });
+            const bool shownFirst = main.isShowingProgressMessage() && ! ran;
+            pump (300);
+            t.check (shownFirst && ran && ! main.isShowingProgressMessage(), "a progress message shows while a project loads");
+            t.check (main.getDialogFolder().isDirectory(), "file dialogs start in an existing folder");
+        }
+
         main.showView ("arrange");
         context.controller.newProject();
         pump();

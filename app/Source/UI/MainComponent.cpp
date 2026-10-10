@@ -73,6 +73,9 @@ namespace integra
 
         juce::Component* comps[] = { &arrange, arrangeDivider.get(), &properties };
         arrangeLayout.layOutComponents (comps, 3, area.getX(), area.getY(), area.getWidth(), area.getHeight(), true, true);
+
+        if (progress != nullptr)
+            progress->setBounds (getLocalBounds());
     }
 
     void MainComponent::showView (const juce::String& name)
@@ -212,9 +215,12 @@ namespace integra
 
     void MainComponent::saveAs (std::function<void (bool)> done)
     {
+        // IntegraLive.saveAs: the current file (an .ixd becomes .integra), else the project's name
         auto start = context.controller.getProjectFile();
         if (start == juce::File())
-            start = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("Untitled.integra");
+            start = getDialogFolder().getChildFile (context.model.get().path + ".integra");
+        else
+            start = start.withFileExtension ("integra");
 
         chooser = std::make_unique<juce::FileChooser> ("Save project", start, "*.integra");
         chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
@@ -227,8 +233,13 @@ namespace integra
                 return;
             }
 
-            auto r = context.controller.saveProject (file);
+            // the project takes the file's name (onSelectFileToSave)
+            auto r = context.controller.saveProjectAs (file);
             showError ("Save", r);
+            rememberFolder (file);
+            if (currentView == "module")
+                moduleView.setBlock (context.model.selectedBlock);
+            properties.selectionChanged();
             updateTitle();
             if (done) done (r.wasOk());
         });
@@ -236,16 +247,111 @@ namespace integra
 
     void MainComponent::openFile (const juce::File& file)
     {
-        withUnsavedChangesCheck ([this, file]
+        if (file.hasFileExtension ("module;bundle"))
         {
-            auto r = context.controller.openProject (file);
-            showError ("Open", r);
-            showView (context.model.get().userData.viewMode == "live" ? "live" : "arrange");
-            properties.selectionChanged();
-            updateTitle();
-            if (r.wasOk())
-                projectOpened();
+            installFiles ({ file });
+            return;
+        }
+        withUnsavedChangesCheck ([this, file] { loadProject (file); });
+    }
+
+    void MainComponent::loadProject (const juce::File& file)
+    {
+        rememberFolder (file);
+        runWithProgressMessage ("Loading: " + file.getFileName() + "...", [this, file]
+        {
+            projectLoaded (context.controller.openProject (file));
         });
+    }
+
+    void MainComponent::projectLoaded (const juce::Result& r)
+    {
+        showError ("Open", r);
+        showView (context.model.get().userData.viewMode == "live" ? "live" : "arrange");
+        properties.selectionChanged();
+        updateTitle();
+        if (r.wasOk())
+            projectOpened();
+    }
+
+    void MainComponent::installFiles (const juce::Array<juce::File>& files)
+    {
+        // InstallModules: .module files, and the modules inside .bundle files
+        juce::StringArray installed;
+        auto r = context.controller.installModules (files, installed);
+        modulesChanged();
+        if (! installed.isEmpty())
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Install modules",
+                                                    "Installed and available in the module library:\n" + installed.joinIntoString ("\n")
+                                                        + (r.failed() ? "\n\nNot installed:\n" + r.getErrorMessage() : juce::String()));
+        else
+            showError ("Install modules", r);
+        if (! installed.isEmpty())
+            ModuleManager::checkForUpgrades (context, [this] { modulesChanged(); });
+    }
+
+    namespace
+    {
+        /** "Loading: name..." over the window while something blocks (Flex: ProgressPopup). */
+        class ProgressMessage  : public juce::Component
+        {
+        public:
+            explicit ProgressMessage (const juce::String& m) : message (m)  { setInterceptsMouseClicks (true, true); }
+
+            void paint (juce::Graphics& g) override
+            {
+                auto& t = Theme::get();
+                g.fillAll (juce::Colours::black.withAlpha (0.25f));
+                auto box = getLocalBounds().withSizeKeepingCentre (juce::jmin (420, getWidth() - 40), 70).toFloat();
+                g.setColour (t.panel);
+                g.fillRoundedRectangle (box, 8.0f);
+                g.setColour (t.outline);
+                g.drawRoundedRectangle (box, 8.0f, 1.0f);
+                g.setColour (t.text);
+                g.setFont (juce::FontOptions (15.0f));
+                g.drawFittedText (message, box.reduced (16.0f).toNearestInt(), juce::Justification::centred, 2);
+            }
+
+            juce::String message;
+        };
+    }
+
+    void MainComponent::runWithProgressMessage (const juce::String& message, std::function<void()> work)
+    {
+        // show the message first: loading blocks the message thread
+        progress = std::make_unique<ProgressMessage> (message);
+        addAndMakeVisible (*progress);
+        progress->setBounds (getLocalBounds());
+        progress->repaint();
+        juce::Timer::callAfterDelay (40, [safe = juce::Component::SafePointer<MainComponent> (this), work]
+        {
+            if (safe == nullptr)
+                return;
+            work();
+            safe->progress.reset();
+        });
+    }
+
+    juce::File MainComponent::getDialogFolder() const
+    {
+        // IntegraLive.doLoad: start where the current project is
+        auto file = context.controller.getProjectFile();
+        if (file.existsAsFile())
+            return file.getParentDirectory();
+        if (auto* settings = context.properties.getUserSettings())
+        {
+            juce::File last (settings->getValue ("lastProjectFolder"));
+            if (last.isDirectory())
+                return last;
+        }
+        auto documents = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+        return documents.isDirectory() ? documents : juce::File::getSpecialLocation (juce::File::userHomeDirectory);
+    }
+
+    void MainComponent::rememberFolder (const juce::File& file)
+    {
+        if (auto* settings = context.properties.getUserSettings())
+            settings->setValue ("lastProjectFolder", file.getParentDirectory().getFullPathName());
     }
 
     void MainComponent::requestQuit (std::function<void()> proceed)
@@ -312,28 +418,25 @@ namespace integra
             case cmdNew:
                 withUnsavedChangesCheck ([this]
                 {
-                    showError ("New project", context.controller.newProject());
-                    showView ("arrange");
-                    properties.selectionChanged();
-                    updateTitle();
+                    runWithProgressMessage ("Starting new Project...", [this]
+                    {
+                        showError ("New project", context.controller.newProject());
+                        showView ("arrange");
+                        properties.selectionChanged();
+                        updateTitle();
+                    });
                 });
                 return true;
 
             case cmdOpen:
                 withUnsavedChangesCheck ([this]
                 {
-                    chooser = std::make_unique<juce::FileChooser> ("Open project", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory), "*.integra");
+                    // IntegraLive.doLoad: projects (.integra) and bare .ixd files, from the project's folder
+                    chooser = std::make_unique<juce::FileChooser> ("Open project", getDialogFolder(), "*.integra;*.ixd");
                     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
                     {
-                        if (fc.getResult() == juce::File())
-                            return;
-                        auto r = context.controller.openProject (fc.getResult());
-                        showError ("Open", r);
-                        showView (context.model.get().userData.viewMode == "live" ? "live" : "arrange");
-                        properties.selectionChanged();
-                        updateTitle();
-                        if (r.wasOk())
-                            projectOpened();
+                        if (fc.getResult() != juce::File())
+                            loadProject (fc.getResult());
                     });
                 });
                 return true;
@@ -410,22 +513,13 @@ namespace integra
                 return true;
 
             case cmdInstallModule:
-                chooser = std::make_unique<juce::FileChooser> ("Install module", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory), "*.module");
-                chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
+                // InstallModules: "Modules and Module Bundles", several at once
+                chooser = std::make_unique<juce::FileChooser> ("Install modules", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory), "*.module;*.bundle");
+                chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles
+                                        | juce::FileBrowserComponent::canSelectMultipleItems, [this] (const juce::FileChooser& fc)
                 {
-                    if (fc.getResult() == juce::File())
-                        return;
-
-                    auto r = context.controller.installModule (fc.getResult());
-                    modulesChanged();
-                    if (r.failed())
-                    {
-                        showError ("Install module", r);
-                        return;
-                    }
-                    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Install module",
-                                                            fc.getResult().getFileNameWithoutExtension() + " is installed and available in the module library.");
-                    ModuleManager::checkForUpgrades (context, [this] { modulesChanged(); });
+                    if (! fc.getResults().isEmpty())
+                        installFiles (fc.getResults());
                 });
                 return true;
 
@@ -436,10 +530,13 @@ namespace integra
             case cmdDemo:
                 withUnsavedChangesCheck ([this]
                 {
-                    showError ("Demo project", context.controller.newDemoProject());
-                    showView ("arrange");
-                    properties.selectionChanged();
-                    updateTitle();
+                    runWithProgressMessage ("Loading the demo project...", [this]
+                    {
+                        showError ("Demo project", context.controller.newDemoProject());
+                        showView ("arrange");
+                        properties.selectionChanged();
+                        updateTitle();
+                    });
                 });
                 return true;
 

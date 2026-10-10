@@ -368,6 +368,63 @@ namespace integra
             t.check (removed.wasOk() && catalogue.getVersions (origin).size() == 1, "uninstall the 3rd party version " + removed.getErrorMessage());
         }
 
+        // --- files: Save As names the project, .ixd files, module bundles ----------
+        {
+            t.check (ProjectController::projectNameFromFile (juce::File ("/tmp/9 My-Song!.integra")) == "MySong"
+                        && ProjectController::projectNameFromFile (juce::File ("/tmp/123.integra")) == "Untitled",
+                     "project names from file names drop illegal characters and leading digits");
+
+            controller.newProject();
+            auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("IntegraFileTest");
+            folder.deleteRecursively();
+            folder.createDirectory();
+            model.selectedTrack = p.tracks.at (0).path;
+            auto saved = controller.saveProjectAs (folder.getChildFile ("First Song.ixd"));
+            t.check (saved.wasOk() && p.path == "FirstSong" && folder.getChildFile ("First Song.integra").existsAsFile()
+                        && model.selectedTrack == "FirstSong." + lastElement (model.selectedTrack),
+                     "Save As renames the project after the file and saves as .integra (" + p.path + ") " + saved.getErrorMessage());
+
+            // a bare .ixd (the XML inside an .integra file) opens too
+            auto ixd = folder.getChildFile ("Bare.ixd");
+            {
+                juce::ZipFile zip (folder.getChildFile ("First Song.integra"));
+                if (auto* entry = zip.getEntry ("integra_data/nodes.ixd"))
+                {
+                    std::unique_ptr<juce::InputStream> in (zip.createStreamForEntry (*entry));
+                    juce::FileOutputStream out (ixd);
+                    out.writeFromInputStream (*in, -1);
+                }
+            }
+            auto opened = controller.openProject (ixd);
+            // (libIntegra names a project loaded from a bare .ixd after the file)
+            t.check (opened.wasOk() && p.valid && ! p.tracks.empty(), "an .ixd file opens as a project " + opened.getErrorMessage());
+
+            // a .bundle is a zip of .module files
+            auto& catalogue = session.getCatalogue();
+            const auto origin = catalogue.findByName ("TapDelay")->originGuid;
+            auto module = makeAlternativeModuleVersion (session.getLocations().systemModules.getChildFile ("TapDelay.module"), "frequency",
+                                                        folder.getChildFile ("TapDelayBundled.module"));
+            auto bundle = folder.getChildFile ("Delays.bundle");
+            {
+                juce::ZipFile::Builder builder;
+                builder.addFile (module, 9, "TapDelayBundled.module");
+                juce::FileOutputStream out (bundle);
+                builder.writeToStream (out, nullptr);
+            }
+            juce::StringArray installed;
+            auto r = controller.installModules ({ bundle }, installed);
+            const auto versions = catalogue.getVersions (origin);
+            t.check (r.wasOk() && installed == juce::StringArray ("TapDelayBundled") && versions.size() == 2,
+                     "installing a .bundle installs the modules in it " + r.getErrorMessage());
+            for (auto* v : versions)
+                if (v->source == IInterfaceDefinition::MODULE_3RD_PARTY)
+                    controller.uninstallModule (v->guid, true);
+            juce::StringArray none;
+            t.check (controller.installModules ({ folder.getChildFile ("First Song.integra") }, none).failed() && none.isEmpty(),
+                     "other files aren't installed as modules");
+            folder.deleteRecursively();
+        }
+
         // --- open the shipped demo blocks into a project (Flex-saved files) --------
         controller.newProject();
         auto firstTrack = p.tracks.at (0).path;
