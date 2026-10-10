@@ -5,6 +5,7 @@
 
 #include "ModuleProperties.h"
 #include "ContainerControls.h"
+#include "InfoView.h"
 
 namespace integra
 {
@@ -19,6 +20,7 @@ namespace integra
         Double-click, Enter or drag onto the graph adds the module; Left/Right expand.
     */
     class ModuleLibrary  : public juce::Component,
+                           public InfoProvider,
                            private juce::ListBoxModel,
                            private juce::KeyListener
     {
@@ -30,6 +32,7 @@ namespace integra
         void paint (juce::Graphics&) override;
         void resized() override;
         void mouseDown (const juce::MouseEvent&) override;
+        Info getInfoAt (juce::Point<int>) override;
 
         /** Called when a module is double-clicked (adds it to the current block). */
         std::function<void (const ModuleCatalogue::Entry&)> onModuleChosen;
@@ -95,6 +98,7 @@ namespace integra
     //==============================================================================
     /** The block's signal graph: modules and audio connections (Flex: ModuleGraph.as). */
     class ModuleGraph  : public juce::Component,
+                         public InfoProvider,
                          public juce::DragAndDropTarget,
                          private juce::ChangeListener
     {
@@ -120,9 +124,18 @@ namespace integra
         bool keyPressed (const juce::KeyPress&) override;
 
         bool isInterestedInDragSource (const SourceDetails&) override;
+        void itemDragEnter (const SourceDetails& d) override    { updateDropPreview (d); }
+        void itemDragMove (const SourceDetails& d) override     { updateDropPreview (d); }
+        void itemDragExit (const SourceDetails&) override;
         void itemDropped (const SourceDetails&) override;
 
+        /** Where a dragged module would go (half transparent) and the connection it would
+            replace (ModuleGraph: _elementBeingCreated, _linkBeingCreatedOver). */
+        std::optional<juce::Rectangle<float>> getDropPreview() const    { return dropPreview; }
+        const juce::String& getDropLink() const noexcept                { return dropLink; }
+
         void deleteSelection();
+        Info getInfoAt (juce::Point<int>) override;
 
         void selectModulePath (const juce::String& path)    { selectModule (path); }
 
@@ -203,6 +216,11 @@ namespace integra
         std::optional<juce::Rectangle<float>> rubberBand;
         bool collapseGroupOnUp = false;
         void updateRubberBand (juce::Rectangle<float>, bool toggle);
+        void updateDropPreview (const SourceDetails&);
+        static std::optional<GUID> draggedModule (const SourceDetails&);
+        static juce::Point<float> dropGridPosition (juce::Point<int> localPosition);
+        std::optional<juce::Rectangle<float>> dropPreview;
+        juce::String dropLink;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ModuleGraph)
     };
@@ -228,10 +246,16 @@ namespace integra
         ModuleLibrary& getLibrary() noexcept                { return library; }
         ActiveButton& getBlockActiveButton() noexcept       { return blockActive; }
 
+        /** Room for the Info view right of the module properties (0 = none). */
+        void setInfoWidth (int w)                           { infoWidth = w; resized(); }
+        juce::Rectangle<int> getInfoArea() const noexcept   { return infoArea; }
+
     private:
         AppContext& context;
         juce::TextButton backButton { "< Arrange" };
         juce::Label breadcrumb;
+        int infoWidth = 0;
+        juce::Rectangle<int> infoArea;
         ActiveButton blockActive { context };   // Flex: the module graph's title bar
         ContainerMeter blockMeter { context };
         ModuleLibrary library;

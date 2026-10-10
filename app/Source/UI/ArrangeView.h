@@ -9,6 +9,7 @@
 #include "Core/EndpointInfo.h"
 #include "BlockLibrary.h"
 #include "ContainerControls.h"
+#include "InfoView.h"
 
 namespace integra
 {
@@ -27,6 +28,7 @@ namespace integra
     //==============================================================================
     /** Time ruler, scene bar and playhead (Flex: Timeline.as, SceneBar.as). */
     class TimelineRuler  : public juce::Component,
+                           public InfoProvider,
                            private juce::Timer
     {
     public:
@@ -41,6 +43,7 @@ namespace integra
 
         int playPosition = 0;
         std::function<void (const juce::String& scenePath)> onSceneSelected;
+        Info getInfoAt (juce::Point<int>) override;
 
         /** Renames a scene in place (double-click it, or its menu). */
         void renameScene (const juce::String& scenePath);
@@ -81,12 +84,15 @@ namespace integra
     //==============================================================================
     /** Track headers and block lanes (Flex: ArrangeView.as, ArrangeViewTrack.as, BlockView.as, EnvelopeView.as). */
     class TrackLanes  : public juce::Component,
+                        public InfoProvider,
                         public juce::DragAndDropTarget,
                         public juce::FileDragAndDropTarget
     {
     public:
         TrackLanes (AppContext&, TimelineMapping&);
         ~TrackLanes() override;
+
+        Info getInfoAt (juce::Point<int>) override;
 
         /** Track active buttons and VU meters (Flex: ArrangeViewTrack's title bar). */
         void syncTrackControls();

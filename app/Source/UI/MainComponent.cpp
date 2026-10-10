@@ -13,6 +13,7 @@ namespace integra
         addAndMakeVisible (properties);
         addChildComponent (moduleView);
         addChildComponent (liveView);
+        addChildComponent (infoView);
 
         arrangeLayout.setItemLayout (0, 150, -1.0, -0.62);
         arrangeLayout.setItemLayout (1, 6, 6, 6);
@@ -27,6 +28,11 @@ namespace integra
         moduleView.onBack = [this] { showView ("arrange"); };
 
         commands.registerAllCommandsForTarget (this);
+
+        // the text size is remembered with the app's settings, as Flex's FontSize was
+        if (auto* settings = context.properties.getUserSettings())
+            if (settings->containsKey ("textSize"))
+                setTextSizeIndex (settings->getIntValue ("textSize", 2));
         commands.setFirstCommandTarget (this);
         addKeyListener (commands.getKeyMappings());
         setWantsKeyboardFocus (true);
@@ -74,8 +80,42 @@ namespace integra
         juce::Component* comps[] = { &arrange, arrangeDivider.get(), &properties };
         arrangeLayout.layOutComponents (comps, 3, area.getX(), area.getY(), area.getWidth(), area.getHeight(), true, true);
 
+        layoutInfoView();
+
         if (progress != nullptr)
             progress->setBounds (getLocalBounds());
+    }
+
+    void MainComponent::setInfoViewShown (bool shouldShow)
+    {
+        infoView.setShown (shouldShow);
+        resized();      // layoutInfoView trims the properties, so lay them out afresh first
+        commands.commandStatusChanged();
+    }
+
+    void MainComponent::layoutInfoView()
+    {
+        // Flex placed an Info view next to the properties (Arrange, Module View) and next
+        // to Scene Shortcuts (Live view); one view moves between those places here
+        const int width = infoView.isShown() ? InfoView::defaultWidth : 0;
+        moduleView.setInfoWidth (currentView == "module" ? width : 0);
+        liveView.setInfoWidth (currentView == "live" ? width : 0);
+
+        juce::Rectangle<int> area;
+        if (currentView == "module")
+            area = moduleView.getInfoArea() + moduleView.getPosition();
+        else if (currentView == "live")
+            area = liveView.getInfoArea() + liveView.getPosition();
+        else if (width > 0)
+        {
+            auto bounds = properties.getBounds();
+            area = bounds.removeFromRight (juce::jmin (width, bounds.getWidth() / 2));
+            properties.setBounds (bounds.withTrimmedRight (2));
+        }
+
+        infoView.setVisible (width > 0 && ! area.isEmpty());
+        infoView.setBounds (area);
+        infoView.toFront (false);
     }
 
     void MainComponent::showView (const juce::String& name)
@@ -97,6 +137,7 @@ namespace integra
         moduleView.setVisible (view == "module");
         liveView.setVisible (view == "live");
         ribbon.setCurrentView (view);
+        resized();      // the Info view moves to the new view
 
         if (view == "live")
             liveView.grabKeyboardFocus();
@@ -129,6 +170,8 @@ namespace integra
             appliedScheme = scheme;
             applyColourScheme (scheme == "dark", false);
         }
+        if ((p.userData.highContrast ? 1 : 0) != appliedContrast)
+            applyHighContrast (p.userData.highContrast, false);
 
         if (currentView == "module" && p.findBlock (moduleView.getBlock()) == nullptr)
             showView ("arrange");
@@ -154,6 +197,25 @@ namespace integra
             top->sendLookAndFeelChange();
             top->repaint();
         }
+    }
+
+    void MainComponent::applyHighContrast (bool on, bool storeInProject)
+    {
+        // SetContrast: stored in the project like the colour scheme
+        appliedContrast = on ? 1 : 0;
+        if (storeInProject)
+            context.controller.updateProjectUserData ([on] (ProjectUserData& d) { d.highContrast = on; });
+        Theme::setHighContrast (on);
+        applyColourScheme (Theme::isDarkScheme(), false);
+    }
+
+    void MainComponent::setTextSizeIndex (int index)
+    {
+        textSizeIndex = juce::jlimit (0, (int) std::size (textScales) - 1, index);
+        juce::Desktop::getInstance().setGlobalScaleFactor (textScales[textSizeIndex]);
+        if (auto* settings = context.properties.getUserSettings())
+            settings->setValue ("textSize", textSizeIndex);
+        commands.commandStatusChanged();
     }
 
     void MainComponent::updateTitle()
@@ -365,7 +427,8 @@ namespace integra
         ids.addArray ({ cmdNew, cmdOpen, cmdSave, cmdSaveAs, cmdImportBlock, cmdExportBlock,
                         cmdUndo, cmdRedo, cmdDelete, cmdAddTrack, cmdAddScene,
                         cmdPlayPause, cmdHome, cmdNextScene, cmdPrevScene,
-                        cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule, cmdModuleManager });
+                        cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule, cmdModuleManager,
+                        cmdInfoView, cmdInfoLock, cmdLighting, cmdHighContrast, cmdTextLarger, cmdTextSmaller, cmdTextReset, cmdHelp });
     }
 
     void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo& info)
@@ -392,14 +455,36 @@ namespace integra
             case cmdAddTrack:     info.setInfo ("Add Track", "", "Edit", 0);                info.addDefaultKeypress ('t', cmd); break;
             case cmdAddScene:     info.setInfo ("Add Scene At Playhead", "", "Edit", 0); break;
             case cmdPlayPause:    info.setInfo ("Play / Pause", "", "Transport", 0);        info.addDefaultKeypress (juce::KeyPress::spaceKey, 0); break;
-            case cmdHome:         info.setInfo ("Return To Start", "", "Transport", 0);     info.addDefaultKeypress (juce::KeyPress::homeKey, 0); break;
-            case cmdNextScene:    info.setInfo ("Next Scene", "", "Transport", 0);          info.addDefaultKeypress (juce::KeyPress::rightKey, cmd); break;
-            case cmdPrevScene:    info.setInfo ("Previous Scene", "", "Transport", 0);      info.addDefaultKeypress (juce::KeyPress::leftKey, cmd); break;
+            // IntegraLive.onStageKeyDown: Enter, Left and Right work without modifiers
+            case cmdHome:         info.setInfo ("Return To Start", "", "Transport", 0);     info.addDefaultKeypress (juce::KeyPress::returnKey, 0);
+                                  info.addDefaultKeypress (juce::KeyPress::homeKey, 0); break;
+            case cmdNextScene:    info.setInfo ("Next Scene", "", "Transport", 0);          info.addDefaultKeypress (juce::KeyPress::rightKey, 0);
+                                  info.addDefaultKeypress (juce::KeyPress::rightKey, cmd); break;
+            case cmdPrevScene:    info.setInfo ("Previous Scene", "", "Transport", 0);      info.addDefaultKeypress (juce::KeyPress::leftKey, 0);
+                                  info.addDefaultKeypress (juce::KeyPress::leftKey, cmd); break;
+            case cmdInfoView:     info.setInfo ("Info View", "", "View", 0);                info.addDefaultKeypress ('3', cmd);
+                                  info.setTicked (infoView.isShown()); break;
+            case cmdInfoLock:     info.setInfo ("Lock Info View", "", "View", 0);
+                                  info.addDefaultKeypress (juce::KeyPress::F2Key, 0);
+                                 #if JUCE_MAC
+                                  info.addDefaultKeypress ('3', juce::ModifierKeys::ctrlModifier);
+                                 #endif
+                                  info.setTicked (infoView.isLocked()); info.setActive (infoView.isShown()); break;
+            case cmdLighting:     info.setInfo ("Lighting", "", "View", 0);                 info.addDefaultKeypress ('l', cmd);
+                                  info.setTicked (Theme::isDarkScheme()); break;
+            case cmdHighContrast: info.setInfo ("High Contrast", "", "View", 0);            info.addDefaultKeypress ('h', cmd);
+                                  info.setTicked (Theme::isHighContrastScheme()); break;
+            case cmdTextLarger:   info.setInfo ("Larger", "", "View", 0);                   info.addDefaultKeypress ('=', cmd);
+                                  info.setActive (textSizeIndex + 1 < (int) std::size (textScales)); break;
+            case cmdTextSmaller:  info.setInfo ("Smaller", "", "View", 0);                  info.addDefaultKeypress ('-', cmd);
+                                  info.setActive (textSizeIndex > 0); break;
+            case cmdTextReset:    info.setInfo ("Reset", "", "View", 0);                    info.addDefaultKeypress ('0', cmd); break;
+            case cmdHelp:         info.setInfo ("Integra Live Website", "", "Help", 0); break;
             case cmdViewArrange:  info.setInfo ("Arrange View", "", "View", 0);             info.addDefaultKeypress ('1', cmd);
                                   info.setTicked (currentView == "arrange"); break;
             case cmdViewLive:     info.setInfo ("Live View", "", "View", 0);                info.addDefaultKeypress ('2', cmd);
                                   info.setTicked (currentView == "live"); break;
-            case cmdViewModule:   info.setInfo ("Module View (Selected Block)", "", "View", 0); info.addDefaultKeypress ('3', cmd);
+            case cmdViewModule:   info.setInfo ("Module View (Selected Block)", "", "View", 0);
                                   info.setTicked (currentView == "module");
                                   info.setActive (context.model.get().findBlock (context.model.selectedBlock) != nullptr); break;
             case cmdPreferences:  info.setInfo ("Settings...", "", "View", 0);              info.addDefaultKeypress (',', cmd); break;
@@ -504,6 +589,14 @@ namespace integra
             case cmdNextScene:  context.controller.nextScene(); return true;
             case cmdPrevScene:  context.controller.previousScene(); return true;
 
+            case cmdInfoView:     setInfoViewShown (! infoView.isShown()); return true;
+            case cmdInfoLock:     if (infoView.isShown()) infoView.setLocked (! infoView.isLocked()); commands.commandStatusChanged(); return true;
+            case cmdLighting:     applyColourScheme (! Theme::isDarkScheme(), true); commands.commandStatusChanged(); return true;
+            case cmdHighContrast: applyHighContrast (! Theme::isHighContrastScheme(), true); commands.commandStatusChanged(); return true;
+            case cmdTextLarger:   setTextSizeIndex (textSizeIndex + 1); return true;
+            case cmdTextSmaller:  setTextSizeIndex (textSizeIndex - 1); return true;
+            case cmdTextReset:    setTextSizeIndex (2); return true;
+            case cmdHelp:         juce::URL ("https://github.com/BirminghamConservatoire/IntegraLive").launchInDefaultBrowser(); return true;
             case cmdViewArrange: showView ("arrange"); return true;
             case cmdViewLive:    showView ("live"); return true;
             case cmdViewModule:  openBlock (context.model.selectedBlock); return true;
@@ -602,11 +695,26 @@ namespace integra
                 menu.addCommandItem (&commands, cmdViewLive);
                 menu.addCommandItem (&commands, cmdViewModule);
                 menu.addSeparator();
+                menu.addCommandItem (&commands, cmdInfoView);
+                menu.addCommandItem (&commands, cmdInfoLock);
+                menu.addSeparator();
                 menu.addCommandItem (&commands, cmdModuleManager);
+                menu.addSeparator();
+                menu.addCommandItem (&commands, cmdLighting);
+                menu.addCommandItem (&commands, cmdHighContrast);
+                {
+                    juce::PopupMenu textSize;
+                    textSize.addCommandItem (&commands, cmdTextLarger);
+                    textSize.addCommandItem (&commands, cmdTextSmaller);
+                    textSize.addCommandItem (&commands, cmdTextReset);
+                    menu.addSubMenu ("Text Size", textSize);
+                }
+                menu.addSeparator();
                 menu.addCommandItem (&commands, cmdPreferences);
                 break;
             case 4:
                 menu.addCommandItem (&commands, cmdDemo);
+                menu.addCommandItem (&commands, cmdHelp);
                 menu.addSeparator();
                 menu.addCommandItem (&commands, cmdAbout);
                 break;

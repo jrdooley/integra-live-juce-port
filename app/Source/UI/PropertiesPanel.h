@@ -3,6 +3,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "Core/AppContext.h"
 #include "Core/EndpointInfo.h"
+#include "InfoView.h"
 
 namespace integra
 {
@@ -17,6 +18,7 @@ namespace integra
         Info, Routing, Scripting and MIDI tabs, always for the innermost selected container.
     */
     class PropertiesPanel  : public juce::Component,
+                             public InfoProvider,
                              private juce::ChangeListener
     {
     public:
@@ -39,6 +41,7 @@ namespace integra
         void paint (juce::Graphics&) override;
         void resized() override;
         void mouseDoubleClick (const juce::MouseEvent&) override;
+        Info getInfoAt (juce::Point<int>) override;
 
         /** Renames the shown project / track / block / scene in place (double-click the
             title, as Flex's editable ViewHolder titles). */

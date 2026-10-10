@@ -1008,6 +1008,21 @@ namespace integra
         midi->refresh();
     }
 
+    Info PropertiesPanel::getInfoAt (juce::Point<int> p)
+    {
+        // ArrangeViewProperties.getInfoToDisplay: title bars, title, else the shown tab
+        if (titlebar != nullptr && titlebar->getBounds().contains (p))
+            return InfoTexts::forView (dynamic_cast<SceneTitlebar*> (titlebar.get()) != nullptr ? "ArrangeViewProperties/ScenePropertiesTitlebar"
+                                                                                               : "ArrangeViewProperties/ProjectPropertiesTitlebar");
+        if (title.getBounds().contains (p))
+            return InfoTexts::forView ("ArrangeViewProperties/Breadcrumbs");
+        const auto tab = tabs.getCurrentTabName();
+        if (tab == "Routing")    return InfoTexts::forView ("ArrangeViewProperties/RoutingView");
+        if (tab == "Scripting")  return InfoTexts::forView ("ArrangeViewProperties/ScriptingView");
+        if (tab == "MIDI")       return InfoTexts::forView ("ArrangeViewProperties/MidiView");
+        return InfoTexts::forView ("ArrangeViewProperties/ArrangeViewProperties");
+    }
+
     void PropertiesPanel::mouseDoubleClick (const juce::MouseEvent& e)
     {
         if (title.getBounds().contains (e.getPosition()))

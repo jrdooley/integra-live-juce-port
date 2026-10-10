@@ -384,10 +384,24 @@ namespace integra
             bar.removeFromLeft (6);
         }
 
+        // the bottom row: Scene Shortcuts, and the Info view at its right (Flex: _liveInfoContainer)
+        const int rowHeight = juce::jmin (area.getHeight() / 2, keybindingsCollapsed ? (infoWidth > 0 ? 180 : keybindingHeaderHeight)
+                                                                                       : keybindingHeaderHeight + keybindingsHeight);
+        auto row = area.removeFromBottom (juce::jmax (keybindingHeaderHeight, rowHeight));
+        infoArea = {};
+        if (infoWidth > 0)
+            infoArea = row.removeFromRight (juce::jmin (infoWidth, row.getWidth() / 2));
         keybindings.setVisible (! keybindingsCollapsed);
-        if (! keybindingsCollapsed)
-            keybindings.setBounds (area.removeFromBottom (juce::jmin (keybindingsHeight, area.getHeight() / 2)));
-        keybindingHeader = area.removeFromBottom (keybindingHeaderHeight);
+        if (keybindingsCollapsed)
+        {
+            keybindingHeader = row.removeFromBottom (keybindingHeaderHeight);
+            area = area.getUnion (row);     // the rest of the row stays with the tracks
+        }
+        else
+        {
+            keybindingHeader = row.removeFromTop (keybindingHeaderHeight);
+            keybindings.setBounds (row);
+        }
         viewport.setBounds (area);
     }
 }

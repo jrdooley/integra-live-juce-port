@@ -542,6 +542,33 @@ namespace integra
         return juce::String (dragPrefix) + toString (rows[(size_t) selection[0]].entry->guid);
     }
 
+    Info ModuleLibrary::getInfoAt (juce::Point<int> p)
+    {
+        // ModuleLibrary.getInfoToDisplay
+        if (clearSearch.isVisible() && clearSearch.getBounds().contains (p))
+            return InfoTexts::forView ("ModuleLibrary/ClearSearchButton");
+        if (search.getBounds().contains (p))
+            return InfoTexts::forView ("ModuleLibrary/SearchBox");
+        if (p.y >= tagCloud->getY() - 20)
+            return InfoTexts::forView (! selectedTags.isEmpty() && p.y < tagCloud->getY() && p.x > getWidth() - 24 ? "ModuleLibrary/ClearTagsButton" : "ModuleLibrary/Tags");
+
+        const auto inList = list.getLocalPoint (this, p);
+        const int row = list.getRowContainingPosition (inList.x, inList.y);
+        if (list.getLocalBounds().contains (inList) && row >= 0 && row < (int) rows.size())
+        {
+            auto& r = rows[(size_t) row];
+            if (r.kind == Row::Kind::sourceLabel)
+                return InfoTexts::forView (r.source == IInterfaceDefinition::MODULE_3RD_PARTY ? "ModuleLibrary/ThirdParty"
+                                           : r.source == IInterfaceDefinition::MODULE_EMBEDDED ? "ModuleLibrary/Embedded"
+                                           : r.source == IInterfaceDefinition::MODULE_IN_DEVELOPMENT ? "ModuleLibrary/InDevelopment"
+                                           : "ModuleLibrary/ShippedWithIntegra");
+            if (r.kind == Row::Kind::module && r.numVersions > 1 && inList.x >= list.getVisibleRowWidth() - 22)
+                return InfoTexts::forView ("ModuleLibrary/ExpandVersions");
+            return { r.entry->label, getInfoMarkdown (*r.entry, r.kind == Row::Kind::module), {} };
+        }
+        return InfoTexts::forView ("ModuleLibrary/ModuleLibrary");
+    }
+
     juce::String ModuleLibrary::getTooltipForRow (int row)
     {
         if (row < 0 || row >= (int) rows.size() || rows[(size_t) row].entry == nullptr)
@@ -769,6 +796,21 @@ namespace integra
             g.setColour (t.textDim);
             g.setFont (juce::FontOptions (15.0f));
             g.drawText ("Drag modules here from the library", getLocalBounds(), juce::Justification::centred);
+        }
+
+        // the module being dragged in, and the connection it would replace
+        if (dropPreview.has_value())
+        {
+            for (auto& l : links)
+                if (l.connectionPath == dropLink)
+                {
+                    g.setColour (t.linkSelected);
+                    g.strokePath (linkPath (l.start, l.end), juce::PathStrokeType (3.5f));
+                }
+            g.setColour (t.moduleFill.withAlpha (0.5f));
+            g.fillRoundedRectangle (*dropPreview, 5.0f);
+            g.setColour (t.accent.withAlpha (0.5f));
+            g.drawRoundedRectangle (*dropPreview, 5.0f, 1.5f);
         }
 
         // rubber band (ModuleGraph: fill alpha 0.1, border alpha 0.2)
@@ -1080,6 +1122,25 @@ namespace integra
         }
     }
 
+    Info ModuleGraph::getInfoAt (juce::Point<int> p)
+    {
+        // ModuleGraph.getInfoToDisplay: pins, links, the module's description, else the block
+        if (auto* pin = pinAt (p.toFloat()))
+            return InfoTexts::forView (pin->isInput ? "ModuleGraph/InputPin" : "ModuleGraph/OutputPin");
+        if (auto* module = moduleAt (p.toFloat()))
+        {
+            auto* block = context.model.get().findBlock (blockPath);
+            auto* m = block != nullptr ? block->findModule (module->name) : nullptr;
+            if (m != nullptr && m->entry != nullptr)
+                return { module->name + " (" + m->entry->label + ")", ModuleLibrary::getInfoMarkdown (*m->entry, true), {} };
+        }
+        if (linkAt (p.toFloat()) != nullptr)
+            return InfoTexts::forView ("ModuleGraph/Link");
+        if (blockPath.isNotEmpty())
+            return InfoTexts::forNode (context, blockPath, "ArrangeView/BlockView");
+        return {};
+    }
+
     void ModuleGraph::renameModule (const juce::String& path)
     {
         for (auto& m : modules)
@@ -1151,16 +1212,78 @@ namespace integra
         return blockPath.isNotEmpty() && details.description.toString().startsWith (ModuleLibrary::dragPrefix);
     }
 
-    void ModuleGraph::itemDropped (const SourceDetails& details)
+    std::optional<GUID> ModuleGraph::draggedModule (const SourceDetails& details)
     {
         auto guidText = details.description.toString().fromFirstOccurrenceOf (ModuleLibrary::dragPrefix, false, false);
         GUID guid;
         if (CGuidHelper::string_to_guid (toStd (guidText), guid) != CError::SUCCESS)
+            return std::nullopt;
+        return guid;
+    }
+
+    juce::Point<float> ModuleGraph::dropGridPosition (juce::Point<int> localPosition)
+    {
+        auto position = localPosition.toFloat() / gridSize;
+        return { juce::jmax (0.0f, std::round (position.x * 2.0f) / 2.0f), juce::jmax (0.0f, std::round (position.y * 2.0f) / 2.0f) };
+    }
+
+    void ModuleGraph::updateDropPreview (const SourceDetails& details)
+    {
+        auto guid = draggedModule (details);
+        auto* entry = guid.has_value() ? context.session.getCatalogue().findByGuid (*guid) : nullptr;
+        if (entry == nullptr)
             return;
 
-        auto position = details.localPosition.toFloat() / gridSize;
-        position = { juce::jmax (0.0f, std::round (position.x * 2.0f) / 2.0f), juce::jmax (0.0f, std::round (position.y * 2.0f) / 2.0f) };
-        auto module = context.controller.addModule (blockPath, guid, position);
+        const auto position = dropGridPosition (details.localPosition) * gridSize;
+        const auto preview = juce::Rectangle<float> (position.x, position.y, ProjectController::moduleWidth * gridSize,
+                                                     ProjectController::moduleHeight (entry) * gridSize);
+
+        // a connection running through the new module is replaced by links into and out of it
+        juce::String link;
+        float best = std::numeric_limits<float>::max();
+        if (entry->numAudioInputs > 0 || entry->numAudioOutputs > 0)
+            for (auto& l : links)
+            {
+                juce::Point<float> nearest;
+                linkPath (l.start, l.end).getNearestPoint (preview.getCentre(), nearest);
+                const float distance = nearest.getDistanceFrom (preview.getCentre());
+                if (preview.contains (nearest) && distance < best)
+                {
+                    best = distance;
+                    link = l.connectionPath;
+                }
+            }
+
+        if (dropPreview != preview || dropLink != link)
+        {
+            dropPreview = preview;
+            dropLink = link;
+            repaint();
+        }
+    }
+
+    void ModuleGraph::itemDragExit (const SourceDetails&)
+    {
+        dropPreview.reset();
+        dropLink = {};
+        repaint();
+    }
+
+    void ModuleGraph::itemDropped (const SourceDetails& details)
+    {
+        updateDropPreview (details);
+        const auto link = dropLink;
+        dropPreview.reset();
+        dropLink = {};
+        repaint();
+
+        auto guid = draggedModule (details);
+        if (! guid.has_value())
+            return;
+
+        const auto position = dropGridPosition (details.localPosition);
+        auto module = link.isNotEmpty() ? context.controller.spliceModule (blockPath, *guid, position, link)
+                                        : context.controller.addModule (blockPath, *guid, position);
         if (module.isNotEmpty())
             selectModule (module);
     }
@@ -1246,6 +1369,15 @@ namespace integra
 
         juce::Component* comps[] = { &graphViewport, divider.get(), &properties };
         verticalLayout.layOutComponents (comps, 3, area.getX(), area.getY(), area.getWidth(), area.getHeight(), true, true);
+
+        // the Info view sits right of the module properties (Flex: _moduleGraphInfoView)
+        infoArea = {};
+        if (infoWidth > 0)
+        {
+            auto bounds = properties.getBounds();
+            infoArea = bounds.removeFromRight (juce::jmin (infoWidth, bounds.getWidth() / 2));
+            properties.setBounds (bounds.withTrimmedRight (2));
+        }
         graph.refreshLayout();
     }
 }

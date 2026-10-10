@@ -123,7 +123,11 @@ automated interaction test.
   move it (half-unit snapping), drag from an output pin to an input pin (or
   back) to connect (links from a module to itself or that would create a
   feedback loop are refused, as `IntegraModel.canSetAudioLink`), click a
-  connection to select it, Delete removes the
+  connection to select it. Dragging a module in from the library shows it half
+  transparent where it would go; dropped onto a connection it is spliced in
+  (the connection's source feeds its first audio input, its first audio output
+  feeds the connection's target; one undo step), as Flex's
+  `ModuleGraph.onDragDrop`. Delete removes the
   selection, right-click a module to rename / export / delete. Double-click a
   module's name to rename it in place. Ctrl/Cmd-click or drag a rubber band on
   empty space to select several modules; dragging one moves them all, Delete
@@ -241,9 +245,29 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
   activity light, Settings.
 * **Menus & keys**: File (New, Open, Save, Save As, Import/Export Block,
   Install Third-Party Module), Edit (Undo/Redo with descriptions, Delete, Add
-  Track, Add Scene), Transport (Space play/pause, Home, Ctrl+←/→ scenes), View
-  (Ctrl+1/2/3 for Arrange/Live/Module, Settings), Help (Open Demo Project,
-  About). Unsaved-changes prompts on New/Open/Quit.
+  Track, Add Scene), Transport (Space play/pause, Enter or Home to return to
+  the start, ←/→ or Ctrl+←/→ for scenes, as Flex's `onStageKeyDown`), View
+  (Ctrl+1/2 for Arrange/Live, Module View, Info View Ctrl+3, Lock Info View F2
+  — Ctrl+3 on macOS —, Module Manager, Lighting Ctrl+L, High Contrast Ctrl+H,
+  Text Size Ctrl+= / Ctrl+- / Ctrl+0, Settings), Help (Integra Live Website,
+  Open Demo Project, About). Unsaved-changes prompts on New/Open/Quit. Ribbon
+  buttons don't take the keyboard focus, so these keys work anywhere outside
+  text fields.
+* **Info view** — `InfoView.{h,cpp}` (Flex: `views/InfoView/`): help for
+  whatever is under the mouse, refreshed 8 times a second. Components that
+  have help implement `InfoProvider::getInfoAt`; the texts are Flex's
+  `assets/viewInfo/*.md` (copied to `viewInfo/` next to the executable), with
+  `<!-- mac only -->` / `<!-- windows only -->` spans kept per platform, and
+  the project's own `info` for blocks, tracks, scenes and modules (module
+  controls show each attribute's description). F2 locks it (scroll, and Edit
+  for a node's info); it sits beside the properties, or beside Scene Shortcuts
+  in the Live view. Shown / hidden state, text size and the last project folder
+  are user settings.
+
+![Info view, locked on a block](images/info-view.png)
+* **High contrast and text size**: High Contrast doubles the distance of every
+  theme colour from the background (stored in the project, as Flex did); text
+  size scales the window in five steps (0.75 to 1.5).
 * **Files** (Flex `IntegraLive.mxml`): Open starts in the current project's
   folder (else the last folder used) and accepts `.integra` projects and bare
   `.ixd` files; Save As names the project after the file (the name loses
@@ -272,7 +296,7 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (139 checks, all
+keyboard events and checks the resulting project state (159 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,
@@ -301,7 +325,10 @@ dropping invalid names; resizing and moving tracks by dragging; Ctrl/Cmd-click
 multi-selection of blocks with a group drag and delete; rubber-band selection
 of modules with a group drag and delete; clicking an envelope line to select
 it and to add a point, double-clicking a point to delete it, and the envelope
-lock button.
+lock button; the Info view (texts loaded, block and ribbon help under the
+mouse, Ctrl+3, F2 lock, editing a block's info), Lighting, High Contrast and
+Text Size, plain arrow keys and Enter, and splicing a module into a
+connection (preview, wiring, one undo).
 
 Bugs it found and that are fixed:
 
@@ -319,7 +346,5 @@ Bugs it found and that are fixed:
 A full feature-by-feature comparison with the Flex GUI is in
 [08-flex-parity.md](08-flex-parity.md).
 
-* Multi-selection / area selection in the module graph, track collapsing.
-* Envelope lock.
-* Hover-driven *Info* view for modules/endpoints (tooltips show the
-  descriptions instead), crash reporter, update checker.
+* Track collapsing.
+* Crash reporter, update checker.

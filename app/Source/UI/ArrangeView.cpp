@@ -535,6 +535,21 @@ namespace integra
         context.controller.addScene (snapTicks ((int) mapping.xToTick ((float) e.x), rate), rate * 10);
     }
 
+    Info TimelineRuler::getInfoAt (juce::Point<int> p)
+    {
+        // SceneBar / Timeline: a scene's own info, else what the strip does
+        if (p.x < mapping.laneX)
+            return InfoTexts::forView ("ArrangeView/ArrangeView");
+        if (p.y < sceneBarHeight)
+        {
+            Zone zone;
+            if (auto* s = sceneAt (p.toFloat(), zone))
+                return InfoTexts::forNode (context, s->path);
+            return InfoTexts::forView ("Timeline/EditableSceneBar");
+        }
+        return InfoTexts::forView ("Timeline/PlayheadArea");
+    }
+
     void TimelineRuler::renameScene (const juce::String& path)
     {
         auto* s = context.model.get().findScene (path);
@@ -554,6 +569,35 @@ namespace integra
     TrackLanes::~TrackLanes()
     {
         context.watcher.removeAll (this);
+    }
+
+    Info TrackLanes::getInfoAt (juce::Point<int> p)
+    {
+        if (getCurveButtonBounds().contains (p.toFloat()))
+            return InfoTexts::forView ("Envelope/CurvatureModeButton");
+        if (getEnvelopeLockBounds().contains (p.toFloat()))
+            return InfoTexts::forView ("Envelope/LockButton");
+
+        if (p.x < mapping.laneX)
+        {
+            if (auto* t = trackAt (p.y))
+            {
+                if (getMeterBounds (t->path).expanded (2.0f).contains (p.toFloat()))
+                    return InfoTexts::forView ("VU/Track");
+                return InfoTexts::forNode (context, t->path, "ArrangeView/ArrangeViewTrack");
+            }
+            return InfoTexts::forView ("ArrangeView/ArrangeView");
+        }
+
+        const model::Track* track = nullptr;
+        if (auto* b = blockAt (p, &track))
+        {
+            for (auto& r : rows())
+                if (r.track == track && envelopeAt (*b, blockBounds (*b, r.bounds), p.toFloat(), false) != nullptr)
+                    return InfoTexts::forView (isCurveMode() && b->path == context.model.selectedBlock ? "Envelope/InCurvatureMode" : "Envelope/Envelope");
+            return InfoTexts::forNode (context, b->path, "ArrangeView/BlockView");
+        }
+        return InfoTexts::forView ("ArrangeView/ArrangeView");
     }
 
     void TrackLanes::syncTrackControls()

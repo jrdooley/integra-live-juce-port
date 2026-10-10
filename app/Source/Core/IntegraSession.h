@@ -23,6 +23,7 @@ namespace integra
             juce::File resources;           // libIntegra data: CollectionSchema.xsd, id2guid.csv
             juce::File blockLibrary;        // demo blocks
             juce::File userBlockLibrary;    // user-saved blocks (writable)
+            juce::File viewInfo;            // the Info view's help texts (Flex assets/viewInfo)
 
             /** Finds resources next to the executable / in the app bundle, falling back
                 to the source tree the app was built from. */

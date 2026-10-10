@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Widgets/IntegraWidgets.h"
+#include "InfoView.h"
 
 namespace integra
 {
@@ -10,6 +11,7 @@ namespace integra
         with toggles for "show in Live view", MIDI learn, and block envelope.
     */
     class ModuleProperties  : public juce::Component,
+                              public InfoProvider,
                               private juce::ChangeListener
     {
     public:
@@ -23,6 +25,7 @@ namespace integra
         void paint (juce::Graphics&) override;
         void resized() override;
         void mouseDoubleClick (const juce::MouseEvent&) override;
+        Info getInfoAt (juce::Point<int>) override;
 
         /** Renames the module in place (double-click the title, as ModuleProperties.title). */
         void renameModule();

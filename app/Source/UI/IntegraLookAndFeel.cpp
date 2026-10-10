@@ -78,9 +78,47 @@ namespace integra
         }
     }
 
+    namespace
+    {
+        bool highContrastOn = false;
+
+        /** MainViewContainer.updateColorSchemeAndContrast: every channel twice as far from
+            black (dark scheme) or from white (light scheme). */
+        Theme withHighContrast (Theme t)
+        {
+            constexpr float multiplier = 2.0f;
+            auto adjust = [&t] (juce::Colour& c)
+            {
+                auto channel = [&t] (juce::uint8 v)
+                {
+                    const float f = v / 255.0f;
+                    const float r = t.isDark ? f * multiplier : 1.0f - (1.0f - f) * multiplier;
+                    return (juce::uint8) juce::jlimit (0, 255, juce::roundToInt (r * 255.0f));
+                };
+                c = juce::Colour (channel (c.getRed()), channel (c.getGreen()), channel (c.getBlue()), c.getAlpha());
+            };
+            for (auto* c : { &t.background, &t.panel, &t.panelAlt, &t.header, &t.outline, &t.text, &t.textDim, &t.accent, &t.accentText,
+                             &t.selection, &t.timelineBackground, &t.gridLine, &t.playhead, &t.blockFill, &t.blockOutline,
+                             &t.moduleFill, &t.moduleHeader, &t.pin, &t.link, &t.linkSelected, &t.sceneFill, &t.envelope,
+                             &t.meterLow, &t.meterHigh, &t.controlBackground, &t.controlFill })
+                adjust (*c);
+            t.highContrast = true;
+            return t;
+        }
+
+        void rebuild (bool dark)
+        {
+            current() = dark ? makeDark() : makeLight();
+            if (highContrastOn)
+                current() = withHighContrast (current());
+        }
+    }
+
     const Theme& Theme::get()            { return current(); }
-    void Theme::setDark (bool dark)      { current() = dark ? makeDark() : makeLight(); }
+    void Theme::setDark (bool dark)      { rebuild (dark); }
     bool Theme::isDarkScheme()           { return current().isDark; }
+    void Theme::setHighContrast (bool on)   { highContrastOn = on; rebuild (current().isDark); }
+    bool Theme::isHighContrastScheme()   { return highContrastOn; }
 
     //==============================================================================
     IntegraLookAndFeel::IntegraLookAndFeel()

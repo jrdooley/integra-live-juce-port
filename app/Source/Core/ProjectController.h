@@ -144,6 +144,9 @@ namespace integra
 
         /** Creates a Connection between two absolute endpoint paths inside containerPath. */
         juce::String connect (juce::String containerPath, juce::String sourceEndpoint, juce::String targetEndpoint);
+        /** Adds a module where a connection was, wired into it: source -> module's first
+            audio input, its first audio output -> target (ModuleGraph.onDragDrop), one undo step. */
+        juce::String spliceModule (juce::String blockPath, const GUID& moduleGuid, juce::Point<float> gridPosition, juce::String connectionPath);
 
         static constexpr float moduleWidth = 7.0f;          // ModuleInstance._standardModuleWidth (grid units)
         static float moduleHeight (const ModuleCatalogue::Entry*);

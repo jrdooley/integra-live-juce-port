@@ -7,6 +7,7 @@
 #include "ModuleView.h"
 #include "LiveView.h"
 #include "PropertiesPanel.h"
+#include "InfoView.h"
 
 namespace integra
 {
@@ -62,6 +63,9 @@ namespace integra
         LiveView& getLiveView() noexcept            { return liveView; }
         RibbonBar& getRibbon() noexcept            { return ribbon; }
         PropertiesPanel& getProperties() noexcept   { return properties; }
+        InfoView& getInfoView() noexcept            { return infoView; }
+        /** View > Info View (Flex: Ctrl+3; the shown state is remembered). */
+        void setInfoViewShown (bool);
         const juce::String& getCurrentView() const noexcept { return currentView; }
         bool invokeCommand (int commandID)          { return commands.invokeDirectly (commandID, false); }
 
@@ -70,8 +74,15 @@ namespace integra
             cmdNew = 1, cmdOpen, cmdSave, cmdSaveAs, cmdImportBlock, cmdExportBlock,
             cmdUndo, cmdRedo, cmdDelete, cmdAddTrack, cmdAddScene,
             cmdPlayPause, cmdHome, cmdNextScene, cmdPrevScene,
-            cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule, cmdModuleManager
+            cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule, cmdModuleManager,
+            cmdInfoView, cmdInfoLock, cmdLighting, cmdHighContrast, cmdTextLarger, cmdTextSmaller, cmdTextReset, cmdHelp
         };
+
+        /** View > Text Size (Flex FontSize: 7 / 9 / 11 / 15 / 20 pt). The port scales the
+            whole window, as its controls are laid out in pixels. */
+        static constexpr float textScales[] = { 0.75f, 0.875f, 1.0f, 1.25f, 1.5f };
+        int getTextSizeIndex() const noexcept       { return textSizeIndex; }
+        void setTextSizeIndex (int);
 
     private:
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
@@ -92,6 +103,8 @@ namespace integra
         PropertiesPanel properties;
         ModuleView moduleView;
         LiveView liveView;
+        InfoView infoView { context };
+        void layoutInfoView();
         juce::StretchableLayoutManager arrangeLayout;
         std::unique_ptr<juce::StretchableLayoutResizerBar> arrangeDivider;
         juce::TooltipWindow tooltips { this, 600 };
@@ -101,6 +114,9 @@ namespace integra
         void projectLoaded (const juce::Result&);
         juce::String currentView = "arrange";
         juce::String appliedScheme;
+        int appliedContrast = -1;
+        int textSizeIndex = 2;
+        void applyHighContrast (bool on, bool storeInProject);
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
     };

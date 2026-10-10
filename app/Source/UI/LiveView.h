@@ -3,6 +3,7 @@
 #include "Widgets/IntegraWidgets.h"
 #include "ContainerControls.h"
 #include "KeybindingView.h"
+#include "InfoView.h"
 
 namespace integra
 {
@@ -19,6 +20,7 @@ namespace integra
         shown. The view is rebuilt only when what it shows changes, and never during a drag.
     */
     class LiveView  : public juce::Component,
+                      public InfoProvider,
                       private juce::ChangeListener,
                       private juce::KeyListener,
                       private juce::Timer
@@ -34,6 +36,7 @@ namespace integra
         void parentHierarchyChanged() override;
         void mouseDown (const juce::MouseEvent&) override;
         void mouseDrag (const juce::MouseEvent&) override;
+        Info getInfoAt (juce::Point<int>) override         { juce::ignoreUnused (getLocalBounds()); return InfoTexts::forView ("LiveView"); }
 
         class TrackPanel;
         class LiveControl;
@@ -47,6 +50,10 @@ namespace integra
         void setKeybindingViewCollapsed (bool);
 
         static constexpr int keybindingHeaderHeight = 22;
+
+        /** Room for the Info view right of Scene Shortcuts (0 = none). */
+        void setInfoWidth (int w)                           { infoWidth = w; resized(); }
+        juce::Rectangle<int> getInfoArea() const noexcept   { return infoArea; }
 
     private:
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
@@ -70,7 +77,8 @@ namespace integra
         KeybindingView keybindings { context };
         bool keybindingsCollapsed = false;
         int keybindingsHeight = KeybindingView::defaultHeight, dragStartHeight = 0;
-        juce::Rectangle<int> keybindingHeader;
+        juce::Rectangle<int> keybindingHeader, infoArea;
+        int infoWidth = 0;
         bool resizingKeybindings = false;
         int playPosition = -1;
         juce::String shownContent;

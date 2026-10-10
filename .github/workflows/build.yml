@@ -176,7 +176,7 @@ jobs:
           $app = "build/app/IntegraLive_artefacts/RelWithDebInfo"
           New-Item -ItemType Directory -Force -Path package/IntegraLive | Out-Null
           Copy-Item "$app/Integra Live.exe" package/IntegraLive/
-          Copy-Item -Recurse "$app/modules","$app/blocks","$app/resources" package/IntegraLive/
+          Copy-Item -Recurse "$app/modules","$app/blocks","$app/resources","$app/viewInfo" package/IntegraLive/
 
       - uses: actions/upload-artifact@v4
         with:

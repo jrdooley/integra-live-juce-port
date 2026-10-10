@@ -1340,6 +1340,145 @@ namespace integra
             saveShot (main, "envelope-editing.png");
         }
 
+        // --- Info view, View menu, Flex shortcuts, splice ---------------------------------
+        {
+            context.controller.newProject();
+            main.showView ("arrange");
+            pump();
+            auto& info = main.getInfoView();
+            t.check (InfoTexts::getNames().size() >= 80 && ! InfoTexts::forView ("ArrangeView/BlockView").isEmpty(),
+                     "the Flex info texts load (" + juce::String (InfoTexts::getNames().size()) + ")");
+
+            const auto block = p.tracks.at (0).blocks.at (0).path;
+            const auto blockPoint = juce::Point<int> ((int) mapping.tickToX ((p.tracks[0].blocks[0].start + p.tracks[0].blocks[0].end) / 2),
+                                                      juce::jlimit (40, 600, p.tracks[0].userData.arrangeViewHeight) / 2);
+            auto hovered = InfoView::infoFor (&lanes, lanes.localPointToGlobal (blockPoint));
+            t.check (hovered.editablePath == block && hovered.title.isNotEmpty(), "the Info view describes the block under the mouse (" + hovered.title + ")");
+            juce::StringArray ribbonTitles;
+            for (auto* button : main.getRibbon().getChildren())
+                if (dynamic_cast<juce::Button*> (button) != nullptr && button->isVisible())
+                    ribbonTitles.addIfNotAlreadyThere (InfoView::infoFor (button, button->localPointToGlobal (button->getLocalBounds().getCentre())).title);
+            ribbonTitles.removeEmptyStrings();
+            t.check (ribbonTitles.size() >= 4, "...and the ribbon bar's buttons (" + ribbonTitles.joinIntoString (", ") + ")");
+
+            const bool wasShown = info.isShown();
+            main.invokeCommand (MainComponent::cmdInfoView);
+            pump();
+            t.check (info.isShown() != wasShown && info.isVisible() != wasShown, "Ctrl+3 shows and hides the Info view");
+            main.invokeCommand (MainComponent::cmdInfoView);
+            pump();
+            t.check (info.isShown() == wasShown && (! wasShown || (info.getRight() == main.getWidth() && main.getProperties().getRight() == info.getX() - 2)),
+                     "...and back, beside the properties");
+
+            info.display (InfoTexts::forNode (context, block, "ArrangeView/BlockView"));
+            main.invokeCommand (MainComponent::cmdInfoLock);
+            t.check (info.isLocked(), "F2 locks the Info view");
+            info.startEditing();
+            if (auto* editor = info.getEditor())
+                editor->setText ("Verse block notes");
+            info.finishEditing (true);
+            pump();
+            t.check (context.session.getValue (block + ".info").toString() == "Verse block notes", "a locked node's info can be edited");
+            saveShot (main, "info-view.png");
+            main.invokeCommand (MainComponent::cmdInfoLock);
+            t.check (! info.isLocked(), "...and F2 unlocks it");
+
+            const bool dark = Theme::isDarkScheme();
+            main.invokeCommand (MainComponent::cmdLighting);
+            t.check (Theme::isDarkScheme() != dark, "View > Lighting switches the colour scheme");
+            main.invokeCommand (MainComponent::cmdLighting);
+            main.invokeCommand (MainComponent::cmdHighContrast);
+            t.check (Theme::isHighContrastScheme() && p.userData.highContrast, "View > High Contrast (stored in the project)");
+            main.invokeCommand (MainComponent::cmdHighContrast);
+            t.check (! Theme::isHighContrastScheme() && Theme::isDarkScheme() == dark, "...and both switch back");
+            main.invokeCommand (MainComponent::cmdTextReset);
+            main.invokeCommand (MainComponent::cmdTextLarger);
+            const int larger = main.getTextSizeIndex();
+            main.invokeCommand (MainComponent::cmdTextSmaller);
+            main.invokeCommand (MainComponent::cmdTextSmaller);
+            const int smaller = main.getTextSizeIndex();
+            main.invokeCommand (MainComponent::cmdTextReset);
+            pump();
+            t.check (larger == 3 && smaller == 1 && main.getTextSizeIndex() == 2
+                        && juce::approximatelyEqual (juce::Desktop::getInstance().getGlobalScaleFactor(), 1.0f),
+                     "View > Text Size larger / smaller / reset");
+
+            // plain arrow keys step through scenes, Enter returns to the start (Flex shortcuts)
+            context.controller.addScene (0, 200);
+            context.controller.addScene (400, 200);
+            pump();
+            context.controller.activateScene ({});
+            pump();
+            main.getRibbon().grabKeyboardFocus();
+            auto sceneName = [&] { return context.session.getValue (p.player.path + ".scene").toString(); };
+            if (auto* peer = main.getPeer())
+                peer->handleKeyPress (juce::KeyPress (juce::KeyPress::rightKey));
+            pump();
+            const auto afterRight = sceneName();
+            if (auto* peer = main.getPeer())
+                peer->handleKeyPress (juce::KeyPress (juce::KeyPress::rightKey));
+            pump();
+            const auto afterSecondRight = sceneName();
+            if (auto* peer = main.getPeer())
+                peer->handleKeyPress (juce::KeyPress (juce::KeyPress::leftKey));
+            pump();
+            t.check (p.scenes.size() == 2 && afterRight.isNotEmpty() && afterSecondRight != afterRight && sceneName() == afterRight,
+                     "the right / left arrow keys select the next / previous scene (" + afterRight + ", " + afterSecondRight + ")");
+            context.session.setValue (p.player.path + ".tick", 500);
+            pump();
+            if (auto* peer = main.getPeer())
+                peer->handleKeyPress (juce::KeyPress (juce::KeyPress::returnKey));
+            pump();
+            t.check (context.session.getValue (p.player.path + ".tick").toString().getIntValue() == 0 && sceneName().isEmpty(),
+                     "Enter returns to the start (tick " + context.session.getValue (p.player.path + ".tick").toString() + ")");
+
+            // dropping a module onto a connection splices it in (ModuleGraph.onDragDrop)
+            const auto audioIn = block + ".AudioIn1", audioOut = block + ".StereoAudioOut1";
+            const auto old = context.controller.connect (block, audioIn + ".out", audioOut + ".in1");
+            main.openBlock (block);
+            pump();
+            auto& g = main.getModuleView().getGraph();
+            g.refreshLayout();
+            auto from = g.getPinPosition (audioIn + ".out");
+            auto to = g.getPinPosition (audioOut + ".in1");
+            t.check (old.isNotEmpty() && from.has_value() && to.has_value(), "a connection to splice into");
+            if (from && to)
+            {
+                auto* delay = context.session.getCatalogue().findByName ("TapDelay");
+                const auto middle = (*from + *to) / 2.0f;
+                const auto at = (middle - juce::Point<float> (ProjectController::moduleWidth * ModuleGraph::gridSize / 2,
+                                                              ProjectController::moduleHeight (delay) * ModuleGraph::gridSize / 2)).toInt();
+                juce::DragAndDropTarget::SourceDetails d (juce::String (ModuleLibrary::dragPrefix) + toString (delay->guid), nullptr, at);
+                g.itemDragEnter (d);
+                g.itemDragMove (d);
+                t.check (g.getDropPreview().has_value() && g.getDropLink() == old, "dragging a module over a connection highlights it");
+                saveShot (main, "splice.png");
+                g.itemDropped (d);
+                pump();
+                const auto delayPath = block + ".TapDelay1";
+                bool intoDelay = false, outOfDelay = false, oldGone = true;
+                juce::StringArray wiring;
+                if (auto* b = p.findBlock (block))
+                    for (auto& c : b->connections)
+                    {
+                        wiring.add (lastElement (c.sourceNode()) + "." + c.sourceEndpoint() + ">" + lastElement (c.targetNode()) + "." + lastElement (c.targetPath));
+                        intoDelay |= c.sourcePath == audioIn + ".out" && c.targetNode() == delayPath;
+                        outOfDelay |= c.sourceNode() == delayPath && c.targetPath == audioOut + ".in1";
+                        oldGone &= ! (c.sourcePath == audioIn + ".out" && c.targetPath == audioOut + ".in1");
+                    }
+                t.check (intoDelay && outOfDelay && oldGone && ! g.getDropPreview().has_value(),
+                         "dropping it there splices the module into the connection (" + wiring.joinIntoString (", ") + ")");
+                context.controller.getUndoManager().undo();
+                model.rebuild();
+                pump();
+                bool restored = false;
+                if (auto* b = p.findBlock (block))
+                    for (auto& c : b->connections)
+                        restored |= c.sourcePath == audioIn + ".out" && c.targetPath == audioOut + ".in1";
+                t.check (restored && ! context.session.nodeExists (delayPath), "one undo takes the splice back");
+            }
+        }
+
         // --- "Loading..." message ------------------------------------------------------
         {
             bool ran = false;

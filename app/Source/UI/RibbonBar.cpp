@@ -14,7 +14,7 @@ namespace integra
         arrangeButton.onClick = [this] { if (onViewRequested) onViewRequested ("arrange"); };
         liveButton.onClick = [this] { if (onViewRequested) onViewRequested ("live"); };
 
-        homeButton.setTooltip ("Return to start (Home)");
+        homeButton.setTooltip ("Return to start (Enter)");
         playButton.setTooltip ("Play / pause (Space)");
         prevScene.setTooltip ("Previous scene");
         nextScene.setTooltip ("Next scene");
@@ -26,6 +26,11 @@ namespace integra
 
         for (auto* b : { &homeButton, &playButton, &prevScene, &nextScene, &prefsButton })
             addAndMakeVisible (b);
+
+        // a focused button would take Enter, Space and the arrow keys, which work
+        // wherever the focus is in Flex (IntegraLive.onStageKeyDown)
+        for (auto* b : { &arrangeButton, &liveButton, &homeButton, &playButton, &prevScene, &nextScene, &prefsButton })
+            b->setWantsKeyboardFocus (false);
 
         startTimerHz (20);
     }
@@ -149,5 +154,19 @@ namespace integra
         area.removeFromLeft (4);
         nextScene.setBounds (area.removeFromLeft (30));
         prefsButton.setBounds (area.removeFromRight (80));
+    }
+
+    Info RibbonBar::getInfoAt (juce::Point<int> p)
+    {
+        // RibbonBar.getInfoToDisplay
+        auto* c = getComponentAt (p);
+        if (c == &arrangeButton)  return InfoTexts::forView ("Ribbon/ArrangeView");
+        if (c == &liveButton)     return InfoTexts::forView ("Ribbon/LiveView");
+        if (c == &homeButton)     return InfoTexts::forView ("Ribbon/Home");
+        if (c == &playButton)     return InfoTexts::forView (context.controller.isPlaying() ? "Ribbon/Pause" : "Ribbon/Play");
+        if (c == &prefsButton)    return InfoTexts::forView ("Preferences");
+        if (p.x > getWidth() / 2 && c == this)
+            return InfoTexts::forView ("Ribbon/MidiInputIndicator");
+        return {};
     }
 }

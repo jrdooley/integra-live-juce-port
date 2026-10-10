@@ -1385,6 +1385,48 @@ namespace integra
         return false;
     }
 
+    juce::String ProjectController::spliceModule (juce::String blockPath, const GUID& moduleGuid, juce::Point<float> gridPosition, juce::String connectionPath)
+    {
+        juce::String source, target;
+        if (auto* block = model.get().findBlock (blockPath))
+            for (auto& c : block->connections)
+                if (c.path == connectionPath)
+                    source = c.sourcePath, target = c.targetPath;
+        auto* entry = session.getCatalogue().findByGuid (moduleGuid);
+        if (entry == nullptr)
+            return {};
+
+        // the module's first audio input and output
+        juce::String firstInput, firstOutput;
+        if (entry->definition != nullptr)
+            for (auto* ep : entry->definition->get_endpoint_definitions())
+            {
+                auto info = EndpointInfo::fromDefinition (*ep);
+                if (! info.isAudioStream)
+                    continue;
+                if (info.isAudioInput && firstInput.isEmpty())
+                    firstInput = info.name;
+                if (! info.isAudioInput && firstOutput.isEmpty())
+                    firstOutput = info.name;
+            }
+
+        return transaction ("Add " + entry->label, [&]
+        {
+            auto module = addModule (blockPath, moduleGuid, gridPosition);
+            if (module.isEmpty() || source.isEmpty() || target.isEmpty())
+                return module;
+            if (firstInput.isNotEmpty() || firstOutput.isNotEmpty())
+                remove (connectionPath);
+            if (firstInput.isNotEmpty())
+                connect (blockPath, source, module + "." + firstInput);
+            if (firstOutput.isNotEmpty())
+                connect (blockPath, module + "." + firstOutput, target);
+            model.rebuild();
+            model.selectedModule = module;
+            return module;
+        });
+    }
+
     juce::String ProjectController::connect (juce::String containerPath, juce::String sourceEndpoint, juce::String targetEndpoint)
     {
         // IntegraModel.canSetAudioLink: no links from a module to itself, and none that

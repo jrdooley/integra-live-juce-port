@@ -90,7 +90,7 @@ platforms; the Windows job uploads a ready-to-run `integra-live-windows-x64` art
 | `integra_smoke` | every module instantiates in Pd and answers pings; all demo blocks load |
 | `integra_host_audio_test` | audio flows through libpd when driven by the host |
 | `IntegraLive --self-test` | 76 end-to-end checks of the app core (undo, routing, envelopes, scenes, scripts, save/reload, Flex files, JUCE audio path) |
-| `IntegraLive --gui-test` | 139 GUI interaction checks with synthesized mouse/keyboard events |
+| `IntegraLive --gui-test` | 159 GUI interaction checks with synthesized mouse/keyboard events |
 
 ## Documentation
 

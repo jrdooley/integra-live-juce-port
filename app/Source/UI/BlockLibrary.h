@@ -2,6 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "Core/AppContext.h"
+#include "InfoView.h"
 
 namespace integra
 {
@@ -15,6 +16,7 @@ namespace integra
         library with the context menu. Hovering shows the block's info text.
     */
     class BlockLibrary  : public juce::Component,
+                          public InfoProvider,
                           private juce::ListBoxModel,
                           private juce::Timer
     {
@@ -53,6 +55,7 @@ namespace integra
         void paint (juce::Graphics&) override;
         void resized() override;
         void visibilityChanged() override                       { if (isVisible()) refresh(); }
+        Info getInfoAt (juce::Point<int>) override;
 
     private:
         int getNumRows() override;

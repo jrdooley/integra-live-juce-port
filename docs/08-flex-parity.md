@@ -43,6 +43,10 @@ Flex paths are relative to `GUI/src/components/`.
 | Multi-selection | `ArrangeView.as`, `ModuleGraph.as`, `Utilities.as` (Cmd on macOS, Ctrl elsewhere) | Ctrl/Cmd-click adds or removes blocks and modules; dragging one moves them all (blocks keep their time and track offsets, and push other blocks aside); Delete removes them all; a plain click on one of a group selects just it. Rubber-band selection on empty space in the module graph (Ctrl/Cmd toggles). |
 | Envelope editing | `BlockView.as`, `EnvelopeView.as` | Clicking within 8 px of an envelope selects it; clicking the selected envelope adds a point there and drags it; points are hit 4 px either side; double-click a point to delete it (not the first); envelope lock button (blocks with several envelopes, Shift inverts); "seconds, value" readout while dragging. |
 | Files | `IntegraLive.mxml` (saveAs, doLoad, onSelectFileToSave, doAutoloadIfNecessary, displayProgressPopup), `InstallModules.as` | Save As renames the project after the file (illegal characters and leading digits dropped) and always writes `.integra`; Open starts in the project's folder (else the last one used) and accepts bare `.ixd` files; opening a `.module` or `.bundle` file (command line, Finder / Explorer) installs it; Install takes several `.module` and `.bundle` files (a bundle is a zip of modules); "Loading: name..." / "Starting new Project..." messages while a project loads. |
+| Info view | `views/InfoView/`, `InfoMarkupForViews.as`, `assets/viewInfo/`, `IntegraView.getInfoToDisplay` | Help for whatever is under the mouse: Flex's 82 Markdown texts (imported as `viewInfo/`) for the ribbon, arrange view, scenes, envelopes, VU meters, properties tabs, module library and graph, Live view and Scene Shortcuts, and the project's own info for blocks, tracks, scenes and modules (each attribute's description for module controls). Ctrl/Cmd+3 shows or hides it (remembered); F2 (Ctrl+3 on macOS) locks it so it can be scrolled, and a locked node's info can be edited. Beside the properties in the Arrange view and Module View, beside Scene Shortcuts in the Live view. Help > Integra Live Website. |
+| View menu | `IntegraLive.mxml` menus, `ColorScheme.as`, `FontSize.as` | Lighting (Ctrl/Cmd+L) switches light / dark, High Contrast (Ctrl/Cmd+H, stored in the project), Text Size larger / smaller / reset (Ctrl/Cmd+= / - / 0; five steps, remembered). The port scales the whole window for text size, as its layout is in pixels. |
+| Flex shortcuts | `IntegraLive.onStageKeyDown` | Plain ←/→ select the previous / next scene and Enter returns to the start (Ctrl/Cmd+←/→ and Home still work), wherever the focus is: ribbon buttons no longer take the keyboard focus. Ctrl/Cmd+3 is the Info view, as in Flex (the Module View is reached from a block). |
+| Splice | `ModuleGraph.onDragDrop`, `onDragOver` | Dragging a module from the library shows it half transparent where it would go, and highlights a connection it covers; dropping it there replaces the connection with links into the module's first audio input and out of its first audio output (one undo step). |
 | MIDI indicator | `MidiInputIndicator.as` | Lights for every incoming message, including repeats of the same message. *(No automated test.)* |
 
 ## Arrange view and timeline
@@ -63,12 +67,11 @@ Flex paths are relative to `GUI/src/components/`.
 ## Module view
 
 **Missing / partial**
-* Library: a ghost preview while dragging, a resizable tag cloud (it fits its tags,
-  up to half the library), **dropping a module onto a link to splice it in**.
+* Library: a resizable tag cloud (it fits its tags, up to half the library).
 * Graph: Ctrl/Cmd-click and rubber band select modules only (Flex also selected their
   links); snapping to other modules' edges with snap lines; per-module
   "Live View" checkbox; right-click on empty space for Import Module; Change Track Colour;
-  track-colour tint and greyed-out inactive blocks; hover info for pins, links and modules.
+  track-colour tint and greyed-out inactive blocks.
 * Properties: typing is for the main value only (Flex labelled each attribute of a
   multi-attribute widget, e.g. XY pad x and y); MIDI learn for any endpoint of a
   multi-endpoint widget (XY pad y, range slider max).
@@ -86,14 +89,11 @@ Flex paths are relative to `GUI/src/components/`.
 
 ## Application
 
-* Ribbon: clickable MIDI indicator with CC/note readout; lighting (light/dark) button.
-* **Info view**: hover-driven Markdown help for whatever is under the mouse
-  (Ctrl+3, lock with F2), using the help texts in `assets/viewInfo/`; Help menu links and
-  module documentation.
-* View menu: Lighting (Ctrl+L), High contrast (Ctrl+H), text size (Ctrl+= / Ctrl+- /
-  Ctrl+0).
-* Shortcuts that differ: plain ←/→ for scenes (Ctrl+←/→ in the port), Enter for
-  return-to-start (Home in the port), Ctrl+3 is Module view instead of Info view.
+* Ribbon: clickable MIDI indicator with CC/note readout; lighting (light/dark) button
+  (in the View menu instead).
+* Info view: Markdown is shown as styled text with links reduced to their text (Flex
+  opened them); module documentation pages (Flex's Help > module docs) aren't bundled.
+* Text size scales the whole window rather than only the text.
 * Preferences: Reset to Defaults; MIDI device lists don't refresh; panel sizes, last
   folders and font size aren't persisted.
 * About box (licence/acknowledgements), update check. The crash reporter is mostly

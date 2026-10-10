@@ -46,6 +46,7 @@ target_compile_definitions(IntegraLive PRIVATE
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:IntegraLive,JUCE_VERSION>"
     INTEGRA_SOURCE_MODULES_DIR="${PROJECT_SOURCE_DIR}/modules"
     INTEGRA_SOURCE_BLOCKS_DIR="${PROJECT_SOURCE_DIR}/blocks"
+    INTEGRA_SOURCE_VIEWINFO_DIR="${PROJECT_SOURCE_DIR}/viewInfo"
     INTEGRA_SOURCE_RESOURCES_DIR="${PROJECT_SOURCE_DIR}/libIntegra/data")
 
 target_link_libraries(IntegraLive
@@ -74,6 +75,7 @@ endif()
 add_custom_command(TARGET IntegraLive POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/modules ${_integra_resources_dest}/modules
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/blocks ${_integra_resources_dest}/blocks
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/viewInfo ${_integra_resources_dest}/viewInfo
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/libIntegra/data ${_integra_resources_dest}/resources)
 
 # Headless end-to-end test of the app core (session, model, controller, audio host)
@@ -106,7 +108,7 @@ if(APPLE)
 else()
     set(_integra_install_dir ${CMAKE_INSTALL_LIBDIR}/integra-live)
     install(TARGETS IntegraLive RUNTIME DESTINATION ${_integra_install_dir})
-    install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules ${PROJECT_SOURCE_DIR}/blocks DESTINATION ${_integra_install_dir})
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules ${PROJECT_SOURCE_DIR}/blocks ${PROJECT_SOURCE_DIR}/viewInfo DESTINATION ${_integra_install_dir})
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/libIntegra/data/ DESTINATION ${_integra_install_dir}/resources)
     if(UNIX)
         install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR})

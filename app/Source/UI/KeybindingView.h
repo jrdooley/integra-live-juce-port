@@ -2,6 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "Core/AppContext.h"
+#include "InfoView.h"
 
 namespace integra
 {
@@ -13,6 +14,7 @@ namespace integra
     */
     class KeybindingView  : public juce::Component,
                             public juce::TooltipClient,
+                            public InfoProvider,
                             private juce::ChangeListener
     {
     public:
@@ -25,6 +27,12 @@ namespace integra
         void mouseDrag (const juce::MouseEvent&) override;
         void mouseUp (const juce::MouseEvent&) override;
         juce::String getTooltip() override;
+        /** A key's scene info, else what Scene Shortcuts do (KeybindingView.getInfoToDisplay). */
+        Info getInfoAt (juce::Point<int> p) override
+        {
+            auto scene = getSceneForKey (keyAt (p.toFloat()));
+            return scene.isNotEmpty() ? InfoTexts::forNode (context, scene) : InfoTexts::forView ("SceneShortcuts");
+        }
 
         /** Where a key is drawn (empty if the key isn't on the keyboard). */
         juce::Rectangle<float> getKeyBounds (juce::juce_wchar key) const;

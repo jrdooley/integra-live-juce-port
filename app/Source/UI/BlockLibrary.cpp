@@ -213,6 +213,16 @@ namespace integra
         return juce::String (dragPrefix) + entries[(size_t) rows[0]].file.getFullPathName();
     }
 
+    Info BlockLibrary::getInfoAt (juce::Point<int> p)
+    {
+        // BlockLibrary.getInfoToDisplay: the block's info, else what the library is
+        const auto inList = list.getLocalPoint (this, p);
+        const int row = list.getRowContainingPosition (inList.x, inList.y);
+        if (list.getLocalBounds().contains (inList) && row >= 0 && row < (int) entries.size())
+            return { entries[(size_t) row].title, entries[(size_t) row].info.isEmpty() ? juce::String ("No Info Available") : entries[(size_t) row].info, {} };
+        return InfoTexts::forView ("BlockLibrary");
+    }
+
     juce::String BlockLibrary::getTooltipForRow (int row)
     {
         if (row < 0 || row >= (int) entries.size())

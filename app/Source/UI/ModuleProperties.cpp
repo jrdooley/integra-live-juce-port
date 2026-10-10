@@ -278,6 +278,34 @@ namespace integra
         g.drawText (description, header, juce::Justification::centredLeft, true);
     }
 
+    Info ModuleProperties::getInfoAt (juce::Point<int> p)
+    {
+        // ControlContainer.getInfoToDisplay: the strip's buttons, else the control's endpoint
+        for (auto* c = getComponentAt (p); c != nullptr && c != this; c = c->getParentComponent())
+        {
+            if (auto* button = dynamic_cast<juce::Button*> (c))
+            {
+                if (button->getName() == "LIVE")  return InfoTexts::forView ("Widget/LiveViewButton");
+                if (button->getName() == "MIDI")  return InfoTexts::forView ("Widget/MidiLearnButton");
+            }
+            if (auto* widget = dynamic_cast<IntegraWidget*> (c))
+            {
+                const auto& spec = widget->getSpec();
+                juce::String markdown;
+                for (auto& [attribute, endpoint] : spec.mapping)
+                {
+                    auto& i = widget->info (attribute);
+                    markdown << "**" << (i.label.isNotEmpty() ? i.label : endpoint) << "**";
+                    if (i.hasRange && i.isNumeric())
+                        markdown << " (" << i.format (i.minimum) << " to " << i.format (i.maximum) << ")";
+                    markdown << "\n\n" << i.description << "\n\n";
+                }
+                return { spec.label, markdown.trim(), {} };
+            }
+        }
+        return InfoTexts::forView ("ModuleProperties");
+    }
+
     void ModuleProperties::mouseDoubleClick (const juce::MouseEvent& e)
     {
         if (e.y < 24 && modulePath.isNotEmpty())

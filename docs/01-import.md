@@ -14,6 +14,7 @@ or modified. This file records exactly what was copied, from where, and why.
 | `third_party/boost/` | `integra-framework@623ecf71:libIntegra/externals/boost/` | Header subset used by `fsplay~`. |
 | `modules/` | `integra-framework@623ecf71:modules/` | 82 `.module` files; identical to IntegraLive `develop` except the fixed `metronome.module`. Unlicense. |
 | `blocks/` | `IntegraLive@91d85f41:blocks/` | Demo block library (`index.xml` + 6 `.integra` files). |
+| `viewInfo/` | `IntegraLive@91d85f41:GUI/src/assets/viewInfo/` | The Info view's help texts (82 Markdown files), shown as in the Flex GUI. GPL-2.0-or-later. |
 | `reference/integra2-juce-prototype/` | `IntegraLive@b8cef433 (integra2):JUCE-libIntegra-Client-1/` | The 2018 JUCE prototype, kept for provenance only — **not built**. |
 
 ## Deliberately not imported

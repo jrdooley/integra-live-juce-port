@@ -14,11 +14,14 @@ namespace integra
                      selection, timelineBackground, gridLine, playhead, blockFill, blockOutline,
                      moduleFill, moduleHeader, pin, link, linkSelected, sceneFill, envelope, meterLow, meterHigh,
                      controlBackground, controlFill;
-        bool isDark = false;
+        bool isDark = false, highContrast = false;
 
         static const Theme& get();
         static void setDark (bool dark);
         static bool isDarkScheme();
+        /** High contrast (Flex: View > High Contrast, stored per project). */
+        static void setHighContrast (bool);
+        static bool isHighContrastScheme();
     };
 
     class IntegraLookAndFeel  : public juce::LookAndFeel_V4
