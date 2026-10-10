@@ -61,7 +61,7 @@ namespace integra
 
         /** Flex AttributeLabel: double-click the value under a control to type a value;
             Enter (or clicking elsewhere) sets it, Escape cancels. */
-        bool startEditingValue();
+        bool startEditingValue (juce::String attribute = {});
         juce::TextEditor* getValueEditor() const noexcept   { return valueEditor.get(); }
         void finishEditingValue (bool commit);
         /** Sets an attribute from typed text: numbers are clamped to the endpoint's range,
@@ -69,7 +69,15 @@ namespace integra
         bool setValueFromText (const juce::String& attribute, const juce::String& text);
         /** The attribute whose value text can be typed into ("" for none). */
         virtual juce::String getEditableAttribute() const;
+        /** Every attribute with its own value text (AttributeLabel), left to right: x and y of
+            an XY pad, min and max of a range slider, else the editable attribute. */
+        virtual juce::StringArray getEditableAttributes() const;
         juce::Rectangle<int> getValueTextArea() const;
+        /** Where one attribute's value is typed: its share of the value text. */
+        virtual juce::Rectangle<int> getValueTextArea (const juce::String& attribute) const;
+        const juce::String& getEditedAttribute() const noexcept   { return editedAttribute; }
+        /** ControlManager: a value goes to the nearest allowed value, an integer is rounded. */
+        static juce::var quantise (const EndpointInfo&, const juce::var&);
 
         /** Right-click: Revert to default for this control or all of the module's controls
             (Flex: ModuleProperties context menu). */

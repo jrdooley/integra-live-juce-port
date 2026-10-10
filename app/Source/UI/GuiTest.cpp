@@ -1748,6 +1748,221 @@ namespace integra
             saveShot (main, "arrange-batch5.png");
         }
 
+        // --- Module View and widgets: link selection, snapping, Live View tick, Import
+        //     Module, tag cloud, RangeSlider, NumberBox, per-attribute typing, quantising --
+        {
+            context.controller.newProject();
+            pump();
+            auto& undo = context.controller.getUndoManager();
+            auto undoOnce = [&] { undo.undo(); model.rebuild(); pump(); };
+            const auto block = p.tracks.at (0).blocks.at (0).path;
+            main.openBlock (block);
+            pump();
+            auto& g = main.getModuleView().getGraph();
+            auto* tapDelay = context.session.getCatalogue().findByName ("TapDelay");
+            const auto delayPath = context.controller.addModule (block, tapDelay->guid, { 10.0f, 1.0f });
+            context.controller.connect (block, block + ".AudioIn1.out", delayPath + ".in1");
+            context.controller.connect (block, delayPath + ".out1", block + ".StereoAudioOut1.in1");
+            pump();
+            g.refreshLayout();
+            auto boundsOf = [&] (const juce::String& path) { return g.getModuleBounds (path).value_or (juce::Rectangle<float>()); };
+            auto connections = [&] { auto* b = p.findBlock (block); return b != nullptr ? (int) b->connections.size() : 0; };
+
+            // selecting a module selects its connections (ModuleGraph.onClickModule)
+            click (g, boundsOf (delayPath).getCentre());
+            t.check (g.getSelectedLinks().size() == 2, "selecting a module selects its connections too");
+            click (g, { (float) g.getWidth() - 20.0f, (float) g.getHeight() - 20.0f });
+            t.check (g.getSelectedLinks().empty() && g.getSelectedModules().empty(), "clicking empty space deselects them");
+            g.keyPressed (juce::KeyPress (juce::KeyPress::backspaceKey));
+            pump();
+            t.check (connections() == 2, "...so Delete removes nothing");
+
+            click (g, boundsOf (delayPath).getCentre());
+            g.keyPressed (juce::KeyPress (juce::KeyPress::deleteKey));
+            pump();
+            t.check (! context.session.nodeExists (delayPath) && connections() == 0, "Delete removes the selected module and its connections");
+            undoOnce();
+            g.refreshLayout();
+            t.check (context.session.nodeExists (delayPath) && connections() == 2, "...and one undo brings both back");
+
+            // a rubber band selects the modules it touches with their connections
+            {
+                auto r = boundsOf (delayPath);
+                drag (g, r.getTopLeft() - juce::Point<float> (8.0f, 8.0f), r.getTopLeft() + juce::Point<float> (10.0f, 10.0f));
+                t.check (g.getSelectedModules().size() == 1 && g.getSelectedLinks().size() == 2, "a rubber band selects modules with their connections");
+            }
+
+            // edge snapping (ModuleGraph: 10 px, nearest edge, snap lines)
+            {
+                const auto in = boundsOf (block + ".AudioIn1");
+                click (g, { (float) g.getWidth() - 20.0f, (float) g.getHeight() - 20.0f });
+                auto from = boundsOf (delayPath).getCentre();
+                const auto offset = from - boundsOf (delayPath).getPosition();
+                const juce::Point<float> target (in.getX() + 6.0f, boundsOf (delayPath).getY() + 120.0f);
+                g.mouseDown (makeEvent (g, from, from, 1, false));
+                g.mouseDrag (makeEvent (g, target + offset, from, 1, true));
+                const bool lines = ! g.getSnapLinesX().empty();
+                g.mouseUp (makeEvent (g, target + offset, from, 1, true));
+                pump();
+                g.refreshLayout();
+                t.check (lines && std::abs (boundsOf (delayPath).getX() - in.getX()) < 0.5f && g.getSnapLinesX().empty(),
+                         "a dragged module's edge snaps to another module's edge, with a snap line");
+            }
+
+            // Live View tick (SetModuleInstanceLiveViewControls)
+            {
+                auto liveControls = [&]
+                {
+                    std::vector<juce::Rectangle<float>> result;
+                    if (auto* b = p.findBlock (block))
+                        for (auto& c : b->userData.liveViewControls)
+                            if (c.moduleName == "TapDelay1")
+                                result.push_back (c.bounds);
+                    return result;
+                };
+                click (g, g.getLiveTickBounds (delayPath).getCentre());
+                pump();
+                auto shown = liveControls();
+                bool overlap = false;
+                for (size_t i = 0; i < shown.size(); ++i)
+                    for (size_t j = i + 1; j < shown.size(); ++j)
+                        overlap |= shown[i].intersects (shown[j]);
+                t.check (shown.size() == WidgetSpec::forModule (context.session, delayPath).size() && ! overlap,
+                         "the Live View tick puts all of a module's controls in the Live view, without overlaps (" + juce::String ((int) shown.size()) + ")");
+                click (g, g.getLiveTickBounds (delayPath).getCentre());
+                pump();
+                t.check (liveControls().empty(), "...and takes them all out again");
+                undoOnce();
+                t.check (liveControls().size() == shown.size(), "...one undo step each");
+            }
+
+            // Import Module (ImportModule): top left at the clicked point, selected
+            {
+                auto file = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("integra-gui-test-module.integra");
+                file.deleteFile();
+                context.controller.exportNode (delayPath, file);
+                juce::String imported;
+                t.check (context.controller.importModule (file, block, { 2.0f, 12.0f }, &imported).wasOk() && context.session.nodeExists (imported)
+                            && model.selectedModule == imported,
+                         "Import Module adds the saved module, selected");
+                auto* b = p.findBlock (block);
+                auto* m = b != nullptr ? b->findModule (lastElement (imported)) : nullptr;
+                t.check (m != nullptr && m->position.getPosition() == juce::Point<float> (2.0f, 12.0f), "...with its top left where the menu was opened");
+                undoOnce();
+                t.check (! context.session.nodeExists (imported), "...one undo removes it");
+                auto blockFile = file.getSiblingFile ("integra-gui-test-block2.integra");
+                context.controller.exportNode (block, blockFile);
+                t.check (context.controller.importModule (blockFile, block, {}).failed(), "...and a block file is refused");
+                file.deleteFile();
+                blockFile.deleteFile();
+            }
+
+            // tag cloud height (TagCloud: drag its title strip)
+            {
+                auto& library = main.getModuleView().getLibrary();
+                const int before = library.getTagCloudHeight();
+                auto handle = library.getTagResizeArea().getCentre().toFloat() + juce::Point<float> (-40.0f, 0.0f);
+                drag (library, handle, handle - juce::Point<float> (0.0f, 40.0f));
+                const int taller = library.getTagCloudHeight();
+                drag (library, library.getTagResizeArea().getCentre().toFloat() - juce::Point<float> (40.0f, 0.0f),
+                      library.getTagResizeArea().getCentre().toFloat() + juce::Point<float> (-40.0f, 2000.0f));
+                t.check (taller > before && taller <= library.getHeight() / 2 && library.getTagCloudHeight() == 0,
+                         "dragging the tag cloud's title resizes it (" + juce::String (before) + " -> " + juce::String (taller) + " -> "
+                            + juce::String (library.getTagCloudHeight()) + ")");
+            }
+
+            // widgets
+            auto widgetsOf = [&] (const juce::String& modulePath)
+            {
+                main.getModuleView().getProperties().setModule (modulePath);
+                pump();
+                std::vector<IntegraWidget*> found;
+                findAll (main.getModuleView().getProperties(), found);
+                return found;
+            };
+            auto widgetOfType = [&] (const std::vector<IntegraWidget*>& ws, const juce::String& type) -> IntegraWidget*
+            {
+                for (auto* w : ws)
+                    if (w->getSpec().type == type)
+                        return w;
+                return nullptr;
+            };
+
+            auto* granular = context.session.getCatalogue().findByName ("QuadGranularSynthesizer");
+            const auto granularPath = granular != nullptr ? context.controller.addModule (block, granular->guid, { 20.0f, 10.0f }) : juce::String();
+            pump();
+            auto granularWidgets = widgetsOf (granularPath);
+            if (auto* range = widgetOfType (granularWidgets, "RangeSlider"))
+            {
+                auto unitOf = [&] (const juce::String& a) { return range->info (a).toUnit ((double) context.session.getValue (range->endpointPath (a))); };
+                // the track: horizontal, inset 4 px in the control area
+                auto area = range->getLocalBounds().reduced (4).toFloat();
+                area.removeFromBottom ((float) juce::jlimit (16, 30, (range->getHeight() - 8) * 2 / 5));
+                const float left = area.getX() + 4.0f, width = area.getWidth() - 8.0f, y = area.getCentreY();
+                auto xAt = [&] (double unit) { return left + (float) unit * width; };
+                drag (*range, { xAt (0.1), y }, { xAt (0.3), y });
+                pump();
+                t.check (std::abs (unitOf ("min") - 0.1) < 0.03 && std::abs (unitOf ("max") - 0.3) < 0.03,
+                         "dragging outside a range slider's range draws a new range");
+                drag (*range, { xAt (0.2), y }, { xAt (0.5), y });
+                pump();
+                t.check (std::abs (unitOf ("min") - 0.4) < 0.03 && std::abs (unitOf ("max") - 0.6) < 0.03, "dragging its middle moves both ends");
+                range->mouseDown (makeEvent (*range, { xAt (0.5), y }, { xAt (0.5), y }, 1, false));
+                range->mouseUp (makeEvent (*range, { xAt (0.5), y }, { xAt (0.5), y }, 1, false));
+                range->mouseDoubleClick (makeEvent (*range, { xAt (0.5), y }, { xAt (0.5), y }, 2, false));
+                pump();
+                t.check (unitOf ("min") > unitOf ("max") + 0.1, "double-clicking its middle swaps the ends");
+                drag (*range, { xAt (unitOf ("max")), y }, { xAt (0.05), y });
+                pump();
+                t.check (std::abs (unitOf ("max") - 0.05) < 0.03, "dragging an end moves just that end");
+                range->mouseDoubleClick (makeEvent (*range, range->getValueTextArea ("max").getCentre().toFloat(),
+                                                   range->getValueTextArea ("max").getCentre().toFloat(), 2, false));
+                t.check (range->getValueEditor() != nullptr && range->getEditedAttribute() == "max", "each end of the range has its own value to type");
+                range->finishEditingValue (false);
+            }
+            else
+                t.check (false, "QuadGranularSynthesizer has a range slider");
+
+            auto* follower = context.session.getCatalogue().findByName ("EnvelopeFollower");
+            const auto followerPath = follower != nullptr ? context.controller.addModule (block, follower->guid, { 20.0f, 20.0f }) : juce::String();
+            pump();
+            if (auto* box = widgetOfType (widgetsOf (followerPath), "NumberBox"))
+            {
+                auto inBox = box->getValueTextArea ("value").getCentre().toFloat();
+                click (*box, inBox);
+                t.check (box->getValueEditor() != nullptr, "clicking a number box starts typing a value");
+                box->finishEditingValue (false);
+            }
+            else
+                t.check (false, "EnvelopeFollower has a number box");
+
+            auto* vocoder = context.session.getCatalogue().findByName ("PhaseVocoder");
+            const auto vocoderPath = vocoder != nullptr ? context.controller.addModule (block, vocoder->guid, { 30.0f, 20.0f }) : juce::String();
+            pump();
+            if (auto* pad = widgetOfType (widgetsOf (vocoderPath), "XYScratchPad"))
+            {
+                auto right = pad->getValueTextArea ("y").getCentre().toFloat();
+                pad->mouseDoubleClick (makeEvent (*pad, right, right, 2, false));
+                t.check (pad->getValueEditor() != nullptr && pad->getEditedAttribute() == "y", "an XY pad's y value can be typed on its own");
+                pad->finishEditingValue (false);
+            }
+            else
+                t.check (false, "PhaseVocoder has an XY pad");
+
+            // ControlManager quantising: integers round, allowed values win
+            {
+                EndpointInfo integer;
+                integer.kind = EndpointInfo::Kind::integer;
+                EndpointInfo allowed;
+                allowed.kind = EndpointInfo::Kind::real;
+                allowed.allowedStates = { "0.5", "1", "2" };
+                t.check ((int) IntegraWidget::quantise (integer, 2.6) == 3 && std::abs ((double) IntegraWidget::quantise (allowed, 1.4) - 1.0) < 1e-9,
+                         "control values are quantised to integers and allowed values");
+            }
+            saveShot (main, "module-view-batch6.png");
+            main.showView ("arrange");
+        }
+
         // --- "Loading..." message ------------------------------------------------------
         {
             bool ran = false;

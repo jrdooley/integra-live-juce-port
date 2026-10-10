@@ -32,7 +32,14 @@ namespace integra
         void paint (juce::Graphics&) override;
         void resized() override;
         void mouseDown (const juce::MouseEvent&) override;
+        void mouseDrag (const juce::MouseEvent&) override;
+        void mouseMove (const juce::MouseEvent&) override;
         Info getInfoAt (juce::Point<int>) override;
+
+        /** The "Tags..." strip above the tag cloud: drag it up or down to resize the cloud,
+            between none and its tags' height, up to half the library (TagCloud). */
+        juce::Rectangle<int> getTagResizeArea() const;
+        int getTagCloudHeight() const;
 
         /** Called when a module is double-clicked (adds it to the current block). */
         std::function<void (const ModuleCatalogue::Entry&)> onModuleChosen;
@@ -91,6 +98,7 @@ namespace integra
         std::vector<GUID> expandedOrigins;
         std::vector<Row> rows;
         int lastSelectedRow = -1;
+        int tagCloudHeight = 60, dragStartHeight = 0;      // TagCloud: initially 60 px
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ModuleLibrary)
     };
@@ -138,6 +146,18 @@ namespace integra
         Info getInfoAt (juce::Point<int>) override;
 
         void selectModulePath (const juce::String& path)    { selectModule (path); }
+
+        /** Selected connections: clicked ones, and those of selected modules. */
+        const std::set<juce::String>& getSelectedLinks() const noexcept    { return selectedLinks; }
+        /** The Live View tick at the top right of a module (ModuleGraphElement): ticked when
+            any of its controls is in the Live view; clicking shows all or hides all. */
+        juce::Rectangle<float> getLiveTickBounds (const juce::String& modulePath) const;
+        /** Snap lines shown while a module is dragged (x of vertical lines, y of horizontal). */
+        const std::vector<float>& getSnapLinesX() const noexcept   { return snapLinesX; }
+        const std::vector<float>& getSnapLinesY() const noexcept   { return snapLinesY; }
+        /** Import Module...: loads a saved module with its top left at a point of the graph. */
+        void importModule (juce::Point<int> position);
+        static constexpr float snapThreshold = 10.0f;     // ModuleGraph.maximumSnapThreshold
 
         /** Selected modules: the primary selection plus those added with Ctrl/Cmd-click or
             the rubber band. Dragging one moves them all; Delete removes them all. */
@@ -204,7 +224,15 @@ namespace integra
         std::vector<ModuleBox> modules;
         std::vector<Link> links;
 
-        juce::String selectedModule, selectedLink;
+        juce::String selectedModule;
+        std::set<juce::String> selectedLinks;
+        /** Selects the links of a module along with it (ModuleGraph.onClickModule). */
+        void selectLinksOf (const juce::String& modulePath, bool select);
+        void showGraphMenu (juce::Point<int>);
+        bool hasLiveViewControls (const juce::String& modulePath) const;
+        void toggleLiveViewControls (const juce::String& modulePath);
+        std::unique_ptr<juce::FileChooser> chooser;
+        std::vector<float> snapLinesX, snapLinesY;
         juce::String draggingModule;
         juce::Point<float> dragOffset;
         juce::Rectangle<float> dragOriginal;

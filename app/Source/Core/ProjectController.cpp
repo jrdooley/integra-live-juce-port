@@ -1992,4 +1992,84 @@ namespace integra
                 controls.push_back ({ moduleName, widgetLabel, bounds });
         });
     }
+
+    juce::Rectangle<float> ProjectController::findNewLiveViewControlPosition (const std::vector<BlockUserData::LiveViewControl>& controls, juce::Point<float> size)
+    {
+        constexpr float margin = 20.0f;
+        juce::Rectangle<float> r (margin, margin, size.x, size.y);
+        for (;;)
+        {
+            bool overlaps = false;
+            for (auto& c : controls)
+                overlaps |= r.expanded (margin).intersects (c.bounds);
+            if (! overlaps)
+                return r;
+            r.translate (margin, 0.0f);
+        }
+    }
+
+    void ProjectController::setModuleLiveViewControls (juce::String modulePath, const std::vector<std::pair<juce::String, juce::Rectangle<float>>>& widgets, bool shown)
+    {
+        const auto moduleName = lastElement (modulePath);
+        auto sorted = widgets;
+        std::stable_sort (sorted.begin(), sorted.end(), [] (auto& a, auto& b) { return a.second.getCentreX() < b.second.getCentreX(); });
+
+        updateBlockUserData (parentPath (modulePath), [&] (BlockUserData& d)
+        {
+            auto& controls = d.liveViewControls;
+            if (! shown)
+            {
+                controls.erase (std::remove_if (controls.begin(), controls.end(), [&] (auto& c) { return c.moduleName == moduleName; }), controls.end());
+                return;
+            }
+            for (auto& [label, design] : sorted)
+            {
+                const bool present = std::any_of (controls.begin(), controls.end(),
+                                                  [&] (auto& c) { return c.moduleName == moduleName && c.widgetLabel == label; });
+                if (! present)
+                    controls.push_back ({ moduleName, label, findNewLiveViewControlPosition (controls, { design.getWidth(), design.getHeight() }) });
+            }
+        });
+    }
+
+    juce::Result ProjectController::importModule (const juce::File& file, juce::String blockPath, juce::Point<float> gridPosition, juce::String* newModulePath)
+    {
+        if (model.get().findBlock (blockPath) == nullptr)
+            return juce::Result::fail ("No block");
+        auto before = session.getChildNames (blockPath);
+
+        return transaction ("Import Module", [&]
+        {
+            if (session.loadFile (file, blockPath) != CError::SUCCESS)
+                return juce::Result::fail ("Cannot import \"" + file.getFileName() + "\":\n\n" + session.getLastError());
+
+            juce::String imported;
+            for (auto& name : session.getChildNames (blockPath))
+                if (! before.contains (name))
+                    imported = blockPath + "." + name;
+
+            // a module, not a block or track
+            if (imported.isEmpty() || session.getModuleName (imported) == "Container")
+            {
+                if (imported.isNotEmpty())
+                    session.deleteNode (imported);
+                return juce::Result::fail ("This file cannot be imported as a module");
+            }
+
+            perform (new LoadedNodeAction (session, imported, file));
+            model.rebuild();
+            const model::Module* m = nullptr;
+            if (auto* block = model.get().findBlock (blockPath))
+                m = block->findModule (lastElement (imported));
+            std::map<juce::String, juce::Rectangle<float>> positions;
+            positions[lastElement (imported)] = { juce::jmax (0.0f, gridPosition.x), juce::jmax (0.0f, gridPosition.y),
+                                                  moduleWidth, moduleHeight (m != nullptr ? m->entry : nullptr) };
+            setModulePositions (blockPath, positions);
+            model.rebuild();
+            model.selectedModule = imported;
+            if (newModulePath != nullptr)
+                *newModulePath = imported;
+            return juce::Result::ok();
+        });
+    }
 }

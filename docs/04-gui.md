@@ -144,7 +144,8 @@ automated interaction test.
   filters on all selected tags; searching clears the tags and selecting a tag
   clears the search, as in Flex. Drag a module onto the graph, double-click it
   or press Enter to add it. Tooltips show Flex's info text (source, modified
-  date and author for version lines).
+  date and author for version lines). Drag the "Tags..." strip to resize the
+  tag cloud.
 
 ![Module library with TapDelay's versions expanded](images/module-library.png)
 * **Title bar**: the block's active button and VU meter, right of the
@@ -154,7 +155,12 @@ automated interaction test.
   move it (half-unit snapping), drag from an output pin to an input pin (or
   back) to connect (links from a module to itself or that would create a
   feedback loop are refused, as `IntegraModel.canSetAudioLink`), click a
-  connection to select it. Dragging a module in from the library shows it half
+  connection to select it (selecting a module selects its connections too; Delete
+  removes the selected modules and connections in one undo step). A dragged
+  module snaps to other modules' edges within 10 px, with snap lines. The tick at
+  a module's top right puts all of its controls in the Live view, or takes them
+  out. Right-click empty space for Remove Selection, Import / Export Module and
+  Change Track Colour. Dragging a module in from the library shows it half
   transparent where it would go; dropped onto a connection it is spliced in
   (the connection's source feeds its first audio input, its first audio output
   feeds the connection's target; one undo step), as Flex's
@@ -173,6 +179,14 @@ automated interaction test.
   names), as Flex's `AttributeLabel`. Right-click a control for *Revert to
   default* > that control, or *All Controls* of the module (one undo step;
   locked controls are left alone). Double-click the title to rename the module.
+  Controls with several values (XY pads, range sliders) have a value to type
+  for each; MIDI learn on them asks which value to learn. Values are quantised
+  to allowed values and integers. Click a number box to type; a range slider
+  moves an end, both ends (drag the middle), or draws a new range, and a
+  double-click on its middle swaps the ends; knobs turn with a 200 px vertical
+  drag.
+
+  ![Module View with the Live View ticks and more controls](images/module-view-widgets.png)
 
 Dark colour scheme (per project, as in Flex; Settings → Dark colour scheme):
 
@@ -327,7 +341,7 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (191 checks, all
+keyboard events and checks the resulting project state (214 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,
@@ -366,7 +380,10 @@ double-clicking below the tracks, Ctrl+Shift+T, exporting and importing a
 track (last, selected, envelopes driven, undo, block files refused), the
 ruler's zoom / scroll strip (zoom about the click, Shift for scrolling only),
 Backspace on a scene, the breadcrumbs, adding and deleting an envelope from
-the block title bar, and Ctrl+E in the script editor.
+the block title bar, and Ctrl+E in the script editor; module graph connection selection with
+modules, Delete and undo, the rubber band, edge snapping, the Live View tick,
+Import Module, the tag cloud's size, range slider gestures, number boxes,
+typing an XY pad's y, and value quantising.
 
 Bugs it found and that are fixed:
 

@@ -241,9 +241,31 @@ namespace integra
         }
         if (path.isNotEmpty())
         {
-            values[attribute] = value;
-            context.controller.setValue (path, value);
+            const auto quantised = quantise (info (attribute), value);
+            values[attribute] = quantised;
+            context.controller.setValue (path, quantised);
         }
+    }
+
+    juce::var IntegraWidget::quantise (const EndpointInfo& i, const juce::var& value)
+    {
+        if (! i.isNumeric() || ! (value.isInt() || value.isDouble() || value.isInt64() || value.isBool()))
+            return value;
+        double v = value;
+        if (! i.allowedStates.isEmpty())
+        {
+            double best = v, distance = std::numeric_limits<double>::max();
+            for (auto& state : i.allowedStates)
+                if (std::abs (state.getDoubleValue() - v) < distance)
+                {
+                    distance = std::abs (state.getDoubleValue() - v);
+                    best = state.getDoubleValue();
+                }
+            v = best;
+        }
+        if (i.kind == EndpointInfo::Kind::integer)
+            return juce::roundToInt (v);
+        return v;
     }
 
     void IntegraWidget::setUnit (const juce::String& attribute, double unit)
@@ -317,10 +339,44 @@ namespace integra
         return labelArea.withTrimmedTop (labelArea.getHeight() / 2);
     }
 
-    bool IntegraWidget::startEditingValue()
+    juce::StringArray IntegraWidget::getEditableAttributes() const
     {
-        const auto attribute = getEditableAttribute();
-        if (attribute.isEmpty() || isLocked (attribute) || getValueTextArea().isEmpty())
+        auto editable = [this] (const juce::String& a)
+        {
+            if (spec.mapping.count (a) == 0)
+                return false;
+            auto& i = info (a);
+            return (i.isNumeric() || i.kind == EndpointInfo::Kind::text) && i.canBeTarget && ! i.isInputFile;
+        };
+        for (auto pair : { std::make_pair ("x", "y"), std::make_pair ("min", "max") })
+            if (spec.mapping.count (pair.first) != 0 && spec.mapping.count (pair.second) != 0)
+            {
+                juce::StringArray result;
+                for (auto a : { pair.first, pair.second })
+                    if (editable (a))
+                        result.add (a);
+                return result;
+            }
+        if (auto a = getEditableAttribute(); a.isNotEmpty())
+            return { a };
+        return {};
+    }
+
+    juce::Rectangle<int> IntegraWidget::getValueTextArea (const juce::String& attribute) const
+    {
+        auto area = getValueTextArea();
+        const juce::StringArray pairs[] = { { "x", "y" }, { "min", "max" } };
+        for (auto& pair : pairs)
+            if (pair.contains (attribute) && spec.mapping.count (pair[0]) != 0 && spec.mapping.count (pair[1]) != 0)
+                return attribute == pair[0] ? area.removeFromLeft (area.getWidth() / 2) : area.withTrimmedLeft (area.getWidth() / 2);
+        return area;
+    }
+
+    bool IntegraWidget::startEditingValue (juce::String attribute)
+    {
+        if (attribute.isEmpty())
+            attribute = getEditableAttributes()[0];
+        if (attribute.isEmpty() || ! getEditableAttributes().contains (attribute) || isLocked (attribute) || getValueTextArea (attribute).isEmpty())
             return false;
 
         editedAttribute = attribute;
@@ -338,7 +394,7 @@ namespace integra
         valueEditor->onEscapeKey = [finishLater] { finishLater (false); };
         valueEditor->onFocusLost = [finishLater] { finishLater (true); };
         addAndMakeVisible (*valueEditor);
-        valueEditor->setBounds (getValueTextArea().expanded (2, 1));
+        valueEditor->setBounds (getValueTextArea (attribute).expanded (2, 1));
         valueEditor->selectAll();
         valueEditor->grabKeyboardFocus();
         repaint();
@@ -406,8 +462,13 @@ namespace integra
 
     void IntegraWidget::mouseDoubleClick (const juce::MouseEvent& e)
     {
-        if (getValueTextArea().contains (e.getPosition()))
-            startEditingValue();
+        // AttributeLabel: each attribute's value is typed where it is shown
+        for (auto& attribute : getEditableAttributes())
+            if (getValueTextArea (attribute).contains (e.getPosition()))
+            {
+                startEditingValue (attribute);
+                return;
+            }
     }
 
     void IntegraWidget::mouseDown (const juce::MouseEvent& e)
@@ -555,13 +616,19 @@ namespace integra
                 const bool vertical = s.position.getHeight() >= s.position.getWidth();
                 switch (style)
                 {
-                    case Style::knob:       slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag); break;
+                    case Style::knob:       slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
+                                            slider.setMouseDragSensitivity (200); break;    // KnobControl: 200 px for the whole range
                     case Style::numberBox:  slider.setSliderStyle (juce::Slider::LinearBar); break;
                     case Style::automatic:  slider.setSliderStyle (vertical ? juce::Slider::LinearVertical : juce::Slider::LinearHorizontal); break;
                 }
 
                 slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-                slider.setRange (0.0, 1.0);
+                // ControlManager: integer ranges of up to 32 steps move in steps
+                auto& valueInfo = info ("value");
+                const double steps = valueInfo.kind == EndpointInfo::Kind::integer && valueInfo.hasRange && valueInfo.toUnit (valueInfo.maximum) > valueInfo.toUnit (valueInfo.minimum)
+                                         && valueInfo.maximum - valueInfo.minimum <= 32.0 && valueInfo.scale == EndpointInfo::Scale::linear
+                                       ? valueInfo.maximum - valueInfo.minimum : 0.0;
+                slider.setRange (0.0, 1.0, steps > 0.0 ? 1.0 / steps : 0.0);
                 slider.setVelocityModeParameters (0.6, 1, 0.0, true, juce::ModifierKeys::shiftModifier);
                 slider.onValueChange = [this] { if (! updating) setUnit ("value", slider.getValue()); };
                 slider.textFromValueFunction = [this] (double unit) { return info ("value").format (info ("value").fromUnit (unit)); };
@@ -794,31 +861,140 @@ namespace integra
         class RangeSliderWidget  : public IntegraWidget
         {
         public:
-            RangeSliderWidget (AppContext& c, const juce::String& p, const WidgetSpec& s) : IntegraWidget (c, p, s)
+            /** RangeSliderControl: drag an end (within 4 px) to move it, the middle to move both,
+                elsewhere to draw a new range; double-click the middle to swap the ends. Min may
+                be above max. Horizontal unless taller than wide. */
+            RangeSliderWidget (AppContext& c, const juce::String& p, const WidgetSpec& s) : IntegraWidget (c, p, s) {}
+
+            void valuesChanged() override   { repaint(); }
+
+            bool isVertical() const         { return getControlArea().getHeight() > getControlArea().getWidth(); }
+
+            juce::Rectangle<float> trackArea() const
             {
-                slider.setSliderStyle (juce::Slider::TwoValueHorizontal);
-                slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-                slider.setRange (0.0, 1.0);
-                slider.onValueChange = [this]
+                auto area = getControlArea().toFloat();
+                if (isVertical())
+                    return area.withSizeKeepingCentre (juce::jmin (40.0f, area.getWidth() / 3.0f), area.getHeight() - 8.0f);
+                return area.withSizeKeepingCentre (area.getWidth() - 8.0f, juce::jmin (40.0f, area.getHeight() / 3.0f));
+            }
+
+            float unitToPixel (double unit) const
+            {
+                auto r = trackArea();
+                return isVertical() ? r.getBottom() - (float) unit * r.getHeight() : r.getX() + (float) unit * r.getWidth();
+            }
+
+            double pixelToUnit (juce::Point<float> p) const
+            {
+                auto r = trackArea();
+                return juce::jlimit (0.0, 1.0, isVertical() ? (double) ((r.getBottom() - p.y) / r.getHeight())
+                                                            : (double) ((p.x - r.getX()) / r.getWidth()));
+            }
+
+            void paint (juce::Graphics& g) override
+            {
+                IntegraWidget::paint (g);
+                auto& t = Theme::get();
+                auto track = trackArea();
+                g.setColour (t.controlBackground);
+                g.fillRoundedRectangle (track, 3.0f);
+                const float a = unitToPixel (getUnit ("min")), b = unitToPixel (getUnit ("max"));
+                auto range = isVertical() ? juce::Rectangle<float> (track.getX(), juce::jmin (a, b), track.getWidth(), std::abs (b - a))
+                                          : juce::Rectangle<float> (juce::jmin (a, b), track.getY(), std::abs (b - a), track.getHeight());
+                g.setColour (t.controlFill);
+                g.fillRect (range);
+                g.setColour (t.accent);
+                for (float edge : { a, b })
+                    if (isVertical())  g.fillRect (track.getX(), edge - 1.5f, track.getWidth(), 3.0f);
+                    else               g.fillRect (edge - 1.5f, track.getY(), 3.0f, track.getHeight());
+
+                // direction arrow: min -> max (inverted ranges point the other way)
+                juce::Path arrow;
+                const float mid = (a + b) / 2.0f, dir = b >= a ? 1.0f : -1.0f;
+                if (std::abs (b - a) > 16.0f)
                 {
-                    if (updating)
-                        return;
-                    setUnit ("min", slider.getMinValue());
-                    setUnit ("max", slider.getMaxValue());
-                };
-                addAndMakeVisible (slider);
-                valuesChanged();
+                    if (isVertical())
+                    {
+                        const float x = track.getCentreX();
+                        arrow.addTriangle (x - 5.0f, mid - dir * 4.0f, x + 5.0f, mid - dir * 4.0f, x, mid + dir * 4.0f);
+                    }
+                    else
+                    {
+                        const float y = track.getCentreY();
+                        arrow.addTriangle (mid - dir * 4.0f, y - 5.0f, mid - dir * 4.0f, y + 5.0f, mid + dir * 4.0f, y);
+                    }
+                    g.setColour (t.text.withAlpha (0.6f));
+                    g.fillPath (arrow);
+                }
+                g.setColour (t.outline);
+                g.drawRoundedRectangle (track, 3.0f, 1.0f);
             }
 
-            void valuesChanged() override
+            void mouseDown (const juce::MouseEvent& e) override
             {
-                const juce::ScopedValueSetter<bool> svs (updating, true);
-                slider.setMinAndMaxValues (getUnit ("min"), juce::jmax (getUnit ("min"), getUnit ("max")), juce::dontSendNotification);
+                popup = e.mods.isPopupMenu() || ! getControlArea().contains (e.getPosition());
+                if (popup)
+                    return IntegraWidget::mouseDown (e);
+
+                const double minU = getUnit ("min"), maxU = getUnit ("max");
+                const float pos = isVertical() ? e.position.y : e.position.x;
+                const float minP = unitToPixel (minU), maxP = unitToPixel (maxU);
+                constexpr float grabEndPixels = 4.0f;
+                const double unit = pixelToUnit (e.position);
+                if (std::abs (pos - minP) <= grabEndPixels)
+                {
+                    mode = Mode::min;
+                    grabOffset = minU - unit;
+                }
+                else if (std::abs (pos - maxP) <= grabEndPixels)
+                {
+                    mode = Mode::max;
+                    grabOffset = maxU - unit;
+                }
+                else if (pos > juce::jmin (minP, maxP) && pos < juce::jmax (minP, maxP))
+                {
+                    mode = Mode::both;
+                    grabOffset = unit;
+                    startMin = minU;
+                    startMax = maxU;
+                }
+                else
+                {
+                    // draw a new range from here
+                    mode = Mode::max;
+                    grabOffset = 0.0;
+                    setRange (unit, unit);
+                }
+                lastMode = mode;
             }
 
-            void resized() override
+            void mouseDrag (const juce::MouseEvent& e) override
             {
-                slider.setBounds (getControlArea().withSizeKeepingCentre (getControlArea().getWidth(), 30));
+                if (popup || mode == Mode::none)
+                    return;
+                const double unit = pixelToUnit (e.position);
+                if (mode == Mode::min)       setRange (juce::jlimit (0.0, 1.0, unit + grabOffset), getUnit ("max"));
+                else if (mode == Mode::max)  setRange (getUnit ("min"), juce::jlimit (0.0, 1.0, unit + grabOffset));
+                else
+                {
+                    // both ends move, each clamped on its own (the range can shrink at the edges)
+                    const double delta = unit - grabOffset;
+                    setRange (juce::jlimit (0.0, 1.0, startMin + delta), juce::jlimit (0.0, 1.0, startMax + delta));
+                }
+            }
+
+            void mouseUp (const juce::MouseEvent&) override     { mode = Mode::none; }
+
+            void mouseDoubleClick (const juce::MouseEvent& e) override
+            {
+                // invert: only for a double-click in the middle
+                if (! popup && lastMode == Mode::both && getControlArea().contains (e.getPosition()))
+                {
+                    const double minU = getUnit ("min"), maxU = getUnit ("max");
+                    setRange (maxU, minU);
+                    return;
+                }
+                IntegraWidget::mouseDoubleClick (e);
             }
 
             juce::String getValueText() const override
@@ -827,8 +1003,64 @@ namespace integra
             }
 
         private:
-            Guarded<juce::Slider> slider { *this };
-            bool updating = false;
+            enum class Mode { none, min, max, both };
+
+            void setRange (double minU, double maxU)
+            {
+                setUnit ("min", minU);
+                setUnit ("max", maxU);
+                repaint();
+            }
+
+            Mode mode = Mode::none, lastMode = Mode::none;
+            double grabOffset = 0.0, startMin = 0.0, startMax = 0.0;
+            bool popup = false;
+        };
+
+        //==========================================================================
+        /** NumberBoxControl: the value in a box; a click on it types a new one. */
+        class NumberBoxWidget  : public IntegraWidget
+        {
+        public:
+            NumberBoxWidget (AppContext& c, const juce::String& p, const WidgetSpec& s) : IntegraWidget (c, p, s) {}
+
+            void valuesChanged() override   { repaint(); }
+
+            juce::Rectangle<int> box() const
+            {
+                auto area = getControlArea();
+                // text box aspect ratio 3:1
+                const int h = juce::jmin (area.getHeight(), area.getWidth() / 3);
+                return area.withSizeKeepingCentre (juce::jmin (area.getWidth(), h * 3), juce::jmax (18, h));
+            }
+
+            juce::Rectangle<int> getValueTextArea (const juce::String&) const override     { return box(); }
+
+            void paint (juce::Graphics& g) override
+            {
+                IntegraWidget::paint (g);
+                auto& t = Theme::get();
+                auto r = box().toFloat();
+                g.setColour (t.controlBackground);
+                g.fillRoundedRectangle (r, 4.0f);
+                g.setColour (t.outline);
+                g.drawRoundedRectangle (r, 4.0f, 1.0f);
+                if (getValueEditor() == nullptr)
+                {
+                    g.setColour (t.text);
+                    g.setFont (juce::FontOptions (juce::jmin (r.getHeight() * 0.75f, r.getWidth() * 0.2f)));
+                    g.drawFittedText (info ("value").format (get ("value")), r.toNearestInt().reduced (4, 0), juce::Justification::centred, 1);
+                }
+            }
+
+            void mouseDown (const juce::MouseEvent& e) override
+            {
+                if (e.mods.isPopupMenu() || ! box().contains (e.getPosition()))
+                    return IntegraWidget::mouseDown (e);
+                startEditingValue ("value");
+            }
+
+            juce::String getValueText() const override  { return {}; }    // shown in the box
         };
 
         //==========================================================================
@@ -1031,7 +1263,7 @@ namespace integra
 
         if (type == "Slider")               return std::make_unique<SliderWidget> (c, p, s, SliderWidget::Style::automatic);
         if (type == "Knob")                 return std::make_unique<SliderWidget> (c, p, s, SliderWidget::Style::knob);
-        if (type == "NumberBox")            return std::make_unique<SliderWidget> (c, p, s, SliderWidget::Style::numberBox);
+        if (type == "NumberBox")            return std::make_unique<NumberBoxWidget> (c, p, s);
         if (type == "Checkbox")             return std::make_unique<CheckboxWidget> (c, p, s);
         if (type == "Trigger")              return std::make_unique<ButtonWidget> (c, p, s, ButtonWidget::Kind::trigger);
         if (type == "PlayButton")           return std::make_unique<ButtonWidget> (c, p, s, ButtonWidget::Kind::play);

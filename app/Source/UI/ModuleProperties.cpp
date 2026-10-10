@@ -78,12 +78,7 @@ namespace integra
             bool hasEnvelope = block != nullptr && block->findEnvelopeForTarget (endpoint) != nullptr;
             envelope.setToggleState (hasEnvelope, juce::dontSendNotification);
 
-            bool hasMidi = false;
-            if (block != nullptr)
-                for (auto& s : block->scalers)
-                    if (s.targetPath == endpoint && s.sourcePath.endsWith (".value"))
-                        hasMidi = true;
-            midi.setToggleState (hasMidi, juce::dontSendNotification);
+            midi.setToggleState (! learnedEndpoints().isEmpty(), juce::dontSendNotification);
         }
 
         void resized() override
@@ -139,26 +134,63 @@ namespace integra
             refresh();
         }
 
+        /** Endpoints of this control that MIDI can drive (ControlContainer: unlocked ones). */
+        juce::StringArray learnableEndpoints() const
+        {
+            juce::StringArray result;
+            for (auto attribute : { "value", "x", "y", "min", "max" })
+                if (auto p = widget->endpointPath (attribute); p.isNotEmpty() && ! widget->isLocked (attribute)
+                     && EndpointInfo::find (context.session, p).canBeTarget)
+                    result.addIfNotAlreadyThere (p);
+            return result;
+        }
+
+        juce::StringArray learnedEndpoints() const
+        {
+            juce::StringArray result;
+            if (auto* block = context.model.get().findBlock (parentPath (widget->getModulePath())))
+                for (auto attribute : { "value", "x", "y", "min", "max", "level" })
+                    if (auto p = widget->endpointPath (attribute); p.isNotEmpty())
+                        for (auto& s : block->scalers)
+                            if (s.targetPath == p && s.sourcePath.endsWith (".value"))
+                                result.addIfNotAlreadyThere (p);
+            return result;
+        }
+
         void learnMidi()
         {
+            // ControlContainer.onClickMidiLearnButton: learning again removes it; with several
+            // endpoints a menu asks which one to learn
             const auto blockPath = parentPath (widget->getModulePath());
-            const auto endpoint = primaryEndpoint();
-
             if (midi.getToggleState())
             {
-                // remove the MIDI routing(s) to this endpoint
                 juce::StringArray toRemove;
                 if (auto* block = context.model.get().findBlock (blockPath))
                     for (auto& s : block->scalers)
-                        if (s.targetPath == endpoint && s.sourcePath.endsWith (".value"))
+                        if (learnedEndpoints().contains (s.targetPath) && s.sourcePath.endsWith (".value"))
                             toRemove.add (parentPath (s.sourcePath)), toRemove.add (s.path);
                 context.controller.remove (toRemove);
+                refresh();
+                return;
             }
-            else
+
+            const auto endpoints = learnableEndpoints();
+            if (endpoints.size() == 1)
             {
-                context.controller.addMidiControl (blockPath, endpoint, true);
+                context.controller.addMidiControl (blockPath, endpoints[0], true);
+                refresh();
             }
-            refresh();
+            else if (endpoints.size() > 1)
+            {
+                juce::PopupMenu menu;
+                for (auto& endpoint : endpoints)
+                {
+                    auto i = EndpointInfo::find (context.session, endpoint);
+                    menu.addItem (i.label.isNotEmpty() ? i.label : lastElement (endpoint),
+                                  [this, blockPath, endpoint] { context.controller.addMidiControl (blockPath, endpoint, true); refresh(); });
+                }
+                menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&midi));
+            }
         }
 
         void toggleEnvelope()

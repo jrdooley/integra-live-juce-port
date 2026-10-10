@@ -55,6 +55,12 @@ Flex paths are relative to `GUI/src/components/`.
 | Envelope selection | `BlockPropertiesTitlebar.as`, `AddEnvelope.as`, `RemoveEnvelope.as` | A block's properties title bar: Envelope <module> <attribute> [x]. Picking an attribute selects its envelope or adds one at its current value; attributes driven by routing or MIDI are disabled; x deletes the selected envelope. Kept in step with the envelope selected in the Arrange view. |
 | Timeline zoom / scroll strip | `Timeline.as` (`_markingTop`, `_zoomCoefficient`) | A 12 px strip above the scene bar (Flex 15 px) with the scroll indicator: drag sideways to scroll, down / up to zoom in / out about the clicked time (15 px dead zone, doubling per 50 px); Shift locks an axis. |
 | Scene delete key, breadcrumbs, Ctrl+E | `Timeline.as`, `Breadcrumbs.as`, `ScriptingView.as` | Backspace deletes the selected scene (ruler focused, scene in view). The properties title's project and track names are links that deselect down to them. Ctrl/Cmd+E runs the selected script, also from inside the editor (Flex only outside it). |
+| Module graph selection | `ModuleGraph.onClickModule`, `onClickLink`, `removeSelection` | Selecting a module selects its connections (Ctrl/Cmd-click and the rubber band too); a plain click on a connection selects only it, Ctrl/Cmd-click toggles it; Delete / Backspace removes the selected connections and modules in one undo step. |
+| Module snapping | `ModuleGraph.getModuleRepositionSnap` | A dragged module's edges snap to unselected modules' edges within 10 px (nearest first, left / top win), with snap lines; no half-grid snapping. |
+| Live View tick | `ModuleGraphElement`, `SetModuleInstanceLiveViewControls`, `UserDataCommand.findNewLiveViewControlPosition` | A tick at each module's top right, in the track colour (grey when inactive), ticked when any of its controls is in the Live view; clicking adds all of them (placed left to right without overlaps) or removes all, one undo step. |
+| Module graph menu | `ModuleGraph` context menu, `ImportModule.as` | Remove Selection, Import Module... (`.integra`, `.mixd`; top left at the clicked point; selected; block files refused; one undo step), Export Module..., Change Track Colour... |
+| Tag cloud size | `TagCloud.as` | Drag the "Tags..." strip to resize the tag cloud, from nothing to its tags' height, at most half the library (not stored, as in Flex). |
+| Widgets | `ControlManager`, `AttributeLabel`, `NumberBoxControl`, `RangeSliderControl`, `KnobControl`, `ControlContainer` | Values go to the nearest allowed value and integers are rounded; sliders step through integer ranges of up to 32. Multi-value controls have a value to type per attribute (XY pad x / y, range min / max). Click a number box to type. Range slider: drag an end (4 px), drag the middle to move both, drag elsewhere to draw a range, double-click the middle to swap the ends; vertical when taller than wide. Knobs: vertical drag, 200 px for the whole range. MIDI learn on a control with several values asks which one. |
 | MIDI indicator | `MidiInputIndicator.as` | Lights for every incoming message, including repeats of the same message. *(No automated test.)* |
 
 ## Arrange view and timeline
@@ -70,16 +76,12 @@ Flex paths are relative to `GUI/src/components/`.
 ## Module view
 
 **Missing / partial**
-* Library: a resizable tag cloud (it fits its tags, up to half the library).
-* Graph: Ctrl/Cmd-click and rubber band select modules only (Flex also selected their
-  links); snapping to other modules' edges with snap lines; per-module
-  "Live View" checkbox; right-click on empty space for Import Module;
-  track-colour tint and greyed-out inactive blocks.
-* Properties: typing is for the main value only (Flex labelled each attribute of a
-  multi-attribute widget, e.g. XY pad x and y); MIDI learn for any endpoint of a
-  multi-endpoint widget (XY pad y, range slider max).
-* Widgets: NumberBox text entry; slider quantising to allowed values; RangeSlider drag
-  middle to move both ends, draw a new range, double-click to invert, vertical orientation.
+* Graph: module elements are drawn flat (Flex: gradients and bevels); links are cubic
+  curves rather than Flex's arcs; dragging from the library over a link doesn't push
+  downstream modules right.
+* Widgets: values typed into a number box are sent on Enter (Flex sent every
+  keystroke); allowed-value notches aren't drawn on sliders and knobs; the Flex
+  controls' shapes and glows are approximated with JUCE sliders.
 
 ## Live view
 

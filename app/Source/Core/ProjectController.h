@@ -225,6 +225,17 @@ namespace integra
 
         /** Live view control visibility for a module widget. */
         void setLiveViewControl (juce::String modulePath, juce::String widgetLabel, bool shown, juce::Rectangle<float> bounds = {});
+        /** The module graph's Live View tick (SetModuleInstanceLiveViewControls): shows all of a
+            module's widgets in the Live view, placed where they don't overlap other controls
+            (sorted by their design position), or hides all of them. `widgets` are the module's
+            widget labels with their design positions. One undo step. */
+        void setModuleLiveViewControls (juce::String modulePath, const std::vector<std::pair<juce::String, juce::Rectangle<float>>>& widgets, bool shown);
+        /** UserDataCommand.findNewLiveViewControlPosition: from (20, 20), 20 px steps right
+            until the control, grown by 20, overlaps no other control. */
+        static juce::Rectangle<float> findNewLiveViewControlPosition (const std::vector<BlockUserData::LiveViewControl>&, juce::Point<float> size);
+        /** Import Module (ImportModule): loads a saved module into a block with its top left at
+            a grid position, and selects it. One undo step. */
+        juce::Result importModule (const juce::File&, juce::String blockPath, juce::Point<float> gridPosition, juce::String* newModulePath = nullptr);
 
         //==============================================================================
         /** Runs fn as a single named undo transaction. Calls nested inside another
