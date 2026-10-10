@@ -526,6 +526,11 @@ namespace integra
         updateTrackUserData (trackPath, [expanded] (TrackUserData& d) { d.arrangeViewExpanded = expanded; });
     }
 
+    void ProjectController::setTrackLiveViewExpanded (juce::String trackPath, bool expanded)
+    {
+        updateTrackUserData (trackPath, [expanded] (TrackUserData& d) { d.liveViewExpanded = expanded; });
+    }
+
     void ProjectController::previewTrackColour (juce::String trackPath, juce::Colour colour)
     {
         if (auto* track = model.get().findTrack (trackPath))

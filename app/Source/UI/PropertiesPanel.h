@@ -2,13 +2,14 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "Core/AppContext.h"
+#include "Markdown.h"
 #include "Core/EndpointInfo.h"
 #include "InfoView.h"
 
 namespace integra
 {
     /** Renders the small Markdown subset used by Integra info texts into an AttributedString. */
-    juce::AttributedString renderMarkdown (const juce::String& markdown, juce::Colour text, juce::Colour accent);
+
 
     /** Control endpoints below a container that can act as routing sources or targets. */
     juce::StringArray findRoutableEndpoints (IntegraSession&, const juce::String& containerPath, bool sources);

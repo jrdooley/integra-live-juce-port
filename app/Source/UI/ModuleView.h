@@ -6,6 +6,7 @@
 #include "ModuleProperties.h"
 #include "ContainerControls.h"
 #include "InfoView.h"
+#include "SavedDivider.h"
 
 namespace integra
 {
@@ -291,6 +292,7 @@ namespace integra
         juce::Viewport graphViewport;
         ModuleProperties properties;
         juce::StretchableLayoutManager verticalLayout;
-        std::unique_ptr<juce::StretchableLayoutResizerBar> divider;
+        std::unique_ptr<SavedDivider> divider;
+        bool propertiesHeightRestored = false;
     };
 }

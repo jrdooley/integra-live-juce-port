@@ -72,7 +72,7 @@ namespace integra
             }
         }
 
-        // other HTML tags go; Markdown links keep their text
+        // other HTML tags go; Markdown links stay (the Info view opens them)
         juce::String out;
         for (int i = 0; i < text.length(); ++i)
         {
@@ -86,13 +86,6 @@ namespace integra
                 }
             }
             out << juce::String::charToString (text[i]);
-        }
-        for (int start = out.indexOfChar ('['); start >= 0; start = out.indexOfChar (start + 1, '['))
-        {
-            const int mid = out.indexOf (start, "](");
-            const int end = mid > 0 ? out.indexOfChar (mid, ')') : -1;
-            if (mid > start && end > mid && ! out.substring (start, mid).containsChar ('\n'))
-                out = out.substring (0, start) + out.substring (start + 1, mid) + out.substring (end + 1);
         }
         return out.trim();
     }
@@ -208,7 +201,8 @@ namespace integra
             if (first.trimCharactersAtStart ("# ").trim() == displayed.title.trim())
                 markdown = markdown.trimStart().fromFirstOccurrenceOf ("\n", false, false);
         }
-        auto attributed = renderMarkdown (markdown.isEmpty() ? juce::String ("*No info*") : markdown, t.text, t.accent);
+        text.links.clear();
+        auto attributed = renderMarkdown (markdown.isEmpty() ? juce::String ("*No info*") : markdown, t.text, t.accent, &text.links);
         const int width = juce::jmax (40, viewport.getMaximumVisibleWidth() - 4);
         text.layout.createLayout (attributed, (float) width);
         text.setSize (width, (int) std::ceil (text.layout.getHeight()) + 8);

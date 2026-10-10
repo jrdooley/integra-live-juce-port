@@ -4,6 +4,7 @@
 #include "ContainerControls.h"
 #include "KeybindingView.h"
 #include "InfoView.h"
+#include "ArrangeView.h"
 
 namespace integra
 {
@@ -26,7 +27,10 @@ namespace integra
                       private juce::Timer
     {
     public:
-        explicit LiveView (AppContext&);
+        LiveView (AppContext&, TimelineMapping& sharedTimeline);
+        /** Called when the timeline's zoom strip changes the shared zoom / scroll. */
+        std::function<void()> onTimelineChanged;
+        TimelineRuler& getTimeline() noexcept               { return timeline; }
         ~LiveView() override;
 
         void paint (juce::Graphics&) override;
@@ -71,6 +75,7 @@ namespace integra
         juce::OwnedArray<juce::TextButton> sceneButtons;
         ActiveButton projectActive { context };
         ContainerMeter projectMeter { context };
+        TimelineRuler timeline;
         juce::Viewport viewport;
         juce::Component content;
         juce::OwnedArray<TrackPanel> panels;

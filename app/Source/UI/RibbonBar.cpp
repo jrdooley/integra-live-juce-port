@@ -77,6 +77,7 @@ namespace integra
                 context.watcher.watch (watchedMidiMonitor + ".midiMessage", this, [this] (const juce::String&, CCommandSource)
                 {
                     lastMidi = juce::Time::getMillisecondCounter();
+                    midiReceived ((juce::uint32) (juce::int64) context.session.getValue (watchedMidiMonitor + ".midiMessage"));
                 });
         }
         midiActivity = juce::Time::getMillisecondCounter() - lastMidi < 250;
@@ -127,13 +128,15 @@ namespace integra
         meters.removeFromTop (2);
         drawMeter (meters.withTrimmedLeft (24), outLevel, "out");
 
-        // MIDI activity
+        // MIDI activity, and the last control change and note (MidiInputIndicator)
         auto midiLed = juce::Rectangle<float> ((float) display.getRight() + 112.0f, (float) getHeight() * 0.5f - 6.0f, 12.0f, 12.0f);
         g.setColour (midiActivity ? t.meterLow : t.controlBackground);
         g.fillEllipse (midiLed);
-        g.setColour (t.textDim);
+        g.setColour (juce::Colour (0xff808080));
         g.setFont (juce::FontOptions (10.0f));
-        g.drawText ("MIDI", midiLed.translated (16.0f, 0.0f).withWidth (30.0f).toNearestInt(), juce::Justification::centredLeft);
+        auto readout = midiLed.translated (16.0f, 0.0f).withWidth (80.0f).withY (6.0f).withHeight ((float) getHeight() - 12.0f).toNearestInt();
+        g.drawText (getControllerText(), readout.removeFromTop (readout.getHeight() / 2), juce::Justification::centredLeft);
+        g.drawText (getNoteText(), readout, juce::Justification::centredLeft);
 
         g.setColour (t.outline);
         g.drawHorizontalLine (getHeight() - 1, 0.0f, (float) getWidth());
@@ -168,5 +171,47 @@ namespace integra
         if (p.x > getWidth() / 2 && c == this)
             return InfoTexts::forView ("Ribbon/MidiInputIndicator");
         return {};
+    }
+
+    juce::String RibbonBar::pitchName (int pitch)
+    {
+        static const char* names[] = { "c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b" };
+        pitch = juce::jlimit (0, 127, pitch);
+        return juce::String (names[pitch % 12]) + juce::String (pitch / 12 - 1);
+    }
+
+    void RibbonBar::midiReceived (juce::uint32 message)
+    {
+        // MidiInputIndicator.onReceiveRawMidiInput: control changes and note-ons only; the
+        // channel isn't shown
+        const auto status = (message & 0xF0) >> 4;
+        const int data1 = (int) ((message & 0xFF00) >> 8), data2 = (int) ((message & 0xFF0000) >> 16);
+        const auto now = juce::Time::getMillisecondCounter();
+        if (status == 0xB)
+        {
+            lastController = data1;
+            lastControllerValue = data2;
+            lastControllerTime = now;
+        }
+        else if (status == 0x9)
+        {
+            lastNote = data1;
+            lastNoteTime = now;
+        }
+        repaint();
+    }
+
+    juce::String RibbonBar::getControllerText() const
+    {
+        if (lastController < 0 || juce::Time::getMillisecondCounter() - lastControllerTime > midiReadoutMilliseconds)
+            return "cc  -";
+        return "cc" + juce::String (lastController) + "  " + juce::String (lastControllerValue);
+    }
+
+    juce::String RibbonBar::getNoteText() const
+    {
+        if (lastNote < 0 || juce::Time::getMillisecondCounter() - lastNoteTime > midiReadoutMilliseconds)
+            return "note  -";
+        return "note  " + pitchName (lastNote);
     }
 }

@@ -14,6 +14,12 @@ namespace integra
     {
     public:
         explicit PreferencesPanel (AppContext&);
+        ~PreferencesPanel() override;
+
+        /** Reset to Defaults (ResetAudioAndMidiSettings): the default audio device, and
+            libIntegra's MIDI settings restored (restoreDefaults); the saved choices go. */
+        void resetToDefaults();
+        int getNumMidiDevices() const noexcept      { return midiInputs.size() + midiOutputs.size(); }
 
         void paint (juce::Graphics&) override;
         void resized() override;
@@ -30,5 +36,6 @@ namespace integra
         juce::Label midiTitle, schemeTitle;
         juce::OwnedArray<juce::ToggleButton> midiInputs, midiOutputs;
         juce::ToggleButton darkScheme { "Dark colour scheme" };
+        juce::TextButton resetButton { "Reset to Defaults" };
     };
 }

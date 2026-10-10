@@ -61,6 +61,12 @@ Flex paths are relative to `GUI/src/components/`.
 | Module graph menu | `ModuleGraph` context menu, `ImportModule.as` | Remove Selection, Import Module... (`.integra`, `.mixd`; top left at the clicked point; selected; block files refused; one undo step), Export Module..., Change Track Colour... |
 | Tag cloud size | `TagCloud.as` | Drag the "Tags..." strip to resize the tag cloud, from nothing to its tags' height, at most half the library (not stored, as in Flex). |
 | Widgets | `ControlManager`, `AttributeLabel`, `NumberBoxControl`, `RangeSliderControl`, `KnobControl`, `ControlContainer` | Values go to the nearest allowed value and integers are rounded; sliders step through integer ranges of up to 32. Multi-value controls have a value to type per attribute (XY pad x / y, range min / max). Click a number box to type. Range slider: drag an end (4 px), drag the middle to move both, drag elsewhere to draw a range, double-click the middle to swap the ends; vertical when taller than wide. Knobs: vertical drag, 200 px for the whole range. MIDI learn on a control with several values asks which one. |
+| Live view track collapse | `ViewHolder.canCollapse`, `LiveViewTrack.as`, `SetTrackExpanded` | Collapse button and title-bar click, while a block is shown; collapsed tracks show only their title bar; stored in `liveViewExpanded` (Flex's `LIVE_VIEW == ARRANGE_VIEW` bug made it share the Arrange view's state; the port keeps them apart); undoable. |
+| Live view timeline | `Timeline(false)`, `MainViewContainer.mxml`, `DoTimelineAutoscroll.as` | A read-only timeline above the Live view, sharing the Arrange view's zoom and scroll: its zoom strip works, clicking a scene selects it, elsewhere moves the playhead. Both timelines follow the playhead while playing (back to 10% when it leaves 10-80% of the width). |
+| MIDI readout | `MidiInputIndicator.as` | "cc<number>  <value>" and "note  <pitch>" (c4 = 60) for the last control change and note-on, each for 5 seconds; not clickable, as in Flex. |
+| Settings | `Preferences.as`, `ResetAudioAndMidiSettings.as` | Reset to Defaults; the MIDI device lists follow libIntegra's. |
+| Remembered panel sizes | `MainViewContainer.mxml` application state | The Arrange view and Module View properties heights (with the Block Library width, Scene Shortcuts height and collapse, Info view state and text size from earlier). |
+| About and Help | `AboutBox.mxml`, `ModuleDocumentationWriter.as`, `InfoView.as` | About box with version, copyright, acknowledgements and the GPL page; Help > Module Documentation generates the endpoint reference page; Info view links open in the browser. |
 | MIDI indicator | `MidiInputIndicator.as` | Lights for every incoming message, including repeats of the same message. *(No automated test.)* |
 
 ## Arrange view and timeline
@@ -86,23 +92,23 @@ Flex paths are relative to `GUI/src/components/`.
 ## Live view
 
 **Missing / partial**
-* Per-track collapse.
-* Read-only timeline above the Live view.
+* Collapsing and expanding isn't animated, nor is the change of block under the
+  playhead (Flex slid the controls).
 * Snapping while resizing diagonally uses each edge's own snap (Flex's
   `doDiagonalReposition` keeps the aspect of the drag); the maximum control sizes of
   `ControlMeasurer` aren't applied.
 
 ## Application
 
-* Ribbon: clickable MIDI indicator with CC/note readout; lighting (light/dark) button
-  (in the View menu instead).
-* Info view: Markdown is shown as styled text with links reduced to their text (Flex
-  opened them); module documentation pages (Flex's Help > module docs) aren't bundled.
+* Ribbon: the lighting (light/dark) button is in the View menu instead.
 * Text size scales the whole window rather than only the text.
-* Preferences: Reset to Defaults; MIDI device lists don't refresh; panel sizes, last
-  folders and font size aren't persisted.
-* About box (licence/acknowledgements), update check. The crash reporter is mostly
-  unnecessary now that libIntegra runs in-process.
+* Settings: the window position and size, the module library width and the last
+  block / track / module folders aren't remembered; audio devices are JUCE's selector
+  rather than Flex's driver / device / channel / sample-rate rows.
+* Help: Flex's local help pages (Integra Live Help, module development guides) and the
+  User Forum link aren't shipped; the startup update check (integralive.org, which no
+  longer serves it) is left out. The crash reporter is mostly unnecessary now that
+  libIntegra runs in-process.
 
 Deliberate differences: the port's undo history covers project edits only (Flex also
 recorded transport and view changes), and it adds a few extras (Module view ENV toggle,

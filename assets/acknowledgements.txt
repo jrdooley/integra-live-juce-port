@@ -1,0 +1,15 @@
+Integra Live was developed by the Integra project at Birmingham Conservatoire,
+Birmingham City University, part-funded by the Culture Programme of the European
+Union 2006-2011. This version is a port of its Flex user interface to JUCE.
+
+It uses:
+
+- libIntegra (GNU GPL v2) - the Integra server and module system
+- libpd and Pure Data 0.43 (BSD licence) - audio processing
+- Pd externals (bonk~, fiddle~, expr, freeverb~, partconv~ and others) and flext
+- JUCE 8 (GNU AGPL v3 / commercial) - user interface and audio devices
+- Lua 5.2 (MIT licence) - scripting
+- libxml2, zlib, minizip (MIT / zlib licences)
+- libsndfile (GNU LGPL), FFTW (GNU GPL), PortMidi (MIT-style licence),
+  PortAudio (MIT licence), Boost (Boost licence), tmpfileplus (Mozilla Public
+  License 2.0)

@@ -15,6 +15,7 @@ or modified. This file records exactly what was copied, from where, and why.
 | `modules/` | `integra-framework@623ecf71:modules/` | 82 `.module` files; identical to IntegraLive `develop` except the fixed `metronome.module`. Unlicense. |
 | `blocks/` | `IntegraLive@91d85f41:blocks/` | Demo block library (`index.xml` + 6 `.integra` files). |
 | `viewInfo/` | `IntegraLive@91d85f41:GUI/src/assets/viewInfo/` | The Info view's help texts (82 Markdown files), shown as in the Flex GUI. GPL-2.0-or-later. |
+| `assets/` | `IntegraLive@91d85f41:GUI/src/assets/` (`copyrightNotice.txt`, `GNU General Public License v2.0.htm`, `module_documentation_styles.css`) | About box texts, the licence page and the module documentation's style sheet; plus the app icon and `acknowledgements.txt` written for the port. |
 | `reference/integra2-juce-prototype/` | `IntegraLive@b8cef433 (integra2):JUCE-libIntegra-Client-1/` | The 2018 JUCE prototype, kept for provenance only — **not built**. |
 
 ## Deliberately not imported

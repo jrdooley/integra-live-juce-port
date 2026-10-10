@@ -1511,7 +1511,12 @@ namespace integra
         verticalLayout.setItemLayout (0, 120, -1.0, -0.55);   // graph
         verticalLayout.setItemLayout (1, 6, 6, 6);            // divider
         verticalLayout.setItemLayout (2, 120, -1.0, -0.45);   // properties
-        divider = std::make_unique<juce::StretchableLayoutResizerBar> (&verticalLayout, 1, false);
+        divider = std::make_unique<SavedDivider> (&verticalLayout, 1, false);
+        divider->onMoved = [this]
+        {
+            if (auto* settings = context.properties.getUserSettings())
+                settings->setValue ("modulePropertiesHeight", properties.getHeight());
+        };
         addAndMakeVisible (*divider);
 
         graph.onModuleSelected = [this] (const juce::String& module) { properties.setModule (module); };
@@ -1574,6 +1579,8 @@ namespace integra
 
         juce::Component* comps[] = { &graphViewport, divider.get(), &properties };
         verticalLayout.layOutComponents (comps, 3, area.getX(), area.getY(), area.getWidth(), area.getHeight(), true, true);
+        if (auto* settings = context.properties.getUserSettings())
+            restoreBottomHeight (verticalLayout, comps, area, settings->getIntValue ("modulePropertiesHeight", 0), propertiesHeightRestored);
 
         // the Info view sits right of the module properties (Flex: _moduleGraphInfoView)
         infoArea = {};

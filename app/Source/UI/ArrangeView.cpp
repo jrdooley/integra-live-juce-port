@@ -256,6 +256,17 @@ namespace integra
         if (e.y < sceneBarBottom)
         {
             Zone zone;
+            if (auto* s = sceneAt (e.position, zone); s != nullptr && readOnly)
+            {
+                // read-only: a click selects the scene, nothing more
+                if (! e.mods.isPopupMenu())
+                {
+                    context.controller.activateScene (s->path);
+                    if (onSceneSelected)
+                        onSceneSelected (s->path);
+                }
+                return;
+            }
             if (auto* s = sceneAt (e.position, zone))
             {
                 const auto path = s->path;
@@ -307,6 +318,17 @@ namespace integra
 
             if (e.mods.isPopupMenu())
                 return;
+
+            if (readOnly)
+            {
+                // empty scene bar of the read-only timeline: the playhead, as below
+                if (context.model.get().player.currentScene.isNotEmpty())
+                    context.controller.activateScene ({});
+                drag = Drag::playhead;
+                startTimer (50);
+                updateDrag (e.position.x);
+                return;
+            }
 
             // drag in empty scene bar to create a scene; the selected scene is deselected
             drag = Drag::newScene;
@@ -614,7 +636,7 @@ namespace integra
 
     void TimelineRuler::mouseDoubleClick (const juce::MouseEvent& e)
     {
-        if (e.y < sceneBarTop || e.y >= sceneBarBottom || e.x < mapping.laneX)
+        if (readOnly || e.y < sceneBarTop || e.y >= sceneBarBottom || e.x < mapping.laneX)
             return;
         // double-click a scene to rename it in place (SceneBar)
         Zone zone;
@@ -2445,11 +2467,13 @@ namespace integra
             ruler.repaint();
             lanes.repaint();
 
-            // follow the playhead while playing
-            const float x = mapping.tickToX (tick);
-            if (x > (float) lanes.getWidth() - 40.0f && context.controller.isPlaying())
+            // follow the playhead while playing (DoTimelineAutoscroll: when it leaves 10% to
+            // 80% of the width, it goes back to 10%; not while the mouse is down)
+            const float x = mapping.tickToX (tick), width = (float) (lanes.getWidth() - mapping.laneX);
+            const float left = (float) mapping.laneX + width * 0.1f, right = (float) mapping.laneX + width * 0.8f;
+            if ((x < left || x > right) && context.controller.isPlaying() && ! juce::Desktop::getInstance().getMainMouseSource().isDragging())
             {
-                mapping.scrollTicks = tick - 40.0 / mapping.pixelsPerTick;
+                mapping.scrollTicks = juce::jmax (0.0, tick - 0.1 * width / mapping.pixelsPerTick);
                 updateScrollBar (true);
             }
         }

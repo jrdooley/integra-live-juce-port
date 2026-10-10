@@ -217,6 +217,16 @@ clicking a key selects its scene and dragging a scene's key onto a free key
 rebinds it. Its title bar collapses it (click the arrow) or resizes it
 (drag, 100–400 px); both are remembered.
 
+A **timeline** runs above the tracks (Flex's read-only `Timeline`): it shares
+the Arrange view's zoom and scroll (its top strip zooms and scrolls), clicking
+a scene selects it (scenes can't be created, moved or renamed there), and
+clicking or dragging elsewhere moves the playhead. While playing, both
+timelines follow the playhead (`DoTimelineAutoscroll`: back to 10% of the
+width when it leaves 10-80%). Each track's **collapse button** (or a click on
+its title bar) shrinks it to the title bar while a block is shown; this is
+stored in the track's `liveViewExpanded`, separately from the Arrange view
+(Flex meant to, but wrote the Arrange view's state).
+
 The view is rebuilt only when something it shows changes (tracks, the block
 under the playhead, its modules or live controls, scenes), and never while a
 mouse button is down in it, so model changes no longer interrupt a drag.
@@ -287,15 +297,17 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
 
 * **Ribbon**: Arrange/Live switch, return-to-start, play/pause, previous/next
   scene, time and current scene display, input/output level meters, MIDI
-  activity light, Settings.
+  activity light with the last control change ("cc7  64") and note-on
+  ("note  c4") the MIDI monitor received, each shown for 5 seconds
+  (`MidiInputIndicator.as`), Settings.
 * **Menus & keys**: File (New, Open, Save, Save As, Import/Export Block,
   Import/Export Track, Install Third-Party Module), Edit (Undo/Redo with descriptions, Delete, Add
   Track, Delete Track Ctrl+Shift+T, Create Block Ctrl+B, Add Scene), Transport (Space play/pause, Enter or Home to return to
   the start, ←/→ or Ctrl+←/→ for scenes, as Flex's `onStageKeyDown`), View
   (Ctrl+1/2 for Arrange/Live, Module View, Info View Ctrl+3, Lock Info View F2
   — Ctrl+3 on macOS —, Module Manager, Lighting Ctrl+L, High Contrast Ctrl+H,
-  Text Size Ctrl+= / Ctrl+- / Ctrl+0, Settings), Help (Integra Live Website,
-  Open Demo Project, About). Unsaved-changes prompts on New/Open/Quit. Ribbon
+  Text Size Ctrl+= / Ctrl+- / Ctrl+0, Settings), Help (Open Demo Project,
+  Integra Live Website, Module Documentation, About). Unsaved-changes prompts on New/Open/Quit. Ribbon
   buttons don't take the keyboard focus, so these keys work anywhere outside
   text fields.
 * **Info view** — `InfoView.{h,cpp}` (Flex: `views/InfoView/`): help for
@@ -306,8 +318,17 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
   the project's own `info` for blocks, tracks, scenes and modules (module
   controls show each attribute's description). F2 locks it (scroll, and Edit
   for a node's info); it sits beside the properties, or beside Scene Shortcuts
-  in the Live view. Shown / hidden state, text size and the last project folder
-  are user settings.
+  in the Live view. Links in the text open in the browser. Shown / hidden
+  state, text size, the last project folder and the heights of the Arrange
+  and Module View properties panels are user settings.
+* **About** (`AboutBox.{h,cpp}`, Flex `AboutBox.mxml`): logo, version (with
+  libIntegra's), Flex's copyright notice, Acknowledgements (the components
+  the port uses) and License Agreement (the GNU GPL v2 page, shipped in
+  `assets/`). **Help > Module Documentation** writes an HTML page of every
+  module's description and endpoints (type, range or allowed values,
+  description), as Flex's `ModuleDocumentationWriter`, and opens it.
+
+  ![About box](images/about-box.png)
 
 ![Info view, locked on a block](images/info-view.png)
 * **High contrast and text size**: High Contrast doubles the distance of every
@@ -324,8 +345,10 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
   "Starting new Project..." and for the demo project).
 * **Settings**: JUCE's audio device selector (ALSA/JACK on Linux, CoreAudio,
   WASAPI/ASIO on Windows) — the device the libpd engine runs on; MIDI
-  input/output devices through libIntegra's `MidiSettings` module (PortMidi);
-  colour scheme.
+  input/output devices through libIntegra's `MidiSettings` module (PortMidi),
+  whose lists follow libIntegra's device lists; colour scheme; **Reset to
+  Defaults** (the default audio device, libIntegra's `restoreDefaults` for
+  MIDI, and the saved audio choice forgotten, as `ResetAudioAndMidiSettings`).
 
 ## Command-line options
 
@@ -341,7 +364,7 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (214 checks, all
+keyboard events and checks the resulting project state (227 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,
@@ -383,7 +406,11 @@ Backspace on a scene, the breadcrumbs, adding and deleting an envelope from
 the block title bar, and Ctrl+E in the script editor; module graph connection selection with
 modules, Delete and undo, the rubber band, edge snapping, the Live View tick,
 Import Module, the tag cloud's size, range slider gestures, number boxes,
-typing an XY pad's y, and value quantising.
+typing an XY pad's y, and value quantising; the MIDI indicator's readout,
+collapsing a Live view track (and undo), the Live view timeline (selecting
+scenes only, its zoom strip), Reset to Defaults, the remembered properties
+height, the About box, the module documentation and clicking an Info view
+link.
 
 Bugs it found and that are fixed:
 

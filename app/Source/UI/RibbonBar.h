@@ -23,8 +23,19 @@ namespace integra
         Info getInfoAt (juce::Point<int>) override;
         void resized() override;
 
+        /** MidiInputIndicator: the last control change ("cc7", value) and note-on ("note",
+            pitch name like "c4") the project's MIDI monitor received; each row goes back to
+            " - " 5 seconds after its last message. */
+        void midiReceived (juce::uint32 packedMessage);
+        juce::String getControllerText() const;
+        juce::String getNoteText() const;
+        static juce::String pitchName (int pitch);     // Utilities.midiPitchToName: 60 -> "c4"
+        static constexpr juce::uint32 midiReadoutMilliseconds = 5000;
+
     private:
         void timerCallback() override;
+        int lastController = -1, lastControllerValue = 0, lastNote = -1;
+        juce::uint32 lastControllerTime = 0, lastNoteTime = 0;
 
         AppContext& context;
         juce::TextButton arrangeButton { "Arrange" }, liveButton { "Live" };

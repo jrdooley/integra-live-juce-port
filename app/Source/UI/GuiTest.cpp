@@ -2,6 +2,9 @@
 #include "Widgets/IntegraWidgets.h"
 #include "ModuleManager.h"
 #include "LiveViewParts.h"
+#include "SavedDivider.h"
+#include "PreferencesPanel.h"
+#include "AboutBox.h"
 #include "TrackColourPicker.h"
 #include "PropertiesPanel.h"
 #include "Core/SelfTest.h"
@@ -1961,6 +1964,141 @@ namespace integra
             }
             saveShot (main, "module-view-batch6.png");
             main.showView ("arrange");
+        }
+
+        // --- Live view collapse and timeline, MIDI readout, Settings, panel sizes, About,
+        //     module documentation, Info view links ------------------------------------
+        {
+            context.controller.newProject();
+            pump();
+            auto& undo = context.controller.getUndoManager();
+            auto undoOnce = [&] { undo.undo(); model.rebuild(); pump(); };
+            const auto track = p.tracks.at (0).path;
+
+            // MIDI indicator readout (MidiInputIndicator)
+            auto& ribbon = main.getRibbon();
+            ribbon.midiReceived (0xB0u | (7u << 8) | (64u << 16));
+            ribbon.midiReceived (0x93u | (60u << 8) | (100u << 16));
+            ribbon.midiReceived (0x80u | (61u << 8));      // note-offs are ignored
+            t.check (ribbon.getControllerText() == "cc7  64" && ribbon.getNoteText() == "note  c4" && RibbonBar::pitchName (61) == "c#4",
+                     "the MIDI indicator shows the last control change and note (" + ribbon.getControllerText() + ", " + ribbon.getNoteText() + ")");
+
+            // Live view: collapse a track, the read-only timeline
+            main.showView ("live");
+            context.controller.setPlayPosition (10);
+            pump (300);
+            auto& live = main.getLiveView();
+            auto* panel = live.getPanel (track);
+            t.check (panel != nullptr && panel->canCollapse() && panel->isExpanded(), "a Live view track with a block can be collapsed");
+            if (panel != nullptr)
+            {
+                click (*panel, panel->getCollapseButtonBounds().getCentre());
+                pump (300);
+                panel = live.getPanel (track);
+                t.check (panel != nullptr && ! panel->isExpanded() && panel->getHeight() == LiveView::TrackPanel::headerHeight
+                            && ! p.tracks[0].userData.liveViewExpanded && p.tracks[0].userData.arrangeViewExpanded,
+                         "clicking its title bar collapses it in the Live view only");
+                undoOnce();
+                pump (300);
+                panel = live.getPanel (track);
+                t.check (panel != nullptr && panel->isExpanded(), "...undoable");
+            }
+
+            auto& timeline = live.getTimeline();
+            const auto& sharedMapping = arrange.getLanes().getMapping();
+            t.check (timeline.isShowing() && timeline.readOnly && timeline.getHeight() == TimelineRuler::height, "the Live view has a timeline above the tracks");
+            const auto scene = context.controller.addScene (0, 200);
+            pump();
+            const float sceneY = TimelineRuler::sceneBarTop + TimelineRuler::sceneBarHeight / 2.0f;
+            context.controller.activateScene ({});
+            const int scenesBefore = (int) p.scenes.size();
+            drag (timeline, { sharedMapping.tickToX (100), sceneY }, { sharedMapping.tickToX (150), sceneY });
+            pump();
+            t.check (p.player.currentScene == lastElement (scene) && (int) p.scenes.size() == scenesBefore && p.scenes[0].start == 0,
+                     "clicking a scene there selects it; it can't be moved");
+            drag (timeline, { sharedMapping.tickToX (400), sceneY }, { sharedMapping.tickToX (480), sceneY });
+            pump();
+            t.check ((int) p.scenes.size() == scenesBefore && p.player.currentScene.isEmpty(), "...and empty space doesn't make a scene");
+            const double zoomBefore = sharedMapping.pixelsPerTick;
+            const juce::Point<float> grab (sharedMapping.tickToX (200), 5.0f);
+            drag (timeline, grab, grab + juce::Point<float> (0.0f, 65.0f));
+            pump();
+            t.check (std::abs (sharedMapping.pixelsPerTick - zoomBefore * 2.0) < zoomBefore * 0.01, "its zoom strip zooms the shared timeline");
+            arrange.zoom (zoomBefore / sharedMapping.pixelsPerTick, (float) sharedMapping.laneX);
+            main.showView ("arrange");
+            pump();
+
+            // Settings: Reset to Defaults
+            {
+                if (auto* settings = context.properties.getUserSettings())
+                    settings->setValue ("audioDeviceState", "<DEVICESETUP/>");
+                PreferencesPanel prefs (context);
+                prefs.resetToDefaults();
+                pump();
+                auto* settings = context.properties.getUserSettings();
+                t.check (settings != nullptr && ! settings->containsKey ("audioDeviceState"), "Reset to Defaults forgets the saved audio settings");
+            }
+
+            // panel sizes are remembered (MainViewContainer: arrangeViewPropertiesHeight)
+            {
+                std::vector<SavedDivider*> dividers;
+                findAll (main, dividers);
+                SavedDivider* arrangeDivider = nullptr;
+                for (auto* d : dividers)
+                    if (d->isShowing())
+                        arrangeDivider = d;
+                if (arrangeDivider != nullptr)
+                {
+                    auto at = arrangeDivider->getLocalBounds().getCentre().toFloat();
+                    drag (*arrangeDivider, at, at + juce::Point<float> (0.0f, -40.0f));
+                    pump();
+                }
+                auto* settings = context.properties.getUserSettings();
+                t.check (arrangeDivider != nullptr && settings != nullptr
+                            && settings->getIntValue ("arrangeViewPropertiesHeight") == main.getProperties().getHeight(),
+                         "the properties panel's height is remembered (" + juce::String (main.getProperties().getHeight()) + ")");
+            }
+
+            // About box and module documentation
+            {
+                AboutBox about (context);
+                const bool copyright = about.getShownText().contains ("Birmingham City University");
+                about.showAcknowledgements (true);
+                t.check (copyright && about.getShownText().contains ("libpd") && AboutBox::getVersionText (context).contains ("libIntegra"),
+                         "the About box shows the version, copyright and acknowledgements");
+                saveShot (about, "about-box.png");
+                auto docs = writeModuleDocumentation (context);
+                const auto html = docs.loadFileAsString();
+                t.check (docs.existsAsFile() && html.contains ("Tap Delay") && html.contains ("<table>") && html.contains ("delayTime"),
+                         "Help > Module Documentation writes every module's endpoints");
+            }
+
+            // Info view links
+            {
+                auto& info = main.getInfoView();
+                const bool wasShown = info.isShown();
+                main.setInfoViewShown (true);
+                info.setLocked (true);
+                info.display ({ "Links", "See [the Lua site](http://lua.org) for more.", {} });
+                pump();
+                auto& text = info.getText();
+                juce::String opened;
+                text.onLinkClicked = [&] (const juce::String& url) { opened = url; };
+                juce::Point<float> onLink;
+                for (int y = 0; y < text.getHeight() && onLink.isOrigin(); y += 2)
+                    for (int x = 0; x < text.getWidth(); x += 2)
+                        if (text.linkAt ({ (float) x, (float) y }).isNotEmpty())
+                        {
+                            onLink = { (float) x, (float) y };
+                            break;
+                        }
+                if (! onLink.isOrigin())
+                    click (text, onLink);
+                t.check (opened == "http://lua.org", "clicking a link in the Info view opens it (" + opened + ")");
+                text.onLinkClicked = nullptr;
+                info.setLocked (false);
+                main.setInfoViewShown (wasShown);
+            }
         }
 
         // --- "Loading..." message ------------------------------------------------------

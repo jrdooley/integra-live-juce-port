@@ -96,8 +96,13 @@ namespace integra
     }
 
     //==============================================================================
-    LiveView::LiveView (AppContext& c) : context (c)
+    LiveView::LiveView (AppContext& c, TimelineMapping& sharedTimeline) : context (c), timeline (c, sharedTimeline)
     {
+        // the read-only timeline above the tracks (MainViewContainer: TimelineMode.READONLY)
+        timeline.readOnly = true;
+        timeline.getProjectLength = [this] { return context.model.get().getLength(); };
+        timeline.onTimelineChanged = [this] { if (onTimelineChanged) onTimelineChanged(); };
+        addAndMakeVisible (timeline);
         setWantsKeyboardFocus (true);
         viewport.setViewedComponent (&content, false);
         viewport.setScrollBarsShown (true, true);
@@ -155,7 +160,7 @@ namespace integra
         d << "|";
         for (auto& t : p.tracks)
         {
-            d << t.path << ":" << t.name << ":" << t.userData.getColour().toString() << ":";
+            d << t.path << ":" << t.name << ":" << t.userData.getColour().toString() << ":" << (int) t.userData.liveViewExpanded << ":";
             if (auto* b = p.findBlock (blockToShow (t)))
             {
                 d << b->path << "{";
@@ -196,6 +201,8 @@ namespace integra
             return;
 
         playPosition = context.controller.getPlayPosition();
+        timeline.playPosition = playPosition;
+        timeline.repaint();
         rebuildIfChanged();     // e.g. the playhead moved into another block
 
         // highlight the current scene
@@ -383,6 +390,8 @@ namespace integra
             b->setBounds (bar.removeFromLeft (juce::jmin (160, juce::jmax (90, bar.getWidth() / juce::jmax (1, sceneButtons.size())))));
             bar.removeFromLeft (6);
         }
+
+        timeline.setBounds (area.removeFromTop (TimelineRuler::height));
 
         // the bottom row: Scene Shortcuts, and the Info view at its right (Flex: _liveInfoContainer)
         const int rowHeight = juce::jmin (area.getHeight() / 2, keybindingsCollapsed ? (infoWidth > 0 ? 180 : keybindingHeaderHeight)

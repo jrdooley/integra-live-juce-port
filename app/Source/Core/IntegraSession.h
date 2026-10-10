@@ -24,6 +24,7 @@ namespace integra
             juce::File blockLibrary;        // demo blocks
             juce::File userBlockLibrary;    // user-saved blocks (writable)
             juce::File viewInfo;            // the Info view's help texts (Flex assets/viewInfo)
+            juce::File assets;              // About box texts, licence, module documentation style (Flex assets)
 
             /** Finds resources next to the executable / in the app bundle, falling back
                 to the source tree the app was built from. */

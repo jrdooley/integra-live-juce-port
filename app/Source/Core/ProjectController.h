@@ -76,6 +76,9 @@ namespace integra
         /** Arrange view collapse button (SetTrackExpanded): a collapsed track shows only its
             title bar. */
         void setTrackExpanded (juce::String trackPath, bool expanded);
+        /** The Live view's own collapse state (liveViewExpanded; the Flex GUI meant to store it
+            separately, but SetTrackExpanded.LIVE_VIEW == ARRANGE_VIEW wrote the Arrange one). */
+        void setTrackLiveViewExpanded (juce::String trackPath, bool expanded);
         /** Shows a colour on a track without an undo step, while the colour wheel is dragged;
             the release then sets it with setTrackColour (TrackColorPicker: one step per drag). */
         void previewTrackColour (juce::String trackPath, juce::Colour);

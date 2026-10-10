@@ -140,7 +140,8 @@ namespace integra
     {
     public:
         TrackPanel (AppContext& c, const model::Track& track, const juce::String& blockPath)
-            : context (c), trackPath (track.path), trackName (track.name), colour (track.userData.getColour()), block (blockPath)
+            : context (c), trackPath (track.path), trackName (track.name), colour (track.userData.getColour()), block (blockPath),
+              expanded (track.userData.liveViewExpanded)
         {
             trackActive.setContainer (track.path);
             trackActive.setColour (colour);
@@ -155,6 +156,8 @@ namespace integra
                 return;
 
             blockName = b->name;
+            if (! expanded)
+                return;     // collapsed: only the title bar
             for (auto& lvc : b->userData.liveViewControls)
             {
                 const auto modulePath = blockPath + "." + lvc.moduleName;
@@ -183,8 +186,15 @@ namespace integra
         ActiveButton& getActiveButton() noexcept            { return trackActive; }
         ContainerMeter& getMeter() noexcept                 { return trackMeter; }
 
+        /** The collapse button (ViewHolder.canCollapse), usable while a block is shown. */
+        juce::Rectangle<float> getCollapseButtonBounds() const     { return { 13.0f, (headerHeight - 14) / 2.0f, 14.0f, 14.0f }; }
+        bool isExpanded() const noexcept                            { return expanded; }
+        bool canCollapse() const noexcept                           { return block.isNotEmpty(); }
+
         int getContentHeight() const
         {
+            if (! expanded && canCollapse())
+                return headerHeight;
             int bottom = headerHeight + 60;
             for (auto* c : controls)
                 bottom = juce::jmax (bottom, c->getBottom() + 10);
@@ -208,6 +218,24 @@ namespace integra
             auto header = getLocalBounds().removeFromTop (headerHeight);
             g.setColour (c);
             g.fillRect (header.removeFromLeft (8));
+
+            // collapse button (CollapseButtonSkin), greyed while no block is shown
+            {
+                auto button = getCollapseButtonBounds();
+                const float r = button.getWidth() / 2.0f;
+                g.setColour (canCollapse() ? c : juce::Colour (0xffc0c0c0));
+                g.fillEllipse (button);
+                auto at = [&] (float x, float y) { return juce::Point<float> (button.getX() + x * r, button.getY() + y * r); };
+                juce::Path arrow;
+                if (expanded || ! canCollapse())
+                    arrow.addTriangle (at (0.5f, 0.8f), at (1.5f, 0.8f), at (1.0f, 1.3f));
+                else
+                    arrow.addTriangle (at (0.8f, 0.5f), at (0.8f, 1.5f), at (1.3f, 1.0f));
+                g.setColour (canCollapse() ? juce::Colour (0xff505050) : juce::Colour (0xff808080));
+                g.fillPath (arrow);
+            }
+            header.removeFromLeft (24);
+
             g.setColour (active ? t.text : t.textDim);
             g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
             g.drawText (trackName, header.reduced (8, 0), juce::Justification::centredLeft);
@@ -216,7 +244,7 @@ namespace integra
             g.drawText (blockName.isEmpty() ? juce::String ("(no block)") : blockName, header.reduced (8, 0).withTrimmedLeft (160).withTrimmedRight (170),
                         juce::Justification::centredLeft);
 
-            if (controls.isEmpty())
+            if (controls.isEmpty() && (expanded || ! canCollapse()))
             {
                 g.setFont (juce::FontOptions (12.0f));
                 g.drawText (blockName.isEmpty() ? juce::String()
@@ -242,6 +270,9 @@ namespace integra
         {
             if (e.mods.isPopupMenu() && e.y >= headerHeight)
                 showControlMenu (e.getPosition());
+            // ViewHolder: a click on the title bar (or its button) collapses or expands it
+            else if (! e.mods.isPopupMenu() && e.y < headerHeight && canCollapse())
+                context.controller.setTrackLiveViewExpanded (trackPath, ! expanded);
         }
 
         /** LiveViewBlock.onUpdateContextMenu: each module's controls, ticked if shown;
@@ -304,6 +335,7 @@ namespace integra
         juce::String trackPath, trackName, blockName;
         juce::Colour colour;
         juce::String block;
+        bool expanded = true;
         ActiveButton trackActive { context };
         ContainerMeter trackMeter { context };
         juce::OwnedArray<LiveControl> controls;

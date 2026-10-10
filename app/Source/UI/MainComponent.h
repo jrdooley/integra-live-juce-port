@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SavedDivider.h"
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "Core/AppContext.h"
 #include "RibbonBar.h"
@@ -76,7 +77,7 @@ namespace integra
             cmdPlayPause, cmdHome, cmdNextScene, cmdPrevScene,
             cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule, cmdModuleManager,
             cmdInfoView, cmdInfoLock, cmdLighting, cmdHighContrast, cmdTextLarger, cmdTextSmaller, cmdTextReset, cmdHelp,
-            cmdImportTrack, cmdExportTrack, cmdCreateBlock, cmdDeleteTrack
+            cmdImportTrack, cmdExportTrack, cmdCreateBlock, cmdDeleteTrack, cmdModuleDocs
         };
 
         /** View > Text Size (Flex FontSize: 7 / 9 / 11 / 15 / 20 pt). The port scales the
@@ -107,7 +108,8 @@ namespace integra
         InfoView infoView { context };
         void layoutInfoView();
         juce::StretchableLayoutManager arrangeLayout;
-        std::unique_ptr<juce::StretchableLayoutResizerBar> arrangeDivider;
+        std::unique_ptr<SavedDivider> arrangeDivider;
+        bool propertiesHeightRestored = false;
         juce::TooltipWindow tooltips { this, 600 };
         std::unique_ptr<juce::FileChooser> chooser;
         std::unique_ptr<juce::Component> progress;

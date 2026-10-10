@@ -5,7 +5,7 @@
 namespace integra
 {
     //==============================================================================
-    juce::AttributedString renderMarkdown (const juce::String& markdown, juce::Colour text, juce::Colour accent)
+    juce::AttributedString renderMarkdown (const juce::String& markdown, juce::Colour text, juce::Colour accent, std::vector<MarkdownLink>* links)
     {
         juce::AttributedString out;
         out.setWordWrap (juce::AttributedString::byWord);
@@ -36,7 +36,11 @@ namespace integra
                     if (close > 0 && end > 0)
                     {
                         flush();
-                        out.append (line.substring (i + 1, close), juce::Font (juce::FontOptions (size, juce::Font::underlined)), accent);
+                        const auto linkText = line.substring (i + 1, close);
+                        const int startChar = out.getText().length();
+                        out.append (linkText, juce::Font (juce::FontOptions (size, juce::Font::underlined)), accent);
+                        if (links != nullptr)
+                            links->push_back ({ { startChar, startChar + linkText.length() }, line.substring (close + 2, end).trim() });
                         i = end + 1;
                         continue;
                     }
@@ -64,6 +68,25 @@ namespace integra
         }
 
         return out;
+    }
+
+    int characterAt (const juce::TextLayout& layout, juce::Point<float> p)
+    {
+        for (int l = 0; l < layout.getNumLines(); ++l)
+        {
+            auto& line = layout.getLine (l);
+            if (p.y < line.lineOrigin.y - line.ascent || p.y > line.lineOrigin.y + line.descent)
+                continue;
+            for (auto* run : line.runs)
+                for (int g = 0; g < run->glyphs.size(); ++g)
+                {
+                    auto& glyph = run->glyphs.getReference (g);
+                    const float x = line.lineOrigin.x + glyph.anchor.x;
+                    if (p.x >= x && p.x < x + glyph.width)
+                        return run->stringRange.getStart() + g;
+                }
+        }
+        return -1;
     }
 
     juce::StringArray findRoutableEndpoints (IntegraSession& session, const juce::String& containerPath, bool sources)

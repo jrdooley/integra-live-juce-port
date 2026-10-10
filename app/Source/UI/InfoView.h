@@ -2,6 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "Core/AppContext.h"
+#include "Markdown.h"
 
 namespace integra
 {
@@ -81,11 +82,41 @@ namespace integra
         bool shown = true, locked = false;
         Info displayed;
         juce::Viewport viewport;
+    public:
+        /** Info text with links: a click on one opens it in the browser (Flex: the
+            TextArea's HTML links). */
         struct Text  : public juce::Component
         {
             juce::TextLayout layout;
+            std::vector<MarkdownLink> links;
+            std::function<void (const juce::String&)> onLinkClicked;
+
+            juce::String linkAt (juce::Point<float> p) const
+            {
+                const int c = characterAt (layout, p);
+                for (auto& l : links)
+                    if (l.characters.contains (c))
+                        return l.url;
+                return {};
+            }
             void paint (juce::Graphics& g) override     { layout.draw (g, getLocalBounds().toFloat()); }
-        } text;
+            void mouseMove (const juce::MouseEvent& e) override
+            {
+                setMouseCursor (linkAt (e.position).isNotEmpty() ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+            }
+            void mouseUp (const juce::MouseEvent& e) override
+            {
+                const auto url = linkAt (e.position);
+                if (url.isNotEmpty() && e.mouseWasClicked())
+                {
+                    if (onLinkClicked)  onLinkClicked (url);
+                    else                juce::URL (url).launchInDefaultBrowser();
+                }
+            }
+        };
+        Text& getText() noexcept        { return text; }
+    private:
+        Text text;
         juce::TextButton editButton { "Edit" }, saveButton { "Save" }, cancelButton { "Cancel" };
         std::unique_ptr<juce::TextEditor> editor;
     };

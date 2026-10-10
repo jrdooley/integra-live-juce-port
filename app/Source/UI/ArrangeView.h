@@ -61,6 +61,9 @@ namespace integra
         static constexpr int height = sceneBarBottom + 24;
         /** Called when the strip changes the zoom or scroll. */
         std::function<void()> onTimelineChanged;
+        /** The Live view's copy (Timeline(false)): scenes can be selected but not created,
+            moved, resized or renamed; the zoom strip and the playhead still work. */
+        bool readOnly = false;
         /** The length of the project in ticks (for the scroll indicator). */
         std::function<int()> getProjectLength;
         bool keyPressed (const juce::KeyPress&) override;
@@ -289,6 +292,10 @@ namespace integra
         TimelineRuler& getRuler() noexcept              { return ruler; }
         juce::Viewport& getViewport() noexcept          { return viewport; }
         BlockLibrary& getBlockLibrary() noexcept        { return blockLibrary; }
+        /** The zoom and scroll, shared with the Live view's timeline. */
+        TimelineMapping& getTimelineMapping() noexcept  { return mapping; }
+        /** Call after changing the shared mapping elsewhere: redraws, and stores it. */
+        void timelineChanged()                          { updateScrollBar (true); }
         ActiveButton& getProjectActiveButton() noexcept { return projectActive; }
         ContainerMeter& getProjectMeter() noexcept      { return projectMeter; }
 

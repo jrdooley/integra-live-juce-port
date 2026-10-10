@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "AboutBox.h"
 #include "ModuleManager.h"
 #include "PreferencesPanel.h"
 #include "IntegraLookAndFeel.h"
@@ -6,7 +7,7 @@
 namespace integra
 {
     MainComponent::MainComponent (AppContext& c)
-        : context (c), ribbon (c), arrange (c), properties (c), moduleView (c), liveView (c)
+        : context (c), ribbon (c), arrange (c), properties (c), moduleView (c), liveView (c, arrange.getTimelineMapping())
     {
         addAndMakeVisible (ribbon);
         addAndMakeVisible (arrange);
@@ -18,13 +19,19 @@ namespace integra
         arrangeLayout.setItemLayout (0, 150, -1.0, -0.62);
         arrangeLayout.setItemLayout (1, 6, 6, 6);
         arrangeLayout.setItemLayout (2, 100, -0.8, -0.38);
-        arrangeDivider = std::make_unique<juce::StretchableLayoutResizerBar> (&arrangeLayout, 1, false);
+        arrangeDivider = std::make_unique<SavedDivider> (&arrangeLayout, 1, false);
+        arrangeDivider->onMoved = [this]
+        {
+            if (auto* settings = context.properties.getUserSettings())
+                settings->setValue ("arrangeViewPropertiesHeight", properties.getHeight());
+        };
         addAndMakeVisible (*arrangeDivider);
 
         ribbon.onViewRequested = [this] (const juce::String& v) { showView (v); };
         ribbon.onPreferences = [this] { commands.invokeDirectly (cmdPreferences, true); };
         arrange.onOpenBlock = [this] (const juce::String& block) { openBlock (block); };
         arrange.onSelectionChanged = [this] { properties.selectionChanged(); };
+        liveView.onTimelineChanged = [this] { arrange.timelineChanged(); };
         properties.getEditedEnvelope = [this] { return arrange.getLanes().editedEnvelope; };
         properties.setEditedEnvelope = [this] (const juce::String& envelope)
         {
@@ -87,6 +94,8 @@ namespace integra
 
         juce::Component* comps[] = { &arrange, arrangeDivider.get(), &properties };
         arrangeLayout.layOutComponents (comps, 3, area.getX(), area.getY(), area.getWidth(), area.getHeight(), true, true);
+        if (auto* settings = context.properties.getUserSettings())
+            restoreBottomHeight (arrangeLayout, comps, area, settings->getIntValue ("arrangeViewPropertiesHeight", 0), propertiesHeightRestored);
 
         layoutInfoView();
 
@@ -432,7 +441,7 @@ namespace integra
     //==============================================================================
     void MainComponent::getAllCommands (juce::Array<juce::CommandID>& ids)
     {
-        ids.addArray ({ cmdImportTrack, cmdExportTrack, cmdCreateBlock, cmdDeleteTrack });
+        ids.addArray ({ cmdImportTrack, cmdExportTrack, cmdCreateBlock, cmdDeleteTrack, cmdModuleDocs });
         ids.addArray ({ cmdNew, cmdOpen, cmdSave, cmdSaveAs, cmdImportBlock, cmdExportBlock,
                         cmdUndo, cmdRedo, cmdDelete, cmdAddTrack, cmdAddScene,
                         cmdPlayPause, cmdHome, cmdNextScene, cmdPrevScene,
@@ -506,6 +515,7 @@ namespace integra
                                   info.setActive (context.model.get().findBlock (context.model.selectedBlock) != nullptr); break;
             case cmdPreferences:  info.setInfo ("Settings...", "", "View", 0);              info.addDefaultKeypress (',', cmd); break;
             case cmdAbout:        info.setInfo ("About Integra Live", "", "Help", 0); break;
+            case cmdModuleDocs:   info.setInfo ("Module Documentation", "", "Help", 0); break;
             case cmdDemo:         info.setInfo ("Open Demo Project", "", "Help", 0); break;
             case cmdInstallModule: info.setInfo ("Install Third-Party Module...", "", "File", 0); break;
             case cmdModuleManager: info.setInfo ("Module Manager...", "", "View", 0); info.addDefaultKeypress ('4', cmd); break;
@@ -669,12 +679,11 @@ namespace integra
                 return true;
 
             case cmdAbout:
-                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Integra Live",
-                    "Integra Live " + juce::String (JUCE_APPLICATION_VERSION_STRING) + "\n\n"
-                    "JUCE port of Integra Live (Birmingham Conservatoire).\n"
-                    "Audio processing: libIntegra " + toString (context.session.lock()->get_libintegra_version())
-                    + " with libpd (Pure Data 0.43).\n\n"
-                    "libIntegra and the JUCE front end are free software under the GNU GPL.");
+                AboutBox::show (context);
+                return true;
+
+            case cmdModuleDocs:
+                writeModuleDocumentation (context).startAsProcess();
                 return true;
 
             default:
@@ -754,6 +763,8 @@ namespace integra
             case 4:
                 menu.addCommandItem (&commands, cmdDemo);
                 menu.addCommandItem (&commands, cmdHelp);
+                menu.addSeparator();
+                menu.addCommandItem (&commands, cmdModuleDocs);
                 menu.addSeparator();
                 menu.addCommandItem (&commands, cmdAbout);
                 break;

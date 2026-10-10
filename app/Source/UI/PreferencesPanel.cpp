@@ -21,14 +21,45 @@ namespace integra
         darkScheme.onClick = [this] { if (onColourSchemeChanged) onColourSchemeChanged (darkScheme.getToggleState()); };
         addAndMakeVisible (darkScheme);
 
+        resetButton.onClick = [this] { resetToDefaults(); };
+        addAndMakeVisible (resetButton);
+
+        // the MIDI lists follow libIntegra's device lists (Flex: SetAvailableMidiDevices)
+        const auto settings = context.model.get().midiSettingsPath;
+        if (settings.isNotEmpty())
+            for (auto endpoint : { "availableInputDevices", "availableOutputDevices", "activeInputDevices", "activeOutputDevices" })
+                context.watcher.watch (settings + "." + endpoint, this, [this] (const juce::String&, CCommandSource)
+                {
+                    juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<PreferencesPanel> (this)] { if (safe) safe->refreshMidi(); });
+                });
+
         refreshMidi();
-        setSize (620, 620);
+        setSize (620, 660);
+    }
+
+    PreferencesPanel::~PreferencesPanel()
+    {
+        context.watcher.removeAll (this);
+    }
+
+    void PreferencesPanel::resetToDefaults()
+    {
+        auto& devices = context.audioHost.getDeviceManager();
+        devices.closeAudioDevice();
+        devices.initialiseWithDefaultDevices (2, 2);
+        if (auto* settings = context.properties.getUserSettings())
+            settings->removeValue ("audioDeviceState");
+        const auto midi = context.model.get().midiSettingsPath;
+        if (midi.isNotEmpty())
+            context.session.bang (midi + ".restoreDefaults");
+        refreshMidi();
     }
 
     void PreferencesPanel::refreshMidi()
     {
         midiInputs.clear();
         midiOutputs.clear();
+        midiTitle.setText ("MIDI devices (via libIntegra / PortMidi)", juce::dontSendNotification);
 
         const auto settings = context.model.get().midiSettingsPath;
         if (settings.isEmpty())
@@ -83,6 +114,7 @@ namespace integra
         area.removeFromTop (8);
         schemeTitle.setBounds (area.removeFromTop (22));
         darkScheme.setBounds (area.removeFromTop (26).withTrimmedLeft (10));
+        resetButton.setBounds (getLocalBounds().reduced (20).removeFromBottom (26).removeFromRight (150));
     }
 
     void PreferencesPanel::show (AppContext& context, std::function<void (bool)> onSchemeChanged)

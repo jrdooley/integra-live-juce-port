@@ -27,11 +27,13 @@ namespace integra
         l.blockLibrary  = pick (bundled.getChildFile ("blocks"), INTEGRA_SOURCE_BLOCKS_DIR);
         l.resources     = pick (bundled.getChildFile ("resources"), INTEGRA_SOURCE_RESOURCES_DIR);
         l.viewInfo      = pick (bundled.getChildFile ("viewInfo"), INTEGRA_SOURCE_VIEWINFO_DIR);
+        l.assets        = pick (bundled.getChildFile ("assets"), INTEGRA_SOURCE_ASSETS_DIR);
        #else
         l.systemModules = bundled.getChildFile ("modules");
         l.blockLibrary  = bundled.getChildFile ("blocks");
         l.resources     = bundled.getChildFile ("resources");
         l.viewInfo      = bundled.getChildFile ("viewInfo");
+        l.assets        = bundled.getChildFile ("assets");
        #endif
 
         auto userData = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
