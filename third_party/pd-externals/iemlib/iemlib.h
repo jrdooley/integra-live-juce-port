@@ -79,14 +79,21 @@ should have been by CPU type and not by operating system! */
 
 #else
 #ifdef __APPLE__
-#define HIOFFSET 0    /* word offset to find MSB */
-#define LOWOFFSET 1    /* word offset to find LSB */
+/* Integra Live port: every Mac Integra runs on (Intel, Apple Silicon) is little-endian */
+#define HIOFFSET 1    /* word offset to find MSB */
+#define LOWOFFSET 0    /* word offset to find LSB */
 #define int32 int  /* a data type that has 32 bits */
 
 #endif /* __APPLE__ */
 #endif /* __linux__ */
 #endif /* MSW */
 #endif /* SGI */
+
+/* Integra Live port: Pd 0.43's m_pd.h defined int32 on Windows; Pd 0.56's doesn't */
+#ifndef int32
+#include <stdint.h>
+#define int32 int32_t
+#endif
 
 union tabfudge
 {

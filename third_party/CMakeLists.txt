@@ -107,6 +107,13 @@ target_include_directories(integra_pdexternals PRIVATE
 target_compile_definitions(integra_pdexternals PRIVATE BOOST_NO_AUTO_PTR)
 target_link_libraries(integra_pdexternals PUBLIC integra_flext integra_libpd integra::fftw3f integra::sndfile)
 target_compile_options(integra_pdexternals PRIVATE ${INTEGRA_NO_WARNINGS})
+# an undeclared function is an error on every compiler (Apple clang's default): on Linux,
+# an external calling Pd's undeclared error() silently linked against glibc's error(),
+# which exits the process
+if(NOT MSVC)
+    target_compile_options(integra_libpd PRIVATE $<$<COMPILE_LANGUAGE:C>:-Werror=implicit-function-declaration>)
+    target_compile_options(integra_pdexternals PRIVATE $<$<COMPILE_LANGUAGE:C>:-Werror=implicit-function-declaration>)
+endif()
 
 # ---------------------------------------------------------------- minizip -----
 add_library(integra_minizip STATIC

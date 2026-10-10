@@ -117,7 +117,7 @@ static int copy_data(FILE *source, FILE *target)
     {
         if (fwrite(buffer, sizeof(char), n, target) != n)
 		{
-            error("write failed");
+            pd_error(0, "write failed");
 			return -1;
 		}
     }
@@ -140,7 +140,7 @@ static int do_copy(const char *source, const char *target)
 
     if (fdsource == -1)
     {   
-        error(CONSOLE_PREFIX "invalid input");
+        pd_error(0, CONSOLE_PREFIX "invalid input");
         return -1;
     }
     
@@ -148,7 +148,7 @@ static int do_copy(const char *source, const char *target)
     
     if(rv == -1)
     {
-        error(CONSOLE_PREFIX "stat failed\n");
+        pd_error(0, CONSOLE_PREFIX "stat failed\n");
         return -1;
     }
     
@@ -156,7 +156,7 @@ static int do_copy(const char *source, const char *target)
     
 	if (fdtarget == -1)
     {   
-        error(CONSOLE_PREFIX "invalid output\n");
+        pd_error(0, CONSOLE_PREFIX "invalid output\n");
         close(fdsource);
         return -1;
     }
@@ -168,7 +168,7 @@ static int do_copy(const char *source, const char *target)
 
     if (rv == -1)
     {
-        error(CONSOLE_PREFIX "copy failed");
+        pd_error(0, CONSOLE_PREFIX "copy failed");
     }
 
     rv  = fclose(fsource);
@@ -176,7 +176,7 @@ static int do_copy(const char *source, const char *target)
 
     if (rv || rv2)
     {
-        error(CONSOLE_PREFIX "file close failed");
+        pd_error(0, CONSOLE_PREFIX "file close failed");
         rv = -1;
     }
 
