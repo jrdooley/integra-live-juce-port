@@ -19,9 +19,10 @@
 
 On Linux (Ubuntu 24.04, GCC 13, JUCE 8.0.8) locally and in CI; on macOS 14 (Apple
 Silicon, Apple clang) and Windows Server 2022 (MSVC 2022, x64) in CI, which runs tests 1–4
-there (the GUI test needs a desktop session).
+there (the GUI test needs a desktop session). A fourth CI job runs every suite under
+AddressSanitizer + UndefinedBehaviorSanitizer ([09-robustness.md](09-robustness.md)).
 
-`ctest --test-dir build` — all 5 pass:
+`ctest --test-dir build` — all 6 pass:
 
 1. `libIntegraTests` — the upstream GoogleTest suite (session, commands, load/save, versioning).
 2. `integra_smoke` — instantiates all 63 DSP modules in Pd, pings them, loads all 6 demo blocks.
@@ -30,8 +31,15 @@ there (the GUI test needs a desktop session).
    JUCE callback path with non-power-of-two buffers, block activation by the playhead, undo/redo
    (including undoing deletes), rename, routing, MIDI control, envelopes, scenes, Lua, block moves,
    save/reopen, and importing all six Flex-saved demo blocks.
-5. `IntegraLive_gui_test` (under `xvfb-run`) — 227 interaction checks with synthesized mouse and
+5. `IntegraLive_stress_test` — every demo block opened, played, saved, reopened and imported;
+   every control of all 66 modules at extreme values and odd text; 600 seeded random edits with
+   undo/redo round-trip checks; playback with playhead jumps and scene changes. Fails on any
+   NaN/infinity from the engine ([09-robustness.md](09-robustness.md)).
+6. `IntegraLive_gui_test` (under `xvfb-run`) — 227 interaction checks with synthesized mouse and
    keyboard events across all three views.
+
+The Pd upgrade was also checked with `--fingerprint-modules` against the Pd 0.43 build: module
+output and reported values match ([10-pd-upgrade.md](10-pd-upgrade.md)).
 
 Screenshots in `docs/images/` are produced by the app itself (`--screenshot`).
 

@@ -91,6 +91,11 @@ platforms; the Windows job uploads a ready-to-run `integra-live-windows-x64` art
 | `integra_host_audio_test` | audio flows through libpd when driven by the host |
 | `IntegraLive --self-test` | 76 end-to-end checks of the app core (undo, routing, envelopes, scenes, scripts, save/reload, Flex files, JUCE audio path) |
 | `IntegraLive --gui-test` | 227 GUI interaction checks with synthesized mouse/keyboard events |
+| `IntegraLive --stress-test [seconds] [projects...]` | every demo block opened, played, saved and reimported; every module's controls at extreme values; 600 random edits with undo/redo checks; long playback ([doc 09](docs/09-robustness.md)) |
+| `IntegraLive --fingerprint-modules` | not a pass/fail test: each module's output and reported values for a fixed input, for comparing builds such as two Pd versions ([doc 10](docs/10-pd-upgrade.md)) |
+
+All ctest suites also run in CI under AddressSanitizer + UndefinedBehaviorSanitizer
+(`-DINTEGRA_SANITIZE=ON`, the `linux-sanitizers` job).
 
 ## Documentation
 
