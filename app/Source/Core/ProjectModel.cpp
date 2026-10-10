@@ -68,6 +68,75 @@ namespace integra
             return length;
         }
 
+        std::vector<Driver> Project::driversOf (const juce::String& endpointPath) const
+        {
+            std::vector<Driver> drivers;
+            auto relative = [this] (const juce::String& path)
+            {
+                return path.startsWith (this->path + ".") ? path.substring (this->path.length() + 1) : path;
+            };
+
+            std::vector<const Container*> containers { this };
+            juce::StringArray envelopeNodes;
+            for (auto& t : tracks)
+            {
+                containers.push_back (&t);
+                for (auto& e : t.blockEnvelopes)
+                    envelopeNodes.add (e.path);
+                for (auto& b : t.blocks)
+                {
+                    containers.push_back (&b);
+                    for (auto& e : b.envelopes)
+                    {
+                        envelopeNodes.add (e.path);
+                        if (e.targetPath == endpointPath)
+                            drivers.push_back ({ Driver::Kind::envelope, "Envelope", { e.path } });
+                    }
+                }
+            }
+
+            juce::StringArray scalerNodes;
+            for (auto* c : containers)
+                for (auto& s : c->scalers)
+                    scalerNodes.add (s.path);
+
+            for (auto* c : containers)
+            {
+                for (auto& s : c->scalers)
+                {
+                    if (s.targetPath != endpointPath)
+                        continue;
+
+                    const MidiControlInput* midi = nullptr;
+                    for (auto& m : c->midiControlInputs)
+                        if (m.outputConnection.isNotEmpty() && m.outputConnection == s.upstreamConnection)
+                            midi = &m;
+
+                    if (midi != nullptr)
+                    {
+                        if (midi->autoLearn)
+                            continue;   // still learning: doesn't lock the control (areAllAutoLearning)
+                        drivers.push_back ({ Driver::Kind::midi,
+                                             "MIDI " + midi->messageType + " " + juce::String (midi->noteOrController)
+                                                 + " (channel " + juce::String (midi->channel) + ")",
+                                             { midi->path, s.path } });
+                    }
+                    else if (s.sourcePath.isNotEmpty())
+                    {
+                        drivers.push_back ({ Driver::Kind::routing, relative (s.sourcePath), { s.path } });
+                    }
+                }
+
+                // a direct connection (not through a scaler, not an envelope's)
+                for (auto& conn : c->connections)
+                    if (conn.targetPath == endpointPath && conn.sourcePath.isNotEmpty()
+                         && ! scalerNodes.contains (conn.sourceNode()) && ! envelopeNodes.contains (conn.sourceNode()))
+                        drivers.push_back ({ Driver::Kind::routing, relative (conn.sourcePath), { conn.path } });
+            }
+
+            return drivers;
+        }
+
         bool isStructuralEndpoint (const juce::String& name)
         {
             static const juce::StringArray names {

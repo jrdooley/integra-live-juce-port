@@ -247,8 +247,8 @@ namespace integra
                     menu.addItem ("Key binding...", [this, path]
                     {
                         auto* scene = context.model.get().findScene (path);
-                        askForName ("Scene key (one character, empty for none)", scene ? scene->userData.keybinding : juce::String(),
-                                    [this, path] (juce::String key) { context.controller.setSceneKeybinding (path, key.trim().substring (0, 1).toLowerCase()); });
+                        askForName ("Scene key (0-9 or A-Z, empty for none)", scene ? scene->userData.keybinding : juce::String(),
+                                    [this, path] (juce::String key) { context.controller.setSceneKeybinding (path, key); });
                     });
                     menu.addSeparator();
                     menu.addItem ("Delete scene", [this, path] { context.controller.remove (path); });
@@ -614,6 +614,17 @@ namespace integra
         return { x, r.getBottom() - 3.0f - unit * (r.getHeight() - 20.0f) };
     }
 
+    std::optional<juce::Point<float>> TrackLanes::getControlPointPosition (const juce::String& controlPointPath) const
+    {
+        for (auto& r : rows())
+            for (auto& b : r.track->blocks)
+                for (auto& env : b.envelopes)
+                    for (auto& cp : env.points)
+                        if (cp.path == controlPointPath)
+                            return pointPosition (env, cp, b, blockBounds (b, r.bounds), EndpointInfo::find (context.session, env.targetPath));
+        return std::nullopt;
+    }
+
     void TrackLanes::paintEnvelopes (juce::Graphics& g, const model::Block& block, juce::Rectangle<float> r)
     {
         auto& t = Theme::get();
@@ -626,10 +637,17 @@ namespace integra
             auto target = EndpointInfo::find (context.session, env.targetPath);
             const bool edited = env.path == editedEnvelope && block.path == context.model.selectedBlock;
 
+            // the point being dragged is drawn at its preview position until it's dropped
+            auto points = env.points;
+            if (drag == Drag::controlPoint)
+                for (auto& cp : points)
+                    if (cp.path == dragPoint)
+                        cp.tick = dragPointTick, cp.value = dragPointValue;
+
             juce::Path path;
-            for (size_t i = 0; i < env.points.size(); ++i)
+            for (size_t i = 0; i < points.size(); ++i)
             {
-                auto pt = pointPosition (env, env.points[i], block, r, target);
+                auto pt = pointPosition (env, points[i], block, r, target);
                 if (i == 0)
                 {
                     path.startNewSubPath (r.getX(), pt.y);
@@ -640,7 +658,7 @@ namespace integra
                     path.lineTo (pt);
                 }
             }
-            auto last = pointPosition (env, env.points.back(), block, r, target);
+            auto last = pointPosition (env, points.back(), block, r, target);
             path.lineTo (r.getRight(), last.y);
 
             g.setColour (t.envelope.withAlpha (edited ? 1.0f : 0.45f));
@@ -648,7 +666,7 @@ namespace integra
 
             if (edited)
             {
-                for (auto& cp : env.points)
+                for (auto& cp : points)
                 {
                     auto pt = pointPosition (env, cp, block, r, target);
                     g.fillEllipse (juce::Rectangle<float> (8.0f, 8.0f).withCentre (pt));
@@ -692,12 +710,21 @@ namespace integra
             // blocks
             g.saveState();
             g.reduceClipRegion (lane);
+            const bool draggingBlocks = drag == Drag::moveBlock || drag == Drag::resizeStart || drag == Drag::resizeEnd;
+            std::vector<const model::Block*> shown;
             for (auto& b : track.blocks)
-            {
-                if (drag == Drag::moveBlock && b.path == dragBlock)
-                    continue;   // drawn as preview below
+                if (! (draggingBlocks && b.path == dragBlock && dragTargetTrack != track.path))
+                    shown.push_back (&b);
+            if (draggingBlocks && dragTargetTrack == track.path && parentPath (dragBlock) != track.path)
+                if (auto* dragged = model.get().findBlock (dragBlock))
+                    shown.push_back (dragged);   // dragged here from another track
 
-                auto r = blockBounds (b, row.bounds);
+            for (auto* bp : shown)
+            {
+                auto& b = *bp;
+                const auto range = displayedRange (b);
+                const float x1 = mapping.tickToX (range.getStart()), x2 = mapping.tickToX (range.getEnd());
+                auto r = juce::Rectangle<float> (x1, (float) row.bounds.getY() + 4.0f, juce::jmax (6.0f, x2 - x1), (float) row.bounds.getHeight() - 8.0f);
                 const bool selected = model.selectedBlock == b.path;
                 const bool active = playPosition >= b.start && playPosition < b.end;
 
@@ -710,19 +737,9 @@ namespace integra
                 g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
                 g.drawFittedText (b.name, r.reduced (6, 3).toNearestInt(), juce::Justification::topLeft, 1);
 
+                if (draggingBlocks && range != juce::Range<int> (b.start, b.end))
+                    continue;   // envelopes are drawn again once the block is dropped
                 paintEnvelopes (g, b, r);
-            }
-
-            if (drag == Drag::moveBlock || drag == Drag::resizeStart || drag == Drag::resizeEnd)
-            {
-                if (dragTargetTrack == track.path && ! dragPreview.isEmpty())
-                {
-                    auto preview = dragPreview.withY ((float) row.bounds.getY() + 4.0f).withHeight ((float) row.bounds.getHeight() - 8.0f);
-                    g.setColour (t.accent.withAlpha (0.3f));
-                    g.fillRoundedRectangle (preview, 4.0f);
-                    g.setColour (t.accent);
-                    g.drawRoundedRectangle (preview, 4.0f, 2.0f);
-                }
             }
             g.restoreState();
 
@@ -744,7 +761,7 @@ namespace integra
             g.drawHorizontalLine (row.bounds.getBottom() - 1, 0.0f, (float) getWidth());
         }
 
-        // snap lines while dragging scenes
+        // snap lines while dragging scenes or blocks
         g.setColour (t.accent);
         for (int tick : mapping.snapLines)
         {
@@ -794,7 +811,7 @@ namespace integra
                 if (r.track == track)
                 {
                     auto b = blockBounds (*block, r.bounds);
-                    if (e.position.x > b.getRight() - 6 || e.position.x < b.getX() + 6)
+                    if (e.position.x > b.getRight() - blockResizeAreaWidth || e.position.x < b.getX() + blockResizeAreaWidth)
                     {
                         setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
                         return;
@@ -829,19 +846,28 @@ namespace integra
                     continue;
 
                 auto target = EndpointInfo::find (context.session, env->targetPath);
-                for (auto& cp : env->points)
+                const auto& points = env->points;   // sorted by tick
+                for (size_t i = 0; i < points.size(); ++i)
                 {
+                    auto& cp = points[i];
                     if (pointPosition (*env, cp, *editedBlock, bb, target).getDistanceFrom (e.position) < 7.0f)
                     {
                         if (e.mods.isPopupMenu())
                         {
-                            if (env->points.size() > 1)
+                            if (i > 0)   // the first control point can't be deleted (EnvelopeView)
                                 context.controller.remove (cp.path);
                             return;
                         }
+                        // EnvelopeView.handleDragPointMouseDown: a point stays between its
+                        // neighbours, and the first one stays at tick 0
                         drag = Drag::controlPoint;
                         dragPoint = cp.path;
                         dragBlock = editedBlock->path;
+                        dragPointLimits = i == 0 ? juce::Range<int> (0, 0)
+                                                 : juce::Range<int> (points[i - 1].tick + 1,
+                                                                     i + 1 < points.size() ? points[i + 1].tick - 1 : editedBlock->length());
+                        dragPointTick = cp.tick;
+                        dragPointValue = cp.value;
                         return;
                     }
                 }
@@ -886,14 +912,23 @@ namespace integra
                     continue;
                 auto bb = blockBounds (*block, r.bounds);
                 dragBlock = block->path;
-                dragStartTick = (int) mapping.xToTick (e.position.x);
-                originalStart = block->start;
-                originalEnd = block->end;
+                dragStartTick = juce::roundToInt (mapping.xToTick (e.position.x));
                 dragTargetTrack = track->path;
-                dragPreview = bb;
-                if (e.position.x > bb.getRight() - 6)       drag = Drag::resizeEnd;
-                else if (e.position.x < bb.getX() + 6)      drag = Drag::resizeStart;
-                else                                        drag = Drag::moveBlock;
+                draggedBlocks.clear();
+                if (e.position.x > bb.getRight() - blockResizeAreaWidth)
+                {
+                    drag = Drag::resizeEnd;
+                    dragPixelOffset = e.position.x - bb.getRight();
+                }
+                else if (e.position.x < bb.getX() + blockResizeAreaWidth)
+                {
+                    drag = Drag::resizeStart;
+                    dragPixelOffset = e.position.x - bb.getX();
+                }
+                else
+                {
+                    drag = Drag::moveBlock;
+                }
             }
         }
         else
@@ -924,76 +959,206 @@ namespace integra
                     continue;
                 auto bb = blockBounds (*block, r.bounds);
                 auto target = EndpointInfo::find (context.session, env->targetPath);
-                const int tick = juce::jlimit (0, block->length(), (int) std::round (mapping.xToTick (e.position.x)) - block->start);
+                const int tick = (int) std::round (mapping.xToTick (e.position.x)) - block->start;
+                dragPointTick = juce::jlimit (dragPointLimits.getStart(), juce::jmax (dragPointLimits.getStart(), dragPointLimits.getEnd()), tick);
                 const double unit = juce::jlimit (0.0, 1.0, (double) ((bb.getBottom() - 3.0f - e.position.y) / (bb.getHeight() - 20.0f)));
-                context.controller.moveControlPoint (dragPoint, tick, (float) target.fromUnit (unit));
+                dragPointValue = (float) target.fromUnit (unit);
             }
+            repaint();
             return;
         }
 
-        if (drag == Drag::none)
-            return;
+        if (drag != Drag::none)
+            updateBlockDrag (e);
+    }
 
-        const int delta = snapTicks ((int) mapping.xToTick (e.position.x) - dragStartTick, rate);
-        int start = originalStart, end = originalEnd;
+    juce::Range<int> TrackLanes::displayedRange (const model::Block& b) const
+    {
+        auto it = draggedBlocks.find (b.path);
+        return it != draggedBlocks.end() ? it->second : juce::Range<int> (b.start, b.end);
+    }
+
+    TrackLanes::Snap TrackLanes::snapBlock (int ticks) const
+    {
+        // ArrangeView.getSnap: blocks on other tracks that aren't being dragged, and scenes, within 10 pixels
+        ticks = juce::jmax (0, ticks);
+        const int margin = (int) (10.0 / mapping.pixelsPerTick);
+        Snap result { ticks, false, 0 };
+        int best = margin + 1;
+        auto consider = [&] (int edge)
+        {
+            const int d = std::abs (edge - ticks);
+            if (d <= margin && d < best)
+            {
+                best = d;
+                result = { edge, true, d };
+            }
+        };
+
+        auto& p = context.model.get();
+        const auto ownTrack = parentPath (dragBlock);
+        for (auto& track : p.tracks)
+        {
+            if (track.path == ownTrack || ! track.userData.arrangeViewExpanded)
+                continue;
+            for (auto& b : track.blocks)
+                if (b.path != dragBlock && draggedBlocks.find (b.path) == draggedBlocks.end())
+                    consider (b.start), consider (b.end);
+        }
+        for (auto& s : p.scenes)
+            consider (s.start), consider (s.end());
+        return result;
+    }
+
+    void TrackLanes::updateBlockDrag (const juce::MouseEvent& e)
+    {
+        // ArrangeView.onDragBlock
+        auto* block = context.model.get().findBlock (dragBlock);
+        if (block == nullptr)
+        {
+            drag = Drag::none;
+            return;
+        }
+
+        draggedBlocks.clear();
+        std::vector<int> snapLines;
+        int start = block->start, end = block->end;
+        bool movingRight = false;
 
         if (drag == Drag::moveBlock)
         {
-            start = juce::jmax (0, originalStart + delta);
-            end = start + (originalEnd - originalStart);
+            // doBlockMove
+            const float x = juce::jlimit ((float) mapping.laneX, (float) getWidth(), e.position.x);
+            const int displacement = juce::jmax (-block->start, juce::roundToInt (mapping.xToTick (x)) - dragStartTick);
+            auto startSnap = snapBlock (block->start + displacement);
+            auto endSnap = snapBlock (block->end + displacement);
+            if (startSnap.snapped && (! endSnap.snapped || startSnap.distance <= endSnap.distance))
+            {
+                start = startSnap.value;
+                snapLines.push_back (startSnap.value);
+                if (endSnap.snapped && endSnap.distance == startSnap.distance)
+                    snapLines.push_back (endSnap.value);
+            }
+            else if (endSnap.snapped)
+            {
+                start = juce::jmax (0, endSnap.value - block->length());
+                snapLines.push_back (endSnap.value);
+            }
+            else
+            {
+                start = startSnap.value;
+            }
+            start = juce::jmax (0, start);
+            end = start + block->length();
+            movingRight = start >= block->start;
+
             if (auto* t = trackAt (e.y))
                 dragTargetTrack = t->path;
         }
         else if (drag == Drag::resizeStart)
         {
-            start = juce::jlimit (0, originalEnd - rate / 4, originalStart + delta);
+            auto snap = snapBlock (juce::roundToInt (mapping.xToTick (e.position.x - dragPixelOffset)));
+            start = juce::jmax (0, juce::jmin (snap.value, block->end - minimumBlockLength));
+            movingRight = start > block->start;
+            if (snap.snapped && start == snap.value)
+                snapLines.push_back (snap.value);
         }
-        else if (drag == Drag::resizeEnd)
+        else
         {
-            end = juce::jmax (originalStart + rate / 4, originalEnd + delta);
+            auto snap = snapBlock (juce::roundToInt (mapping.xToTick (e.position.x - dragPixelOffset)));
+            end = juce::jmax (snap.value, block->start + minimumBlockLength);
+            movingRight = end > block->end;
+            if (snap.snapped && end == snap.value)
+                snapLines.push_back (snap.value);
         }
 
-        dragPreview = { mapping.tickToX (start), 0.0f, mapping.tickToX (end) - mapping.tickToX (start), 1.0f };
-        dragStartTickPreview = { start, end };
+        draggedBlocks[dragBlock] = { start, end };
+        if (auto* target = context.model.get().findTrack (dragTargetTrack))
+            rescheduleBlocks (*target, movingRight);
+
+        if (snapLines != mapping.snapLines)
+        {
+            mapping.snapLines = std::move (snapLines);
+            if (onSnapLinesChanged)
+                onSnapLinesChanged();
+        }
         repaint();
+    }
+
+    void TrackLanes::rescheduleBlocks (const model::Track& track, bool movingRight)
+    {
+        // ArrangeView.doBlockRescheduling for the dragged block: push the other blocks on
+        // its (target) track out of the way, keeping their order, instead of overlapping
+        const auto dragged = draggedBlocks[dragBlock];
+
+        struct Span { juce::String path; int start, end; int length() const { return end - start; } };
+        std::vector<Span> others;
+        for (auto& b : track.blocks)
+            if (b.path != dragBlock)
+                others.push_back ({ b.path, b.start, b.end });
+        std::stable_sort (others.begin(), others.end(), [] (const Span& a, const Span& b) { return a.start + a.end < b.start + b.end; });
+
+        int insertion = (int) others.size();
+        for (int i = 0; i < (int) others.size(); ++i)
+        {
+            if (movingRight ? others[(size_t) i].end > dragged.getStart() : others[(size_t) i].start >= dragged.getEnd())
+            {
+                insertion = i;
+                break;
+            }
+        }
+
+        int durationToLeft = 0;
+        for (int i = 0; i < insertion; ++i)
+            durationToLeft += others[(size_t) i].length();
+        while (durationToLeft > dragged.getStart() && insertion > 0)
+            durationToLeft -= others[(size_t) --insertion].length();
+
+        int maximumEnd = dragged.getStart();
+        for (int i = insertion - 1; i >= 0; --i)
+        {
+            auto& b = others[(size_t) i];
+            if (b.end <= maximumEnd)
+                break;
+            draggedBlocks[b.path] = { maximumEnd - b.length(), maximumEnd };
+            maximumEnd -= b.length();
+        }
+
+        int minimumStart = dragged.getEnd();
+        for (int i = insertion; i < (int) others.size(); ++i)
+        {
+            auto& b = others[(size_t) i];
+            if (b.start >= minimumStart)
+                break;
+            draggedBlocks[b.path] = { minimumStart, minimumStart + b.length() };
+            minimumStart += b.length();
+        }
     }
 
     void TrackLanes::mouseUp (const juce::MouseEvent&)
     {
+        if (drag == Drag::controlPoint)
+        {
+            // committed once, as RepositionControlPoint in onEndDragPoint
+            drag = Drag::none;
+            context.controller.moveControlPoint (dragPoint, dragPointTick, dragPointValue);
+        }
+
         if (drag == Drag::moveBlock || drag == Drag::resizeStart || drag == Drag::resizeEnd)
         {
-            auto range = dragStartTickPreview;
-            const auto blockPath = dragBlock;
-            const auto targetTrack = dragTargetTrack;
             drag = Drag::none;
-
-            auto* block = context.model.get().findBlock (blockPath);
-            auto* track = context.model.get().findTrack (targetTrack);
-
-            if (block != nullptr && track != nullptr && ! range.isEmpty())
-            {
-                // blocks in one track may not overlap
-                bool overlaps = false;
-                for (auto& other : track->blocks)
-                    if (other.path != blockPath && juce::Range<int> (other.start, other.end).intersects (range))
-                        overlaps = true;
-
-                if (! overlaps)
-                {
-                    // the controller rebuilds the model, so don't keep `block` across its calls
-                    const int oldStart = block->start, oldEnd = block->end;
-                    juce::String path = blockPath;
-                    if (targetTrack != parentPath (blockPath))
-                        path = context.controller.moveBlockToTrack (blockPath, targetTrack);
-                    if (range.getStart() != oldStart || range.getEnd() != oldEnd)
-                        context.controller.repositionBlock (path, range.getStart(), range.getEnd());
-                }
-            }
+            if (! draggedBlocks.empty())
+                context.controller.repositionBlocks (dragBlock, dragTargetTrack, draggedBlocks);
         }
 
         drag = Drag::none;
-        dragStartTickPreview = {};
-        dragPreview = {};
+        draggedBlocks.clear();
+        if (! mapping.snapLines.empty())
+        {
+            mapping.snapLines.clear();
+            if (onSnapLinesChanged)
+                onSnapLinesChanged();
+        }
         repaint();
     }
 
@@ -1068,16 +1233,12 @@ namespace integra
     void TrackLanes::deleteSelection()
     {
         auto& model = context.model;
-        if (model.selectedBlock.isNotEmpty())
-        {
-            context.controller.remove (model.selectedBlock);
-            model.selectedBlock = {};
-        }
-        else if (model.selectedTrack.isNotEmpty())
-        {
-            context.controller.remove (model.selectedTrack);
-            model.selectedTrack = {};
-        }
+        // as ArrangeView.as: Delete/Backspace removes blocks only; tracks are deleted
+        // explicitly from their context menu
+        if (model.selectedBlock.isEmpty())
+            return;
+        context.controller.remove (model.selectedBlock);
+        model.selectedBlock = {};
         if (onSelectionChanged) onSelectionChanged();
     }
 
@@ -1202,6 +1363,7 @@ namespace integra
         lanes.onOpenBlock = [this] (const juce::String& block) { if (onOpenBlock) onOpenBlock (block); };
         lanes.onSelectionChanged = [this] { ruler.repaint(); if (onSelectionChanged) onSelectionChanged(); };
         ruler.onSnapLinesChanged = [this] { lanes.repaint(); };
+        lanes.onSnapLinesChanged = [this] { ruler.repaint(); };
         ruler.onAutoScroll = [this] (double deltaTicks)
         {
             mapping.scrollTicks = juce::jmax (0.0, mapping.scrollTicks + deltaTicks);

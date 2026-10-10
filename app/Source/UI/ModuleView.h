@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "ModuleProperties.h"
 
 namespace integra
@@ -126,10 +128,8 @@ namespace integra
         juce::String draggingModule;
         juce::Point<float> dragOffset;
         juce::Rectangle<float> dragOriginal;
-        const Pin* dragPin = nullptr;
+        std::optional<Pin> dragPin;     // a copy: `modules` is rebuilt whenever the model changes
         juce::Point<float> dragPinEnd;
-        juce::String dragPinEndpoint;
-        bool dragPinIsInput = false;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ModuleGraph)
     };

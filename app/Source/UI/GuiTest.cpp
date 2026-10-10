@@ -106,9 +106,32 @@ namespace integra
         t.check (p.findBlock (block2) != nullptr && p.findBlock (block2)->length() == length - 5 * rate,
                  "dragging a block's end edge shortens it by 5 s");
 
+        // dropping a block onto another pushes it along (ArrangeView.doBlockRescheduling)
+        const auto block1Path = p.tracks[0].blocks.at (0).path;
+        auto blockRange = [&] (const juce::String& path)
+        {
+            auto* b = p.findBlock (path);
+            return b != nullptr ? juce::Range<int> (b->start, b->end) : juce::Range<int>();
+        };
+        auto describeRange = [] (juce::Range<int> r) { return juce::String (r.getStart()) + ".." + juce::String (r.getEnd()); };
+        auto describeBlocks = [&] { return " (" + describeRange (blockRange (block1Path)) + " / " + describeRange (blockRange (block2)) + ")"; };
         drag (lanes, { mapping.tickToX (100), (float) rowMiddle }, { mapping.tickToX (1300), (float) rowMiddle });
         pump();
-        t.check (p.tracks[0].blocks.size() == 2 && p.tracks[0].blocks[0].start == 0, "a block can't be dragged onto another block");
+        t.check (blockRange (block1Path) == juce::Range<int> (1200, 2000) && blockRange (block2) == juce::Range<int> (2000, 2600),
+                 "dropping a block onto another pushes it along" + describeBlocks());
+        main.invokeCommand (MainComponent::cmdUndo);
+        pump();
+        t.check (blockRange (block1Path) == juce::Range<int> (0, 800) && blockRange (block2) == juce::Range<int> (1600, 2200),
+                 "one undo puts both blocks back" + describeBlocks());
+
+        // Delete with no block selected must not delete the track
+        {
+            click (lanes, { mapping.tickToX (1000), (float) rowMiddle });   // empty lane: selects the track only
+            const int tracksBeforeDelete = (int) p.tracks.size();
+            lanes.keyPressed (juce::KeyPress (juce::KeyPress::deleteKey));
+            pump();
+            t.check ((int) p.tracks.size() == tracksBeforeDelete, "Delete with only a track selected doesn't delete the track");
+        }
 
         const int tracksBefore = (int) p.tracks.size();
         click (lanes, { 50.0f, (float) lanes.getTotalHeight() - TrackLanes::addTrackHeight / 2.0f });
@@ -284,6 +307,26 @@ namespace integra
         b1 = p.findBlock (block1);
         t.check (b1 != nullptr && b1->findEnvelopeForTarget (delayPath + ".feedback") != nullptr, "ENV toggle adds an envelope for the control");
 
+        // a control driven by an envelope is locked (ControlContainer padlock)
+        {
+            std::vector<IntegraWidget*> lockedWidgets;
+            findAll (main.getModuleView(), lockedWidgets);
+            IntegraWidget* knob = nullptr;
+            for (auto* w : lockedWidgets)
+                if (w->getModulePath() == delayPath && w->getSpec().label == "feedback")
+                    knob = w;
+            t.check (knob != nullptr && knob->isFullyLocked(), "the enveloped knob shows as locked");
+            const auto before = (double) context.session.getValue (delayPath + ".feedback");
+            std::vector<juce::Slider*> knobSliders;
+            if (knob != nullptr)
+                findAll (*knob, knobSliders);
+            if (! knobSliders.empty())
+                knobSliders[0]->setValue (before > 0.5 ? 0.1 : 0.9, juce::sendNotificationSync);
+            pump();
+            t.check (std::abs ((double) context.session.getValue (delayPath + ".feedback") - before) < 1.0e-6,
+                     "a locked control doesn't change its endpoint");
+        }
+
         // --- Live view ------------------------------------------------------------
         context.controller.setPlayPosition (100);
         main.showView ("live");
@@ -292,10 +335,36 @@ namespace integra
         findAll (main.getLiveView(), liveWidgets);
         t.check (liveWidgets.size() == 1 && liveWidgets[0]->getSpec().label == "feedback", "Live view shows the feedback control of the playing block");
 
-        auto& live = main.getLiveView();
+        // moving a control stores its new position relative to the block area (no header offset)
+        if (liveWidgets.size() == 1)
+        {
+            auto* control = liveWidgets[0]->getParentComponent();
+            auto storedBounds = [&]
+            {
+                if (auto* blk = p.findBlock (block1))
+                    for (auto& c : blk->userData.liveViewControls)
+                        if (c.widgetLabel == "feedback")
+                            return c.bounds;
+                return juce::Rectangle<float>();
+            };
+            const auto before = storedBounds();
+            control->mouseDown (makeEvent (*control, { 20.0f, 5.0f }, { 20.0f, 5.0f }, 1, false));
+            control->mouseDrag (makeEvent (*control, { 50.0f, 25.0f }, { 20.0f, 5.0f }, 1, true));
+            control->mouseUp (makeEvent (*control, { 50.0f, 25.0f }, { 20.0f, 5.0f }, 1, true));
+            pump (400);
+            const auto after = storedBounds();
+            t.check (after.getPosition() == before.getPosition() + juce::Point<float> (30.0f, 20.0f),
+                     "moving a live control stores exactly the dragged offset ("
+                     + before.getPosition().toString() + " -> " + after.getPosition().toString() + ")");
+        }
+
         context.controller.setSceneKeybinding (p.scenes.at (0).path, "q");
         pump();
-        live.keyPressed (juce::KeyPress ('q'));
+        t.check (p.scenes.at (0).userData.keybinding == "Q", "scene keys are stored upper-case, as in Flex");
+        context.controller.activateScene ({});
+        main.getRibbon().grabKeyboardFocus();   // scene keys work wherever the focus is
+        if (auto* peer = main.getPeer())
+            peer->handleKeyPress (juce::KeyPress ('q'));
         pump();
         t.check (context.session.getValue (p.player.path + ".scene").toString() == p.scenes.at (0).name, "scene key binding selects the scene in Live view");
 
@@ -312,6 +381,52 @@ namespace integra
         main.invokeCommand (MainComponent::cmdUndo);
         pump();
         t.check (context.session.nodeExists (delayPath) && p.findBlock (block1)->envelopes.size() == 1, "undo brings them all back");
+
+        // --- envelope control points (EnvelopeView) ---------------------------------
+        main.showView ("arrange");
+        pump();
+        if (auto* blk = p.findBlock (block1); blk != nullptr && ! blk->envelopes.empty())
+        {
+            const auto envelope = blk->envelopes.front().path;
+            const auto pointA = context.controller.addControlPoint (envelope, 200, 0.2f);
+            const auto pointB = context.controller.addControlPoint (envelope, 400, 0.2f);
+            pump();
+            context.model.selectedBlock = block1;
+            lanes.editedEnvelope = envelope;
+            lanes.repaint();
+
+            auto pointTick = [&] (const juce::String& path)
+            {
+                if (auto* b = p.findBlock (block1))
+                    for (auto& env : b->envelopes)
+                        for (auto& cp : env.points)
+                            if (cp.path == path)
+                                return cp.tick;
+                return -1;
+            };
+
+            if (auto pos = lanes.getControlPointPosition (pointA))
+            {
+                drag (lanes, *pos, { mapping.tickToX (blk->start + 600), pos->y });
+                pump();
+            }
+            t.check (pointTick (pointA) == 399, "a control point can't be dragged past the next one (tick " + juce::String (pointTick (pointA)) + ")");
+
+            juce::String firstPoint;
+            if (auto* b = p.findBlock (block1))
+                firstPoint = b->envelopes.front().points.front().path;
+            if (auto pos = lanes.getControlPointPosition (firstPoint))
+            {
+                drag (lanes, *pos, { pos->x + 40.0f, pos->y });
+                pump();
+                if (auto pos2 = lanes.getControlPointPosition (firstPoint))
+                    lanes.mouseDown (makeEvent (lanes, *pos2, *pos2, 1, false, juce::ModifierKeys::rightButtonModifier));
+                pump();
+            }
+            t.check (context.session.nodeExists (firstPoint) && pointTick (firstPoint) == 0,
+                     "the first control point stays at tick 0 and can't be deleted");
+            juce::ignoreUnused (pointB);
+        }
 
         main.showView ("arrange");
         context.controller.newProject();

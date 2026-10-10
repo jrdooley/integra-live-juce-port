@@ -2,6 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <map>
+#include <optional>
 #include <vector>
 #include "Core/AppContext.h"
 #include "Core/EndpointInfo.h"
@@ -85,12 +86,15 @@ namespace integra
         bool keyPressed (const juce::KeyPress&) override;
 
         int getTotalHeight() const;
+        /** Where a control point of a block envelope is drawn (for tests). */
+        std::optional<juce::Point<float>> getControlPointPosition (const juce::String& controlPointPath) const;
         void deleteSelection();
         const TimelineMapping& getMapping() const noexcept  { return mapping; }
 
         int playPosition = 0;
         std::function<void (const juce::String& blockPath)> onOpenBlock;
         std::function<void()> onSelectionChanged;
+        std::function<void()> onSnapLinesChanged;
 
         static constexpr int headerWidth = 170;
         static constexpr int addTrackHeight = 34;
@@ -123,10 +127,22 @@ namespace integra
 
         enum class Drag { none, moveBlock, resizeStart, resizeEnd, controlPoint } drag = Drag::none;
         juce::String dragBlock, dragPoint;
-        int dragStartTick = 0, originalStart = 0, originalEnd = 0;
-        juce::Rectangle<float> dragPreview;
-        juce::Range<int> dragStartTickPreview;
+        int dragStartTick = 0;
+        float dragPixelOffset = 0.0f;
         juce::String dragTargetTrack;
+        std::map<juce::String, juce::Range<int>> draggedBlocks;   // dragged and nudged blocks
+        juce::Range<int> dragPointLimits;                         // allowed ticks for the dragged control point
+        int dragPointTick = 0;
+        float dragPointValue = 0.0f;
+
+        static constexpr float blockResizeAreaWidth = 10.0f;   // BlockView resize areas
+        static constexpr int minimumBlockLength = 10;          // Block._minimumBlockLength (ticks)
+
+        juce::Range<int> displayedRange (const model::Block&) const;
+        void updateBlockDrag (const juce::MouseEvent&);
+        void rescheduleBlocks (const model::Track&, bool movingRight);
+        struct Snap { int value; bool snapped; int distance; };
+        Snap snapBlock (int ticks) const;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TrackLanes)
     };

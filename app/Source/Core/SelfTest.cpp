@@ -126,6 +126,19 @@ namespace integra
         // delete with dependants, then undo restores the subtree and its connections
         auto c2 = controller.connect (block, in, delay + ".in1");
         auto c3 = controller.connect (block, delay + ".out1", block + ".StereoAudioOut1.in2");
+
+        // no self-links and no feedback loops (IntegraModel.canSetAudioLink)
+        {
+            model.rebuild();
+            auto delay2 = controller.addModule (block, session.getCatalogue().findByName ("TapDelay")->guid, { 24, 5 });
+            model.rebuild();
+            auto forward = controller.connect (block, delay + ".out1", delay2 + ".in1");
+            t.check (forward.isNotEmpty(), "connect TapDelay1 -> TapDelay2");
+            t.check (controller.connect (block, delay2 + ".out1", delay + ".in1").isEmpty(), "a connection that would make a feedback loop is refused");
+            t.check (controller.connect (block, delay + ".out1", delay + ".in1").isEmpty(), "a module can't be connected to itself");
+            controller.remove (delay2);
+            model.rebuild();
+        }
         controller.setValue (delay + ".feedback", 0.25);
         controller.remove (delay);
         model.rebuild();
@@ -175,6 +188,21 @@ namespace integra
         model.rebuild();
         t.check (midi.isNotEmpty() && blk (block).midiControlInputs.size() == 1
                     && blk (block).midiControlInputs[0].outputConnection.isNotEmpty(), "MIDI control input routed through a scaler");
+
+        // what drives an endpoint (locks its controls)
+        {
+            auto kinds = [&] (const juce::String& endpoint)
+            {
+                juce::String k;
+                for (auto& d : p.driversOf (endpoint))
+                    k << (d.kind == model::Driver::Kind::envelope ? "env" : d.kind == model::Driver::Kind::midi ? "midi" : "routing") << ";";
+                return k;
+            };
+            t.check (kinds (delay + ".mix") == "routing;", "a routed endpoint is driven by the routing (" + kinds (delay + ".mix") + ")");
+            t.check (kinds (delay + ".delayTime") == "env;", "an enveloped endpoint is driven by the envelope");
+            t.check (kinds (delay + ".outLevel") == "midi;", "a MIDI-controlled endpoint is driven by MIDI");
+            t.check (kinds (delay + ".feedback").isEmpty(), "a free endpoint has no drivers");
+        }
 
         // --- reposition and move block --------------------------------------------
         controller.repositionBlock (block, 100, 500);

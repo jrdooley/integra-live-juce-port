@@ -49,6 +49,7 @@ namespace integra
         ArrangeView& getArrangeView() noexcept      { return arrange; }
         ModuleView& getModuleView() noexcept        { return moduleView; }
         LiveView& getLiveView() noexcept            { return liveView; }
+        RibbonBar& getRibbon() noexcept            { return ribbon; }
         PropertiesPanel& getProperties() noexcept   { return properties; }
         const juce::String& getCurrentView() const noexcept { return currentView; }
         bool invokeCommand (int commandID)          { return commands.invokeDirectly (commandID, false); }

@@ -30,6 +30,47 @@ namespace integra
     }
 
     //==============================================================================
+    /** The padlock shown on a driven control; click for the menu that removes the driver. */
+    class IntegraWidget::Padlock  : public juce::Component,
+                                    public juce::SettableTooltipClient
+    {
+    public:
+        explicit Padlock (IntegraWidget& w) : widget (w) {}
+
+        void paint (juce::Graphics& g) override
+        {
+            auto& t = Theme::get();
+            auto r = getLocalBounds().toFloat().reduced (1.5f);
+            g.setColour (t.panel.withAlpha (0.85f));
+            g.fillRoundedRectangle (r, 3.0f);
+
+            auto body = r.reduced (r.getWidth() * 0.18f, 0).withTrimmedTop (r.getHeight() * 0.45f).withTrimmedBottom (r.getHeight() * 0.08f);
+            juce::Path shackle;
+            shackle.addCentredArc (body.getCentreX(), body.getY(), body.getWidth() * 0.32f, r.getHeight() * 0.3f,
+                                   0.0f, -juce::MathConstants<float>::halfPi, juce::MathConstants<float>::halfPi, true);
+            g.setColour (widget.isFullyLocked() ? t.text : t.textDim);
+            g.strokePath (shackle, juce::PathStrokeType (1.6f));
+            g.fillRoundedRectangle (body, 1.5f);
+        }
+
+        void mouseDown (const juce::MouseEvent&) override   { widget.showPadlockMenu(); }
+
+    private:
+        IntegraWidget& widget;
+    };
+
+    namespace
+    {
+        /** Covers a fully locked control so it can't be changed by the mouse. */
+        class LockOverlay  : public juce::Component,
+                             public juce::SettableTooltipClient
+        {
+        public:
+            LockOverlay()   { setInterceptsMouseClicks (true, false); }
+        };
+    }
+
+    //==============================================================================
     IntegraWidget::IntegraWidget (AppContext& c, const juce::String& path, const WidgetSpec& s)
         : context (c), modulePath (path), spec (s)
     {
@@ -49,11 +90,120 @@ namespace integra
 
         auto& primary = info (spec.mapping.count ("value") ? "value" : spec.mapping.begin() != spec.mapping.end() ? spec.mapping.begin()->first : "value");
         setTooltip (primary.description.isNotEmpty() ? spec.label + ": " + primary.description : spec.label);
+
+        addComponentListener (this);
+        context.model.addChangeListener (this);
+        updateLocks();
     }
 
     IntegraWidget::~IntegraWidget()
     {
+        context.model.removeChangeListener (this);
+        removeComponentListener (this);
         context.watcher.removeAll (this);
+    }
+
+    void IntegraWidget::changeListenerCallback (juce::ChangeBroadcaster*)
+    {
+        updateLocks();
+    }
+
+    void IntegraWidget::updateLocks()
+    {
+        // ControlContainer.setControlWritableFlags
+        lockedAttributes.clear();
+        drivers.clear();
+        auto& project = context.model.get();
+        for (auto& [attribute, endpoint] : spec.mapping)
+        {
+            for (auto& d : project.driversOf (modulePath + "." + endpoint))
+            {
+                lockedAttributes.insert (attribute);
+                drivers.push_back ({ attribute, d });
+            }
+        }
+
+        if (lockedAttributes.empty())
+        {
+            padlock.reset();
+            lockOverlay.reset();
+            return;
+        }
+
+        juce::StringArray explanation;
+        for (auto& [attribute, d] : drivers)
+            explanation.add ("'" + attribute + "' is set by "
+                             + (d.kind == model::Driver::Kind::envelope ? juce::String ("an envelope")
+                                : d.kind == model::Driver::Kind::midi ? d.description
+                                : "a routing from " + d.description));
+        const auto tip = explanation.joinIntoString ("\n") + "\nClick the padlock to remove it.";
+
+        if (padlock == nullptr)
+        {
+            padlock = std::make_unique<Padlock> (*this);
+            addAndMakeVisible (*padlock);
+        }
+        static_cast<Padlock*> (padlock.get())->setTooltip (tip);
+
+        if (isFullyLocked())
+        {
+            if (lockOverlay == nullptr)
+            {
+                lockOverlay = std::make_unique<LockOverlay>();
+                addAndMakeVisible (*lockOverlay);
+            }
+            static_cast<LockOverlay*> (lockOverlay.get())->setTooltip (tip);
+        }
+        else
+        {
+            lockOverlay.reset();
+        }
+
+        layoutLock();
+        repaint();
+    }
+
+    bool IntegraWidget::isFullyLocked() const
+    {
+        for (auto& [attribute, endpoint] : spec.mapping)
+            if (! isLocked (attribute))
+                return false;
+        return ! spec.mapping.empty();
+    }
+
+    void IntegraWidget::componentMovedOrResized (juce::Component&, bool, bool wasResized)
+    {
+        if (wasResized)
+            layoutLock();
+    }
+
+    void IntegraWidget::layoutLock()
+    {
+        if (lockOverlay != nullptr)
+        {
+            lockOverlay->setBounds (getLocalBounds());
+            lockOverlay->toFront (false);
+        }
+        if (padlock != nullptr)
+        {
+            padlock->setBounds (2, 2, 16, 16);
+            padlock->toFront (false);
+        }
+    }
+
+    void IntegraWidget::showPadlockMenu()
+    {
+        // ControlContainer.onClickPadlock
+        juce::PopupMenu menu;
+        const bool multiple = spec.mapping.size() > 1;
+        for (auto& [attribute, d] : drivers)
+        {
+            juce::String label = d.kind == model::Driver::Kind::envelope ? juce::String ("Delete Envelope") + (multiple ? " for " + attribute : juce::String())
+                                                                         : "Delete Routing from " + d.description + (multiple ? " to " + attribute : juce::String());
+            const auto nodes = d.nodesToRemove;
+            menu.addItem (label, [this, nodes] { context.controller.remove (nodes); });
+        }
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (padlock.get()));
     }
 
     juce::String IntegraWidget::endpointPath (const juce::String& attribute) const
@@ -83,6 +233,12 @@ namespace integra
     void IntegraWidget::set (const juce::String& attribute, const juce::var& value)
     {
         auto path = endpointPath (attribute);
+        if (isLocked (attribute))
+        {
+            valuesChanged();   // put the control back where the driver has it
+            repaint();
+            return;
+        }
         if (path.isNotEmpty())
         {
             values[attribute] = value;
@@ -98,7 +254,7 @@ namespace integra
     void IntegraWidget::bang (const juce::String& attribute)
     {
         auto path = endpointPath (attribute);
-        if (path.isNotEmpty())
+        if (path.isNotEmpty() && ! isLocked (attribute))
             context.controller.bang (path);
     }
 
@@ -463,10 +619,13 @@ namespace integra
         class FileDialogWidget  : public IntegraWidget
         {
         public:
-            FileDialogWidget (AppContext& c, const juce::String& p, const WidgetSpec& s, bool forSaving)
-                : IntegraWidget (c, p, s), saving (forSaving)
+            /** SoundFileLoadDialog, FileLoadDialog, FileSaveDialog, LocateFolderDialog (Flex controls/*DialogControl.as) */
+            enum class Mode { loadSound, load, save, folder };
+
+            FileDialogWidget (AppContext& c, const juce::String& p, const WidgetSpec& s, Mode m)
+                : IntegraWidget (c, p, s), mode (m)
             {
-                button.setButtonText (saving ? "Save..." : "Load...");
+                button.setButtonText (mode == Mode::save ? "Save..." : mode == Mode::folder ? "Choose folder..." : "Load...");
                 button.onClick = [this] { choose(); };
                 addAndMakeVisible (button);
             }
@@ -487,11 +646,16 @@ namespace integra
         private:
             void choose()
             {
-                const juce::String patterns = saving ? "*.wav;*.aif;*.aiff" : "*.wav;*.aif;*.aiff;*.flac;*.ogg";
-                chooser = std::make_unique<juce::FileChooser> (spec.label, juce::File::getSpecialLocation (juce::File::userMusicDirectory), patterns);
-                const int chooserFlags = saving ? (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting)
-                                                : juce::FileBrowserComponent::openMode;
-                chooser->launchAsync (chooserFlags | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
+                const juce::String patterns = mode == Mode::loadSound ? "*.wav;*.aif;*.aiff" : "*";
+                auto start = juce::File::createFileWithoutCheckingPath (get ("value").toString());
+                if (! start.exists())
+                    start = juce::File::getSpecialLocation (mode == Mode::loadSound ? juce::File::userMusicDirectory : juce::File::userDocumentsDirectory);
+                chooser = std::make_unique<juce::FileChooser> (spec.label, start, patterns);
+                int chooserFlags = mode == Mode::save ? (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting
+                                                         | juce::FileBrowserComponent::canSelectFiles)
+                                 : mode == Mode::folder ? (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories)
+                                 : (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles);
+                chooser->launchAsync (chooserFlags, [this] (const juce::FileChooser& fc)
                 {
                     auto f = fc.getResult();
                     if (f != juce::File())
@@ -499,7 +663,7 @@ namespace integra
                 });
             }
 
-            bool saving;
+            Mode mode;
             juce::TextButton button;
             std::unique_ptr<juce::FileChooser> chooser;
         };
@@ -625,8 +789,10 @@ namespace integra
         if (type == "RadioGroup")           return std::make_unique<RadioGroupWidget> (c, p, s);
         if (type == "RangeSlider")          return std::make_unique<RangeSliderWidget> (c, p, s);
         if (type == "VuMeter")              return std::make_unique<VuMeterWidget> (c, p, s);
-        if (type == "SoundFileLoadDialog")  return std::make_unique<FileDialogWidget> (c, p, s, false);
-        if (type == "FileSaveDialog")       return std::make_unique<FileDialogWidget> (c, p, s, true);
+        if (type == "SoundFileLoadDialog")  return std::make_unique<FileDialogWidget> (c, p, s, FileDialogWidget::Mode::loadSound);
+        if (type == "FileLoadDialog")       return std::make_unique<FileDialogWidget> (c, p, s, FileDialogWidget::Mode::load);
+        if (type == "FileSaveDialog")       return std::make_unique<FileDialogWidget> (c, p, s, FileDialogWidget::Mode::save);
+        if (type == "LocateFolderDialog")   return std::make_unique<FileDialogWidget> (c, p, s, FileDialogWidget::Mode::folder);
         if (type == "XYPanPad")             return std::make_unique<XYPadWidget> (c, p, s, true);
         if (type == "XYScratchPad")         return std::make_unique<XYPadWidget> (c, p, s, false);
         if (type == "DryWetBalance")        return std::make_unique<BalanceWidget> (c, p, s, "dry", "wet");

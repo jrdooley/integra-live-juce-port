@@ -28,12 +28,18 @@ automated interaction test.
   palette, height, move up/down, import block, delete); "+ Add track".
 * **Blocks** positioned by their block envelopes: double-click an empty lane to
   add a block (up to the next block), drag to move (also vertically to another
-  track), drag either edge to resize, double-click to open in the Module View,
-  right-click for rename / export / delete / *Edit envelope*. Blocks may not
-  overlap within a track (enforced as in Flex).
+  track), drag either edge (10 px handles) to resize, double-click to open in
+  the Module View, right-click for rename / export / delete / *Edit envelope*.
+  Blocks don't overlap within a track: as in Flex (`doBlockRescheduling`), a
+  dragged or resized block pushes its neighbours along, keeping their order;
+  edges snap to blocks on other tracks and to scenes within 10 px; the whole
+  drag is one undo step. Delete/Backspace removes the selected block (tracks
+  are deleted from their context menu only).
 * **Envelopes** inside blocks: all of a block's envelopes are drawn; choose one
   with *Edit envelope* to edit it — double-click to add a control point, drag
-  to move, right-click to delete.
+  to move (a point stays between its neighbours and the first one stays at
+  tick 0, as in `EnvelopeView.as`; the move is committed on release),
+  right-click to delete (not the first point).
 * Zoom with Ctrl+wheel or the +/- buttons, scroll with the scrollbar or
   shift+wheel; zoom/scroll persist in the project (`timelineZoom`,
   `timelineScroll` userData, same units as Flex).
@@ -55,7 +61,9 @@ automated interaction test.
 * **Module graph**: modules at their stored grid positions (Flex grid units,
   one unit = one text row = 18 px), audio pins on each side; drag a module to
   move it (half-unit snapping), drag from an output pin to an input pin (or
-  back) to connect, click a connection to select it, Delete removes the
+  back) to connect (links from a module to itself or that would create a
+  feedback loop are refused, as `IntegraModel.canSetAudioLink`), click a
+  connection to select it, Delete removes the
   selection, right-click a module to rename / export / delete. The selected
   module is saved as the block's `primarySelectedChild`, as in Flex.
 * **Module properties**: the module's widgets from its interface definition,
@@ -73,12 +81,13 @@ Dark colour scheme (per project, as in Flex; Settings → Dark colour scheme):
 ![Live view](images/live-view.png)
 
 Each track shows the live-view controls of the block currently under the
-playhead (or the selected block). Controls appear where they were placed —
+playhead (nothing when no block is, as in Flex). Controls appear where they were placed —
 the demo block *LiveViewControls* above was laid out in the Flex GUI and
 opens unchanged. Drag a control's title strip to move it, its corner to
-resize it; the layout is stored in the block's `userData`. Scene buttons
-across the top select scenes, and each scene's key binding works while the
-Live view has focus.
+resize it; the layout is stored in the block's `userData` relative to the
+block area, as Flex stored it. Scene buttons across the top select scenes,
+and each scene's key binding (0-9 or A-Z, stored upper-case as in Flex) works
+anywhere in the window while the Live view is shown, except in text fields.
 
 ## Widgets — `Widgets/IntegraWidgets.{h,cpp}` (Flex: `controls/`, `controlSDK/`)
 
@@ -94,7 +103,7 @@ endpoints through their IID attribute mappings:
 | RadioGroup | value | from allowed states / state labels / small integer ranges |
 | RangeSlider | min, max | two-thumb slider |
 | VuMeter | level | follows Pd feedback |
-| SoundFileLoadDialog, FileSaveDialog | value | native file chooser |
+| SoundFileLoadDialog, FileLoadDialog, FileSaveDialog, LocateFolderDialog | value | native file / folder chooser |
 | XYPanPad, XYScratchPad | x, y | 2-D pad |
 | DryWetBalance, EarlyLateBalance, PanoramaBalance | value | labelled crossfader |
 
@@ -102,6 +111,12 @@ Every widget follows its endpoints through `EndpointWatcher` (a per-path
 registry on top of the notification hub), so values changed by envelopes,
 scripts, MIDI, routing or Pd feedback update the controls; user edits go
 through `ProjectController` and are undoable (drags coalesce into one step).
+
+A control whose endpoint is driven by an envelope, MIDI (once learned) or a
+routing is locked, as in Flex's `ControlContainer`: it shows a padlock and the
+user can't change it (for a multi-endpoint widget, only the driven attribute is
+locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
+…* for each driver (`model::Project::driversOf`).
 
 ## Application shell — `MainComponent`, `RibbonBar`, `PreferencesPanel`
 
@@ -132,7 +147,7 @@ through `ProjectController` and are undoable (drags coalesce into one step).
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (34 checks, all
+keyboard events and checks the resulting project state (41 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,

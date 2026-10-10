@@ -21,13 +21,21 @@ namespace integra
 
     void ModuleLibrary::refresh()
     {
-        if (tagFilter.getNumItems() == 0)
+        // rebuild the tag list when the catalogue's tags change (e.g. after installing a module)
+        const auto tags = context.session.getCatalogue().getAllTags();
+        juce::StringArray shownTags;
+        for (int i = 1; i < tagFilter.getNumItems(); ++i)
+            shownTags.add (tagFilter.getItemText (i));
+        if (tagFilter.getNumItems() == 0 || shownTags != juce::StringArray (tags))
         {
+            const auto selected = tagFilter.getSelectedId() > 1 ? tagFilter.getText() : juce::String();
+            tagFilter.clear (juce::dontSendNotification);
             tagFilter.addItem ("All modules", 1);
             int id = 2;
-            for (auto& tag : context.session.getCatalogue().getAllTags())
+            for (auto& tag : tags)
                 tagFilter.addItem (tag, id++);
-            tagFilter.setSelectedId (1, juce::dontSendNotification);
+            const int index = juce::StringArray (tags).indexOf (selected);
+            tagFilter.setSelectedId (index >= 0 ? index + 2 : 1, juce::dontSendNotification);
         }
 
         const auto text = search.getText().trim();
@@ -278,7 +286,7 @@ namespace integra
             g.strokePath (linkPath (l.start, l.end), juce::PathStrokeType (l.connectionPath == selectedLink ? 3.0f : 2.0f));
         }
 
-        if (dragPin != nullptr)
+        if (dragPin.has_value())
         {
             g.setColour (t.accent);
             auto from = dragPin->isInput ? dragPinEnd : dragPin->position;
@@ -380,12 +388,12 @@ namespace integra
     void ModuleGraph::mouseDown (const juce::MouseEvent& e)
     {
         grabKeyboardFocus();
-        dragPin = nullptr;
+        dragPin.reset();
         draggingModule = {};
 
         if (auto* pin = pinAt (e.position))
         {
-            dragPin = pin;
+            dragPin = *pin;
             dragPinEnd = e.position;
             return;
         }
@@ -426,7 +434,7 @@ namespace integra
 
     void ModuleGraph::mouseDrag (const juce::MouseEvent& e)
     {
-        if (dragPin != nullptr)
+        if (dragPin.has_value())
         {
             dragPinEnd = e.position;
             repaint();
@@ -458,7 +466,7 @@ namespace integra
 
     void ModuleGraph::mouseUp (const juce::MouseEvent& e)
     {
-        if (dragPin != nullptr)
+        if (dragPin.has_value())
         {
             auto* target = pinAt (e.position);
             if (target != nullptr && target->isInput != dragPin->isInput
@@ -467,10 +475,10 @@ namespace integra
                 const auto& source = dragPin->isInput ? target->endpoint : dragPin->endpoint;
                 const auto& dest = dragPin->isInput ? dragPin->endpoint : target->endpoint;
                 const auto s = source, d = dest;
-                dragPin = nullptr;
+                dragPin.reset();
                 context.controller.connect (blockPath, s, d);
             }
-            dragPin = nullptr;
+            dragPin.reset();
             repaint();
             return;
         }

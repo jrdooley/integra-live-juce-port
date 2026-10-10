@@ -23,6 +23,7 @@ namespace integra
         std::vector<std::pair<juce::String, juce::var>> stateLabels;
         bool canBeSource = false, canBeTarget = false;
         bool isInputFile = false;
+        bool isAudioStream = false;
 
         bool isNumeric() const noexcept     { return kind == Kind::integer || kind == Kind::real; }
 

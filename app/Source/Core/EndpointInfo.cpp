@@ -11,6 +11,8 @@ namespace integra
         if (info.description == "None")
             info.description = {};
 
+        info.isAudioStream = def.is_audio_stream();
+
         auto* control = def.get_control_info();
         if (control == nullptr)
             return info;    // audio stream: Kind::missing

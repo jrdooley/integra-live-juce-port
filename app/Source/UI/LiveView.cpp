@@ -58,16 +58,32 @@ namespace integra
                 resizer.setBounds (getWidth() - 12, getHeight() - 12, 12, 12);
             }
 
-            void mouseDown (const juce::MouseEvent& e) override     { dragger.startDraggingComponent (this, e); }
-            void mouseDrag (const juce::MouseEvent& e) override     { dragger.dragComponent (this, e, nullptr); }
+            void mouseDown (const juce::MouseEvent& e) override
+            {
+                dragStartBounds = getBounds();
+                dragStartInParent = getParentComponent() != nullptr ? e.getEventRelativeTo (getParentComponent()).position : e.position;
+            }
+
+            void mouseDrag (const juce::MouseEvent& e) override
+            {
+                if (getParentComponent() == nullptr)
+                    return;
+                const auto delta = (e.getEventRelativeTo (getParentComponent()).position - dragStartInParent).roundToInt();
+                // keep the control inside the block area (LiveViewBlock clamps to >= 0)
+                setTopLeftPosition (juce::jmax (0, dragStartBounds.getX() + delta.x), juce::jmax (topMargin, dragStartBounds.getY() + delta.y));
+            }
             void mouseUp (const juce::MouseEvent&) override         { store(); }
 
             static constexpr int stripHeight = 14;
 
+            /** y offset of the block area within the track panel (its header). */
+            int topMargin = 0;
+
         private:
             void store()
             {
-                auto bounds = getBounds().toFloat();
+                // stored relative to the block area, as placed by TrackPanel
+                auto bounds = getBounds().translated (0, -topMargin).toFloat();
                 const auto moduleName = lastElement (module);
                 const auto widgetLabel = label;
                 context.controller.updateBlockUserData (parentPath (module), [&] (BlockUserData& d)
@@ -81,7 +97,8 @@ namespace integra
             AppContext& context;
             juce::String module, label;
             std::unique_ptr<IntegraWidget> widget;
-            juce::ComponentDragger dragger;
+            juce::Rectangle<int> dragStartBounds;
+            juce::Point<float> dragStartInParent;
             juce::ComponentBoundsConstrainer constrainer;
             ResizeCorner resizer { this, &constrainer };
         };
@@ -111,6 +128,7 @@ namespace integra
                     auto bounds = lvc.bounds;
                     if (bounds.isEmpty())
                         bounds = { 10.0f, 10.0f, spec.position.getWidth(), spec.position.getHeight() + LiveControl::stripHeight };
+                    control->topMargin = headerHeight;
                     control->setBounds (bounds.toNearestInt().translated (0, headerHeight));
                     addAndMakeVisible (control);
                 }
@@ -176,18 +194,17 @@ namespace integra
 
     LiveView::~LiveView()
     {
+        if (keyTarget != nullptr)
+            keyTarget->removeKeyListener (this);
         context.model.removeChangeListener (this);
     }
 
     juce::String LiveView::blockToShow (const model::Track& track) const
     {
+        // as LiveViewTrack: only the block under the playhead is shown
         for (auto& b : track.blocks)
             if (playPosition >= b.start && playPosition < b.end)
                 return b.path;
-
-        if (auto* selected = context.model.get().findBlock (context.model.selectedBlock))
-            if (parentPath (selected->path) == track.path)
-                return selected->path;
 
         return {};
     }
@@ -218,8 +235,30 @@ namespace integra
             sceneButtons[i]->setToggleState (p.player.currentScene == p.scenes[(size_t) i].name, juce::dontSendNotification);
     }
 
+    void LiveView::parentHierarchyChanged()
+    {
+        updateKeyTarget();
+    }
+
+    void LiveView::updateKeyTarget()
+    {
+        // KeybindingView listened on the stage: scene keys work wherever the focus is,
+        // except where a focused component (e.g. a text editor) uses the key itself.
+        auto* top = isShowing() ? getTopLevelComponent() : nullptr;
+        if (top == this)
+            top = nullptr;
+        if (top == keyTarget.getComponent())
+            return;
+        if (keyTarget != nullptr)
+            keyTarget->removeKeyListener (this);
+        keyTarget = top;
+        if (keyTarget != nullptr)
+            keyTarget->addKeyListener (this);
+    }
+
     void LiveView::visibilityChanged()
     {
+        updateKeyTarget();
         if (isVisible())
         {
             shownSignature = {};
@@ -230,6 +269,7 @@ namespace integra
     void LiveView::rebuild()
     {
         auto& p = context.model.get();
+        playPosition = context.controller.getPlayPosition();
 
         sceneButtons.clear();
         for (auto& s : p.scenes)
@@ -261,16 +301,29 @@ namespace integra
 
     bool LiveView::keyPressed (const juce::KeyPress& key)
     {
+        return handleSceneKey (key);
+    }
+
+    bool LiveView::keyPressed (const juce::KeyPress& key, juce::Component*)
+    {
+        return isShowing() && handleSceneKey (key);
+    }
+
+    bool LiveView::handleSceneKey (const juce::KeyPress& key)
+    {
+        if (key.getModifiers().isCommandDown() || key.getModifiers().isCtrlDown() || key.getModifiers().isAltDown())
+            return false;
+
         auto character = key.getTextCharacter();
         if (character == 0 && key.getKeyCode() > 32 && key.getKeyCode() < 127)
             character = (juce::juce_wchar) key.getKeyCode();   // some platforms deliver only the key code
         if (character == 0)
             return false;
-        const auto c = juce::String::charToString (character).toLowerCase();
+        const auto c = juce::String::charToString (character).toUpperCase();
 
         for (auto& s : context.model.get().scenes)
         {
-            if (s.userData.keybinding.isNotEmpty() && s.userData.keybinding.toLowerCase() == c)
+            if (s.userData.keybinding.isNotEmpty() && s.userData.keybinding.toUpperCase() == c)
             {
                 context.controller.activateScene (s.path);
                 return true;

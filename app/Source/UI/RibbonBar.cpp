@@ -30,6 +30,11 @@ namespace integra
         startTimerHz (20);
     }
 
+
+    RibbonBar::~RibbonBar()
+    {
+        context.watcher.removeAll (this);
+    }
     void RibbonBar::setCurrentView (const juce::String& viewName)
     {
         arrangeButton.setToggleState (viewName != "live", juce::dontSendNotification);
@@ -57,15 +62,17 @@ namespace integra
         outLevel = juce::jmax (outLevel * 0.85f, context.audioHost.getAndResetOutputPeak());
         inLevel = juce::jmax (inLevel * 0.85f, context.audioHost.getAndResetInputPeak());
 
-        if (p.midiMonitorPath.isNotEmpty())
+        // every incoming message is a set of midiMessage, so watch it rather than polling
+        // the value (repeated identical messages wouldn't change it)
+        if (p.midiMonitorPath != watchedMidiMonitor)
         {
-            const int message = context.session.getValue (p.midiMonitorPath + ".midiMessage");
-            if (message != lastMidiMessage)
-            {
-                if (lastMidiMessage >= 0)
+            context.watcher.removeAll (this);
+            watchedMidiMonitor = p.midiMonitorPath;
+            if (watchedMidiMonitor.isNotEmpty())
+                context.watcher.watch (watchedMidiMonitor + ".midiMessage", this, [this] (const juce::String&, CCommandSource)
+                {
                     lastMidi = juce::Time::getMillisecondCounter();
-                lastMidiMessage = message;
-            }
+                });
         }
         midiActivity = juce::Time::getMillisecondCounter() - lastMidi < 250;
 

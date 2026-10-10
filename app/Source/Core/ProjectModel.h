@@ -138,6 +138,15 @@ namespace integra
             juce::String currentScene;
         };
 
+        /** Something that sets an endpoint automatically: an envelope, MIDI or a routing
+            (Flex: IntegraModel.isConnectionTarget). Its controls are locked while it exists. */
+        struct Driver
+        {
+            enum class Kind { envelope, midi, routing } kind;
+            juce::String description;         // e.g. "MIDI cc 7 (channel 1)", "Track1.Block1.LFO1.out"
+            juce::StringArray nodesToRemove;  // deleting these removes the driver
+        };
+
         struct Project  : Container
         {
             bool valid = false;
@@ -156,6 +165,9 @@ namespace integra
 
             /** End of the last block, in ticks. */
             int getLength() const;
+
+            /** What drives `endpointPath`. MIDI inputs still in learn mode don't count, as in Flex. */
+            std::vector<Driver> driversOf (const juce::String& endpointPath) const;
         };
 
         /** Endpoint names whose changes alter the snapshot (others, like Player.tick or

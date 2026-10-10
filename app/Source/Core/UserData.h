@@ -83,7 +83,9 @@ namespace integra
 
     struct SceneUserData  : UserDataBase
     {
-        juce::String keybinding;                  // single character, or empty
+        juce::String keybinding;                  // one of `keybindings`, or empty
+
+        static constexpr const char* keybindings = "1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ";   // SceneUserData.KEYBINDINGS
 
         static SceneUserData fromString (const juce::String&);
         juce::String toString() const;

@@ -71,6 +71,9 @@ namespace integra
         juce::String addBlock (juce::String trackPath, int startTick, int endTick, bool withDefaultContents = true);
         void repositionBlock (juce::String blockPath, int startTick, int endTick);
         juce::String moveBlockToTrack (juce::String blockPath, juce::String trackPath);
+        /** Finishes a block drag in one undo step: optionally moves `blockPath` to `trackPath`,
+            then repositions every block in `ranges` (keyed by path before the move). */
+        void repositionBlocks (juce::String blockPath, juce::String trackPath, const std::map<juce::String, juce::Range<int>>& ranges);
 
         /** Imports a saved block (.integra) into a track at the given time. */
         juce::Result importBlock (const juce::File&, juce::String trackPath, int startTick, juce::String* newBlockPath = nullptr);
@@ -152,13 +155,18 @@ namespace integra
         void setLiveViewControl (juce::String modulePath, juce::String widgetLabel, bool shown, juce::Rectangle<float> bounds = {});
 
         //==============================================================================
-        /** Runs fn as a single named undo transaction. */
+        /** Runs fn as a single named undo transaction. Calls nested inside another
+            transaction join the outer one, so composite edits undo in one step. */
         template <typename Fn>
         auto transaction (juce::String name, Fn&& fn)
         {
-            undoManager.beginNewTransaction (name);
-            lastSetPath = {};
-            ++transactionCounter;
+            if (transactionDepth == 0)
+            {
+                undoManager.beginNewTransaction (name);
+                lastSetPath = {};
+                ++transactionCounter;
+            }
+            struct Depth { int& d; Depth (int& x) : d (x) { ++d; } ~Depth() { --d; } } depth { transactionDepth };
             return fn();
         }
 
@@ -168,6 +176,7 @@ namespace integra
         juce::String createNode (const GUID&, juce::String prefix, juce::String parentPath);
         void setValueInTransaction (juce::String endpointPath, const juce::var& value);
         void repositionScenesInTransaction (const SceneRanges&);
+        bool isUpstreamInAudioLinks (juce::String modulePath, juce::String candidate) const;
         juce::String relativeTo (juce::String containerPath, juce::String absolutePath) const;
         void collectDependants (juce::String path, juce::StringArray& toDelete) const;
         void removeInTransaction (const juce::StringArray& paths);
@@ -179,7 +188,7 @@ namespace integra
         ProjectModel& model;
         juce::UndoManager undoManager { 3000, 100 };
         juce::File projectFile;
-        int transactionCounter = 0, savedTransactionCount = 0;
+        int transactionCounter = 0, savedTransactionCount = 0, transactionDepth = 0;
         juce::String lastSetPath;
         juce::uint32 lastSetTime = 0;
     };

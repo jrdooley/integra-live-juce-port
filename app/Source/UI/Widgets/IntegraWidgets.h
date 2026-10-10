@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <set>
 #include "Core/AppContext.h"
 #include "Core/EndpointInfo.h"
 
@@ -25,7 +26,9 @@ namespace integra
         The JUCE port of the Flex controlSDK (components/controls/ in the Flex GUI).
     */
     class IntegraWidget  : public juce::Component,
-                           public juce::SettableTooltipClient
+                           public juce::SettableTooltipClient,
+                           private juce::ChangeListener,
+                           private juce::ComponentListener
     {
     public:
         IntegraWidget (AppContext&, const juce::String& modulePath, const WidgetSpec&);
@@ -49,6 +52,13 @@ namespace integra
         /** Smallest sensible size for this widget type. */
         static juce::Point<int> minimumSize (const juce::String& type);
 
+        /** True when an envelope, MIDI or a routing drives the attribute's endpoint; the user
+            can't change it then (Flex: ControlContainer padlock). */
+        bool isLocked (const juce::String& attribute) const   { return lockedAttributes.count (attribute) > 0; }
+        bool isFullyLocked() const;
+        /** Shows the padlock menu (delete the envelope / routing). */
+        void showPadlockMenu();
+
     protected:
         juce::var get (const juce::String& attribute) const;
         double getUnit (const juce::String& attribute) const;
@@ -68,7 +78,16 @@ namespace integra
         const WidgetSpec spec;
 
     private:
+        class Padlock;
+        void changeListenerCallback (juce::ChangeBroadcaster*) override;
+        void componentMovedOrResized (juce::Component&, bool, bool) override;
+        void updateLocks();
+        void layoutLock();
+
         std::map<juce::String, EndpointInfo> infos;
+        std::set<juce::String> lockedAttributes;
+        std::vector<std::pair<juce::String, model::Driver>> drivers;   // attribute, driver
+        std::unique_ptr<juce::Component> padlock, lockOverlay;
         std::map<juce::String, juce::var> values;
         bool showLabel = true;
         static const EndpointInfo missingInfo;

@@ -11,6 +11,7 @@ namespace integra
     {
     public:
         explicit RibbonBar (AppContext&);
+        ~RibbonBar() override;
 
         void setCurrentView (const juce::String& viewName);   // "arrange" | "live" | "module"
         std::function<void (const juce::String&)> onViewRequested;
@@ -30,6 +31,6 @@ namespace integra
         float outLevel = 0.0f, inLevel = 0.0f;
         bool midiActivity = false;
         juce::uint32 lastMidi = 0;
-        int lastMidiMessage = -1;
+        juce::String watchedMidiMonitor;   // MidiRawInput whose messages light the MIDI indicator
     };
 }

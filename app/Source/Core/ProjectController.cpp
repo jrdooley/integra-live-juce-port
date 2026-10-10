@@ -1,4 +1,5 @@
 #include "ProjectController.h"
+#include "EndpointInfo.h"
 
 namespace integra
 {
@@ -620,6 +621,28 @@ namespace integra
         });
     }
 
+    void ProjectController::repositionBlocks (juce::String blockPath, juce::String trackPath, const std::map<juce::String, juce::Range<int>>& ranges)
+    {
+        transaction ("Move Block", [&]
+        {
+            juce::String movedPath = blockPath;
+            if (trackPath.isNotEmpty() && trackPath != parentPath (blockPath))
+            {
+                movedPath = moveBlockToTrack (blockPath, trackPath);
+                if (movedPath == blockPath)
+                    return;   // refused (name clash)
+            }
+
+            for (auto& [path, range] : ranges)
+            {
+                const auto current = path == blockPath ? movedPath : path;
+                if (auto* b = model.get().findBlock (current))
+                    if (b->start != range.getStart() || b->end != range.getEnd())
+                        repositionBlock (current, range.getStart(), range.getEnd());
+            }
+        });
+    }
+
     juce::String ProjectController::moveBlockToTrack (juce::String blockPath, juce::String trackPath)
     {
         auto* block = model.get().findBlock (blockPath);
@@ -761,8 +784,55 @@ namespace integra
         });
     }
 
+    bool ProjectController::isUpstreamInAudioLinks (juce::String modulePath, juce::String candidate) const
+    {
+        // IntegraModel.isTargetUpstreamInAudioLinks: follow audio connections backwards
+        // from modulePath, through every container, looking for candidate
+        std::vector<const model::Connection*> audioLinks;
+        auto collect = [&] (const model::Container& c)
+        {
+            for (auto& conn : c.connections)
+                if (conn.sourcePath.isNotEmpty() && conn.targetPath.isNotEmpty()
+                     && EndpointInfo::find (session, conn.sourcePath).isAudioStream
+                     && EndpointInfo::find (session, conn.targetPath).isAudioStream)
+                    audioLinks.push_back (&conn);
+        };
+        auto& p = model.get();
+        collect (p);
+        for (auto& t : p.tracks)
+        {
+            collect (t);
+            for (auto& b : t.blocks)
+                collect (b);
+        }
+
+        juce::StringArray visited, toVisit { modulePath };
+        while (! toVisit.isEmpty())
+        {
+            const auto node = toVisit[0];
+            toVisit.remove (0);
+            visited.add (node);
+            for (auto* link : audioLinks)
+            {
+                if (link->targetNode() != node)
+                    continue;
+                if (link->sourceNode() == candidate)
+                    return true;
+                if (! visited.contains (link->sourceNode()))
+                    toVisit.addIfNotAlreadyThere (link->sourceNode());
+            }
+        }
+        return false;
+    }
+
     juce::String ProjectController::connect (juce::String containerPath, juce::String sourceEndpoint, juce::String targetEndpoint)
     {
+        // IntegraModel.canSetAudioLink: no links from a module to itself, and none that
+        // would make a feedback loop (the target already feeds the source)
+        if (parentPath (sourceEndpoint) == parentPath (targetEndpoint)
+             || isUpstreamInAudioLinks (parentPath (sourceEndpoint), parentPath (targetEndpoint)))
+            return {};
+
         if (auto* c = model.get().findContainer (containerPath))
             for (auto& existing : c->connections)
                 if (existing.sourcePath == sourceEndpoint && existing.targetPath == targetEndpoint)
@@ -958,11 +1028,11 @@ namespace integra
 
         // first unused key binding, as AddScene.getUnusedKeybinding
         juce::String key;
-        for (auto c : juce::String ("1234567890abcdefghijklmnopqrstuvwxyz"))
+        for (auto c : juce::String (SceneUserData::keybindings))
         {
             bool used = false;
             for (auto& s : p.scenes)
-                used |= s.userData.keybinding == juce::String::charToString (c);
+                used |= s.userData.keybinding.equalsIgnoreCase (juce::String::charToString (c));
             if (! used)
             {
                 key = juce::String::charToString (c);
@@ -1033,12 +1103,17 @@ namespace integra
 
     void ProjectController::setSceneKeybinding (juce::String scenePath, juce::String key)
     {
+        // SceneUserData.KEYBINDINGS: one of 0-9 / A-Z, stored upper-case
+        key = key.trim().toUpperCase().substring (0, 1);
+        if (key.isNotEmpty() && ! juce::String (SceneUserData::keybindings).contains (key))
+            return;
+
         // a key can only select one scene
         transaction ("Set Scene Key", [&]
         {
             for (auto& s : model.get().scenes)
             {
-                if (s.path != scenePath && key.isNotEmpty() && s.userData.keybinding == key)
+                if (s.path != scenePath && key.isNotEmpty() && s.userData.keybinding.equalsIgnoreCase (key))
                 {
                     auto d = s.userData;
                     d.keybinding = {};

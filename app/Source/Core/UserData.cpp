@@ -268,7 +268,7 @@ namespace integra
             return d;
 
         d.readBase (*xml, { "keybinding" });
-        d.keybinding = childText (*xml, "keybinding");
+        d.keybinding = childText (*xml, "keybinding").toUpperCase();   // early port versions stored lower-case
         return d;
     }
 
