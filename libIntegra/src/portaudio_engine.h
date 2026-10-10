@@ -76,7 +76,7 @@ namespace integra_internal
 
 		private:
 
-			typedef std::unordered_map<string, PaHostApiTypeId> api_map;
+			typedef std::unordered_map<string, int> api_map;	// PaHostApiTypeId values, or api_none() (-1 is not a valid enumerator)
 			typedef std::unordered_map<string, PaDeviceIndex> device_map;
 
 			void update_available_apis();
@@ -96,7 +96,7 @@ namespace integra_internal
 			void output_handler( void *output_buffer, unsigned long frames_per_buffer, const PaStreamCallbackTimeInfo* time_info, PaStreamCallbackFlags status_flags );
 			void duplex_handler( const void *input_buffer, void *output_buffer, unsigned long frames_per_buffer, const PaStreamCallbackTimeInfo* time_info, PaStreamCallbackFlags status_flags );
 
-			PaHostApiTypeId api_none() const;
+			int api_none() const;
 
 			PaHostApiIndex get_selected_api_index() const;
 
@@ -120,7 +120,7 @@ namespace integra_internal
 			device_map m_available_output_devices;
 			int_vector m_available_sample_rates;
 
-			PaHostApiTypeId m_selected_api;
+			int m_selected_api;
 			PaDeviceIndex m_selected_input_device;
 			PaDeviceIndex m_selected_output_device;
 			int m_sample_rate;

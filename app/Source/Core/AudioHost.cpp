@@ -1,4 +1,6 @@
 #include "AudioHost.h"
+#include <algorithm>
+#include <cmath>
 
 namespace integra
 {
@@ -154,6 +156,14 @@ namespace integra
                 blockPosition = 0;
                 if (session.raw().process_audio (inputBlock.data(), outputBlock.data(), inChannels, outChannels, sampleRate) != CError::SUCCESS)
                     std::fill (outputBlock.begin(), outputBlock.end(), 0.0f);
+
+                // a NaN or infinity from a misbehaving module must never reach the speakers:
+                // the whole block is silenced (its other samples are suspect too) and counted
+                if (! std::all_of (outputBlock.begin(), outputBlock.end(), [] (float x) { return std::isfinite (x); }))
+                {
+                    std::fill (outputBlock.begin(), outputBlock.end(), 0.0f);
+                    nonFiniteBlocks.fetch_add (1, std::memory_order_relaxed);
+                }
             }
         }
 

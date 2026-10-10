@@ -347,7 +347,7 @@ namespace integra_internal
 			return;
 		}
 
-		const PaHostApiInfo *api_info = Pa_GetHostApiInfo( Pa_HostApiTypeIdToHostApiIndex( m_selected_api ) );
+		const PaHostApiInfo *api_info = Pa_GetHostApiInfo( Pa_HostApiTypeIdToHostApiIndex( ( PaHostApiTypeId ) m_selected_api ) );
 		if( !api_info )
 		{
 			INTEGRA_TRACE_ERROR << "Failed to get api info";
@@ -380,7 +380,7 @@ namespace integra_internal
 			return;
 		}
 
-		const PaHostApiInfo *api_info = Pa_GetHostApiInfo( Pa_HostApiTypeIdToHostApiIndex( m_selected_api ) );
+		const PaHostApiInfo *api_info = Pa_GetHostApiInfo( Pa_HostApiTypeIdToHostApiIndex( ( PaHostApiTypeId ) m_selected_api ) );
 		if( !api_info )
 		{
 			INTEGRA_TRACE_ERROR << "Failed to get api info";
@@ -550,7 +550,7 @@ namespace integra_internal
 				continue;
 			}
 
-			m_available_apis[ CStringHelper::trim( api_info->name ) ] = api_info->type;
+			m_available_apis[ CStringHelper::trim( api_info->name ) ] = ( int ) api_info->type;
 		}
 	}
 
@@ -1071,9 +1071,9 @@ namespace integra_internal
 	}
 
 
-	PaHostApiTypeId CPortAudioEngine::api_none() const
+	int CPortAudioEngine::api_none() const
 	{
-		return ( PaHostApiTypeId ) -1;
+		return -1;
 	}
 
 
@@ -1084,7 +1084,7 @@ namespace integra_internal
 			return -1;
 		}
 
-		PaHostApiIndex api_index = Pa_HostApiTypeIdToHostApiIndex( m_selected_api );
+		PaHostApiIndex api_index = Pa_HostApiTypeIdToHostApiIndex( ( PaHostApiTypeId ) m_selected_api );
 		if( api_index >= 0 )
 		{
 			return api_index;

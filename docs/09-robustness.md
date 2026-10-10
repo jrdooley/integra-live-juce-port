@@ -68,3 +68,16 @@ they never showed up in the original Windows builds.
 - macOS and Windows under sanitizers (the stress test itself runs in CI on both).
 - Projects other than the demo blocks: run `--stress-test 60 /path/to/project.integra`
   on your own projects to include them.
+
+## Safety additions
+
+- **Output guard** (`AudioHost`): if a block coming out of the engine holds a NaN or an
+  infinity, the whole block is silenced before it reaches the audio interface, and
+  counted (`getNonFiniteBlockCount`). A misbehaving module can then cost a moment of
+  silence, never a burst of full-scale noise. The stress test checks the count, so the
+  guard doesn't hide bugs from it.
+- **Sanitizer CI job** (`linux-sanitizers` in `.github/workflows/build.yml`): builds with
+  `INTEGRA_SANITIZE=ON` and runs every ctest suite, failing on any memory error or
+  undefined behaviour. Getting it green needed one more fix: libIntegra stored the
+  sentinel -1 in PortAudio's `PaHostApiTypeId` enum (not a valid value); those ids are
+  now kept as `int`.

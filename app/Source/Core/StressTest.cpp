@@ -28,9 +28,11 @@ namespace integra
         };
 
         /** Pulls `callbacks` blocks of 100 samples (not a multiple of 64) through AudioHost;
-            returns false if any output sample is not finite. */
+            returns false if the engine produced a NaN or infinity (AudioHost silences those
+            blocks, so its count is checked as well as the output). */
         bool pullAudio (AudioHost& host, int callbacks)
         {
+            const int silencedBefore = host.getNonFiniteBlockCount();
             const int numSamples = 100, channels = 2;
             juce::AudioBuffer<float> in (channels, numSamples), out (channels, numSamples);
             static double phase = 0;
@@ -55,7 +57,7 @@ namespace integra
                         if (! std::isfinite (out.getSample (c, i)))
                             finite = false;
             }
-            return finite;
+            return finite && host.getNonFiniteBlockCount() == silencedBefore;
         }
 
         /** Every node path in the snapshot exists in libIntegra. */

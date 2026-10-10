@@ -42,6 +42,42 @@ jobs:
           name: integra-live-linux
           path: build/integra-live-*.tar.gz
 
+  linux-sanitizers:
+    # AddressSanitizer + UndefinedBehaviorSanitizer over every test, including the
+    # stress test (see docs/09-robustness.md). Leak checking is off: Pd never frees
+    # its global state at exit.
+    runs-on: ubuntu-24.04
+    env:
+      ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config \
+            libxml2-dev liblua5.2-dev libsndfile1-dev libfftw3-dev \
+            portaudio19-dev libportmidi-dev libasound2-dev libjack-jackd2-dev libgtest-dev \
+            libfreetype-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxext-dev xvfb xauth
+
+      - name: Cache fetched dependencies (JUCE)
+        uses: actions/cache@v4
+        with:
+          path: build/_deps/*-src
+          key: deps-${{ runner.os }}-${{ hashFiles('app/CMakeLists.txt', 'cmake/*.cmake') }}
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DINTEGRA_SANITIZE=ON
+
+      - name: Build
+        # fewer parallel jobs: sanitizer builds of the JUCE modules need a lot of memory
+        run: cmake --build build --parallel 2
+
+      - name: Test under the sanitizers
+        run: ctest --test-dir build --output-on-failure
+
   macos:
     # Self-contained universal (Apple Silicon + Intel) app: static vcpkg dependencies,
     # signed and packaged as a DMG. Signing/notarisation use repository secrets when

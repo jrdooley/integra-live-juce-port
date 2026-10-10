@@ -35,6 +35,10 @@ namespace integra
         float getAndResetOutputPeak() noexcept                  { return outputPeak.exchange (0.0f); }
         float getAndResetInputPeak() noexcept                   { return inputPeak.exchange (0.0f); }
 
+        /** How many engine blocks have been silenced because they held a NaN or infinity
+            (which would otherwise reach the audio interface as full-scale noise). */
+        int getNonFiniteBlockCount() const noexcept            { return nonFiniteBlocks.load(); }
+
         double getCpuUsage() const                              { return deviceManager.getCpuUsage(); }
 
         /** Sets the channel layout the callback expects (called when a device starts;
@@ -66,6 +70,7 @@ namespace integra
         std::atomic<bool> processing { false };
 
         std::atomic<float> outputPeak { 0.0f }, inputPeak { 0.0f };
+        std::atomic<int> nonFiniteBlocks { 0 };
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioHost)
     };
