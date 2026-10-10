@@ -86,7 +86,7 @@ namespace integra
             black (dark scheme) or from white (light scheme). */
         Theme withHighContrast (Theme t)
         {
-            constexpr float multiplier = 2.0f;
+            static constexpr float multiplier = 2.0f;     // static: MSVC wants a capture for a local constexpr
             auto adjust = [&t] (juce::Colour& c)
             {
                 auto channel = [&t] (juce::uint8 v)
