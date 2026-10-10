@@ -2027,8 +2027,10 @@ namespace integra
                 controls.erase (std::remove_if (controls.begin(), controls.end(), [&] (auto& c) { return c.moduleName == moduleName; }), controls.end());
                 return;
             }
-            for (auto& [label, design] : sorted)
+            for (auto& widget : sorted)     // (no structured binding: Apple clang can't capture one)
             {
+                const auto& label = widget.first;
+                const auto& design = widget.second;
                 const bool present = std::any_of (controls.begin(), controls.end(),
                                                   [&] (auto& c) { return c.moduleName == moduleName && c.widgetLabel == label; });
                 if (! present)
