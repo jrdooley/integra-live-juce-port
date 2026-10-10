@@ -1,5 +1,7 @@
 #pragma once
 
+#include <map>
+
 #include "IntegraSession.h"
 #include "IntegraActions.h"
 #include "ProjectModel.h"
@@ -112,7 +114,12 @@ namespace integra
         //==============================================================================
         // Scenes & transport
 
-        juce::String addScene (int startTick, int length);
+        using SceneRanges = std::map<juce::String, juce::Range<int>>;   // scene path -> start/end ticks
+
+        /** Adds a scene; `moved` repositions neighbouring scenes in the same undo step. */
+        juce::String addScene (int startTick, int length, const SceneRanges& moved = {});
+        /** Moves and resizes scenes as one undo step (Flex: RepositionScene per scene). */
+        void repositionScenes (const SceneRanges&);
         void setScene (juce::String scenePath, int startTick, int length, juce::String mode);
         void setSceneKeybinding (juce::String scenePath, juce::String key);
         void activateScene (juce::String scenePath);
@@ -160,6 +167,7 @@ namespace integra
         juce::String createNode (juce::String moduleName, juce::String prefix, juce::String parentPath);
         juce::String createNode (const GUID&, juce::String prefix, juce::String parentPath);
         void setValueInTransaction (juce::String endpointPath, const juce::var& value);
+        void repositionScenesInTransaction (const SceneRanges&);
         juce::String relativeTo (juce::String containerPath, juce::String absolutePath) const;
         void collectDependants (juce::String path, juce::StringArray& toDelete) const;
         void removeInTransaction (const juce::StringArray& paths);

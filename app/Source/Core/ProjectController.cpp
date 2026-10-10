@@ -950,7 +950,7 @@ namespace integra
     }
 
     //==============================================================================
-    juce::String ProjectController::addScene (int startTick, int length)
+    juce::String ProjectController::addScene (int startTick, int length, const SceneRanges& moved)
     {
         auto& p = model.get();
         if (p.player.path.isEmpty())
@@ -973,6 +973,8 @@ namespace integra
         const auto player = p.player.path;
         return transaction ("Add Scene", [&]
         {
+            repositionScenesInTransaction (moved);
+
             auto scene = createNode ("Scene", "Scene", player);
             if (scene.isEmpty())
                 return juce::String();
@@ -987,6 +989,34 @@ namespace integra
 
             model.rebuild();
             return scene;
+        });
+    }
+
+    void ProjectController::repositionScenesInTransaction (const SceneRanges& scenes)
+    {
+        for (auto& [path, range] : scenes)
+        {
+            auto* scene = model.get().findScene (path);
+            if (scene == nullptr || (scene->start == range.getStart() && scene->length == range.getLength()))
+                continue;
+            setValueInTransaction (path + ".start", juce::jmax (0, range.getStart()));
+            setValueInTransaction (path + ".length", juce::jmax (1, range.getLength()));
+        }
+    }
+
+    void ProjectController::repositionScenes (const SceneRanges& scenes)
+    {
+        bool changed = false;
+        for (auto& [path, range] : scenes)
+            if (auto* scene = model.get().findScene (path))
+                changed |= scene->start != range.getStart() || scene->length != range.getLength();
+        if (! changed)
+            return;
+
+        transaction ("Move Scene", [&]
+        {
+            repositionScenesInTransaction (scenes);
+            model.rebuild();
         });
     }
 

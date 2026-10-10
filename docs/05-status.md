@@ -30,7 +30,7 @@ there (the GUI test needs a desktop session).
    JUCE callback path with non-power-of-two buffers, block activation by the playhead, undo/redo
    (including undoing deletes), rename, routing, MIDI control, envelopes, scenes, Lua, block moves,
    save/reopen, and importing all six Flex-saved demo blocks.
-5. `IntegraLive_gui_test` (under `xvfb-run`) — 27 interaction checks with synthesized mouse and
+5. `IntegraLive_gui_test` (under `xvfb-run`) — 34 interaction checks with synthesized mouse and
    keyboard events across all three views.
 
 Screenshots in `docs/images/` are produced by the app itself (`--screenshot`).
@@ -54,7 +54,7 @@ real MIDI devices.
 1. **Packaging**: code signing/notarisation for the macOS bundle; a Windows installer
    (CI currently uploads a zip-able folder). The GUI interaction test runs on Linux only in
    CI (it needs a desktop session on macOS/Windows).
-2. Remaining Flex features (see doc 04): module version upgrade/switch dialog, block library
-   panel, multi-select in the module graph, envelope curvature gesture, track collapse.
+2. Remaining Flex features and bugs: see [08-flex-parity.md](08-flex-parity.md) for the
+   full comparison with the Flex GUI.
 3. Optionally route MIDI through JUCE as well (a host-driven MIDI engine analogous to the audio
    one), so device handling is uniform.

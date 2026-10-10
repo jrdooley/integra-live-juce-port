@@ -144,6 +144,53 @@ namespace integra
         pump();
         t.check ((int) p.scenes.size() == scenesBefore, "Edit > Redo restores it");
 
+        // scene duration editing (Flex: SceneBar resize areas, Timeline.repositionSceneToMousePosition)
+        {
+            const auto scene1 = p.scenes.at (0).path;
+            auto sceneRange = [&] (const juce::String& path)
+            {
+                auto* s = p.findScene (path);
+                return s != nullptr ? juce::Range<int> (s->start, s->end()) : juce::Range<int>();
+            };
+            auto describe = [] (juce::Range<int> r) { return " (" + juce::String (r.getStart()) + ".." + juce::String (r.getEnd()) + ")"; };
+
+            drag (ruler, { mapping.tickToX (320) - 3.0f, 8.0f }, { mapping.tickToX (480) - 3.0f, 8.0f });
+            pump();
+            t.check (sceneRange (scene1) == juce::Range<int> (0, 480), "dragging a scene's end handle extends it" + describe (sceneRange (scene1)));
+
+            drag (ruler, { mapping.tickToX (480) - 3.0f, 8.0f }, { mapping.tickToX (200) - 3.0f, 8.0f });
+            pump();
+            t.check (sceneRange (scene1) == juce::Range<int> (0, 200), "dragging a scene's end handle shortens it" + describe (sceneRange (scene1)));
+
+            drag (ruler, { mapping.tickToX (0) + 3.0f, 8.0f }, { mapping.tickToX (80) + 3.0f, 8.0f });
+            pump();
+            t.check (sceneRange (scene1) == juce::Range<int> (80, 200), "dragging a scene's start handle shortens it from the left" + describe (sceneRange (scene1)));
+
+            drag (ruler, { mapping.tickToX (400), 8.0f }, { mapping.tickToX (600), 8.0f });
+            pump();
+            juce::String scene2;
+            for (auto& s : p.scenes)
+                if (s.path != scene1)
+                    scene2 = s.path;
+            t.check (sceneRange (scene2) == juce::Range<int> (400, 600), "a second scene is created" + describe (sceneRange (scene2)));
+
+            drag (ruler, { mapping.tickToX (200) - 3.0f, 8.0f }, { mapping.tickToX (480) - 3.0f, 8.0f });
+            pump();
+            t.check (sceneRange (scene1) == juce::Range<int> (80, 480) && sceneRange (scene2) == juce::Range<int> (480, 680),
+                     "extending a scene pushes the next scene along" + describe (sceneRange (scene1)) + describe (sceneRange (scene2)));
+
+            main.invokeCommand (MainComponent::cmdUndo);
+            pump();
+            t.check (sceneRange (scene1) == juce::Range<int> (80, 200) && sceneRange (scene2) == juce::Range<int> (400, 600),
+                     "one undo restores both scenes" + describe (sceneRange (scene1)) + describe (sceneRange (scene2)));
+
+            // end handle snaps to the end of the first block (800) within 10 pixels
+            drag (ruler, { mapping.tickToX (200) - 3.0f, 8.0f }, { mapping.tickToX (790) - 3.0f, 8.0f });
+            pump();
+            t.check (sceneRange (scene1) == juce::Range<int> (80, 800) && sceneRange (scene2) == juce::Range<int> (800, 1000),
+                     "a scene edge snaps to a block edge" + describe (sceneRange (scene1)) + describe (sceneRange (scene2)));
+        }
+
         // --- Module view ----------------------------------------------------------
         const auto block1 = p.tracks[0].blocks.at (0).path;
         doubleClick (lanes, { mapping.tickToX (100), (float) rowMiddle });

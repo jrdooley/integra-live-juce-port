@@ -12,10 +12,18 @@ automated interaction test.
 
 ![Arrange view](images/arrange-view.png)
 
-* **Timeline ruler** with time grid that adapts to zoom, **scene bar** (drag in
-  empty space to create a scene, drag a scene to move it or its right edge to
-  resize, right-click for mode hold/play/loop, rename, key binding, delete),
-  playhead (click/drag the ruler to locate), loop range.
+* **Timeline ruler** with time grid that adapts to zoom, **scene bar**,
+  playhead (click/drag the ruler to locate; this deselects the scene, as in
+  Flex), loop range.
+* **Scenes** behave as in Flex (`Timeline.as`, `SceneBar.as`): drag in empty
+  space to create one; each scene has a 10 px resize handle inside either edge
+  (resize cursor) and moves when dragged in the middle (hand cursor). Edges snap
+  to block starts/ends within 10 px, with snap lines drawn across the lanes;
+  neighbouring scenes are pushed aside so scenes never overlap
+  (`doSceneRescheduling`); the timeline auto-scrolls when dragging at its
+  edges; the dragged scene is drawn in place while dragging. A drag, including
+  the scenes it pushed, is one undo step. Right-click for mode
+  (hold/play/loop), rename, key binding, delete.
 * **Tracks**: coloured headers (right-click: rename, colour from the Flex
   palette, height, move up/down, import block, delete); "+ Add track".
 * **Blocks** positioned by their block envelopes: double-click an empty lane to
@@ -124,11 +132,13 @@ through `ProjectController` and are undoable (drags coalesce into one step).
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (27 checks, all
+keyboard events and checks the resulting project state (34 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,
-Edit › Undo/Redo, double-click to open the Module View, drop a module from
+Edit › Undo/Redo, extending and shortening a scene from either edge, a
+scene pushing its neighbour along (undone in one step), a scene edge snapping
+to a block edge, double-click to open the Module View, drop a module from
 the library at a grid position, patch output→input pins, drag a module and
 persist its position, the module's 7 widgets appear, moving a knob sets the
 endpoint and the knob follows external changes, LIVE and ENV toggles, the
@@ -146,6 +156,9 @@ Bugs it found and that are fixed:
   inside a pumped callback; the test quits from a fresh timer dispatch.
 
 ## Not (yet) ported from the Flex GUI
+
+A full feature-by-feature comparison with the Flex GUI is in
+[08-flex-parity.md](08-flex-parity.md).
 
 * Module Manager dialog for **upgrading/switching module versions** in a
   project (installing third-party modules *is* supported).

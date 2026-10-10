@@ -1,6 +1,8 @@
 #pragma once
 
 #include <juce_gui_extra/juce_gui_extra.h>
+#include <map>
+#include <vector>
 #include "Core/AppContext.h"
 #include "Core/EndpointInfo.h"
 
@@ -12,6 +14,7 @@ namespace integra
         double scrollTicks = 0.0;       // tick at the left edge of the lanes
         double pixelsPerTick = 0.4;     // Flex TimelineState.zoom
         int laneX = 0;                  // x of tick-space origin in the lanes' coordinates
+        std::vector<int> snapLines;     // ticks drawn as snap lines during a drag (Flex SetTimeDomainSnaplines)
 
         float tickToX (double tick) const   { return (float) (laneX + (tick - scrollTicks) * pixelsPerTick); }
         double xToTick (float x) const      { return scrollTicks + (x - laneX) / pixelsPerTick; }
@@ -19,12 +22,14 @@ namespace integra
 
     //==============================================================================
     /** Time ruler, scene bar and playhead (Flex: Timeline.as, SceneBar.as). */
-    class TimelineRuler  : public juce::Component
+    class TimelineRuler  : public juce::Component,
+                           private juce::Timer
     {
     public:
         TimelineRuler (AppContext&, TimelineMapping&);
 
         void paint (juce::Graphics&) override;
+        void mouseMove (const juce::MouseEvent&) override;
         void mouseDown (const juce::MouseEvent&) override;
         void mouseDrag (const juce::MouseEvent&) override;
         void mouseUp (const juce::MouseEvent&) override;
@@ -32,18 +37,36 @@ namespace integra
 
         int playPosition = 0;
         std::function<void (const juce::String& scenePath)> onSceneSelected;
+        /** Scroll the timeline by this many ticks (auto-scroll while dragging at the edges). */
+        std::function<void (double deltaTicks)> onAutoScroll;
+        /** Called while a drag changes the snap lines, so the lanes can redraw them. */
+        std::function<void()> onSnapLinesChanged;
 
         static constexpr int sceneBarHeight = 22;
+        static constexpr float sceneResizeAreaWidth = 10.0f;   // SceneBar._resizeAreaWidth
 
     private:
-        juce::Rectangle<float> sceneBounds (const model::Scene&) const;
+        enum class Zone { none, move, resizeStart, resizeEnd };
+        enum class Drag { none, playhead, newScene, moveScene, resizeSceneStart, resizeSceneEnd } drag = Drag::none;
+
+        juce::Rectangle<float> sceneBounds (int start, int end) const;
+        const model::Scene* sceneAt (juce::Point<float>, Zone&) const;
+        juce::Range<int> displayedRange (const model::Scene&) const;
+        void updateDrag (float mouseX);
+        void finishDrag();
+        void reschedule (int zoneStart, int zoneEnd, bool movingRight);
+        void timerCallback() override;
+
+        struct Snap { int value; bool snapped; int distance; };
+        Snap snap (int ticks) const;
+
         AppContext& context;
         TimelineMapping& mapping;
 
-        enum class Drag { none, playhead, newScene, moveScene, resizeScene } drag = Drag::none;
         juce::String dragScene;
-        int dragStartTick = 0, dragOriginalStart = 0, dragOriginalLength = 0;
-        juce::Range<int> pendingScene;
+        float dragPixelOffset = 0.0f, dragClickX = 0.0f, lastMouseX = 0.0f;
+        juce::Range<int> newScene;                          // scene being created
+        std::map<juce::String, juce::Range<int>> repositioned;  // dragged and nudged scenes
     };
 
     //==============================================================================

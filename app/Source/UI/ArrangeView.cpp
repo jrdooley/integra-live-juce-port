@@ -42,10 +42,63 @@ namespace integra
     //==============================================================================
     TimelineRuler::TimelineRuler (AppContext& c, TimelineMapping& m) : context (c), mapping (m) {}
 
-    juce::Rectangle<float> TimelineRuler::sceneBounds (const model::Scene& s) const
+    juce::Rectangle<float> TimelineRuler::sceneBounds (int start, int end) const
     {
-        const float x1 = mapping.tickToX (s.start), x2 = mapping.tickToX (s.end());
+        const float x1 = mapping.tickToX (start), x2 = mapping.tickToX (end);
         return { x1, 2.0f, juce::jmax (4.0f, x2 - x1), (float) sceneBarHeight - 4.0f };
+    }
+
+    juce::Range<int> TimelineRuler::displayedRange (const model::Scene& s) const
+    {
+        auto it = repositioned.find (s.path);
+        return it != repositioned.end() ? it->second : juce::Range<int> (s.start, s.end());
+    }
+
+    const model::Scene* TimelineRuler::sceneAt (juce::Point<float> pos, Zone& zone) const
+    {
+        zone = Zone::none;
+        if (pos.y >= (float) sceneBarHeight || pos.x < (float) mapping.laneX)
+            return nullptr;
+
+        for (auto& s : context.model.get().scenes)
+        {
+            auto r = sceneBounds (s.start, s.end());
+            if (! r.contains (pos))
+                continue;
+
+            // as SceneBar: the end handle wins over the start handle on narrow scenes
+            if (pos.x >= r.getRight() - sceneResizeAreaWidth)
+                zone = Zone::resizeEnd;
+            else if (pos.x < r.getX() + sceneResizeAreaWidth)
+                zone = Zone::resizeStart;
+            else
+                zone = Zone::move;
+            return &s;
+        }
+        return nullptr;
+    }
+
+    TimelineRuler::Snap TimelineRuler::snap (int ticks) const
+    {
+        // Timeline.getSnap: snap to the start or end of any block within 10 pixels
+        ticks = juce::jmax (0, ticks);
+        const int margin = (int) (10.0 / mapping.pixelsPerTick);
+        Snap result { ticks, false, 0 };
+        int best = margin + 1;
+
+        for (auto& track : context.model.get().tracks)
+        {
+            if (! track.userData.arrangeViewExpanded)
+                continue;
+            for (auto& b : track.blocks)
+                for (int edge : { b.start, b.end })
+                    if (std::abs (edge - ticks) <= margin && std::abs (edge - ticks) < best)
+                    {
+                        best = std::abs (edge - ticks);
+                        result = { edge, true, best };
+                    }
+        }
+        return result;
     }
 
     void TimelineRuler::paint (juce::Graphics& g)
@@ -60,28 +113,40 @@ namespace integra
         g.saveState();
         g.reduceClipRegion (lanes);
 
-        // scenes
-        for (auto& s : p.scenes)
+        auto drawScene = [&] (juce::Rectangle<float> r, const juce::String& label, bool current)
         {
-            auto r = sceneBounds (s);
-            const bool current = p.player.currentScene == s.name;
             g.setColour (t.sceneFill.withAlpha (current ? 1.0f : 0.6f));
             g.fillRoundedRectangle (r, 3.0f);
             g.setColour (t.outline);
             g.drawRoundedRectangle (r, 3.0f, current ? 2.0f : 1.0f);
+
+            // resize handles
+            if (r.getWidth() > 3.0f * sceneResizeAreaWidth)
+            {
+                g.setColour (t.outline.withAlpha (0.5f));
+                for (float x : { r.getX() + 4.0f, r.getRight() - 6.0f })
+                    g.fillRect (juce::Rectangle<float> (x, r.getY() + 5.0f, 2.0f, r.getHeight() - 10.0f));
+            }
+
             g.setColour (juce::Colours::black);
             g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
-            auto label = s.name + (s.userData.keybinding.isNotEmpty() ? "  [" + s.userData.keybinding + "]" : juce::String());
-            g.drawFittedText (label, r.reduced (4, 0).toNearestInt(), juce::Justification::centredLeft, 1);
+            g.drawFittedText (label, r.reduced (sceneResizeAreaWidth, 0).toNearestInt(), juce::Justification::centredLeft, 1);
+        };
+
+        // scenes, at their dragged or nudged positions while a drag is in progress
+        for (auto& s : p.scenes)
+        {
+            auto range = displayedRange (s);
+            const bool current = drag == Drag::newScene ? false
+                               : (drag == Drag::moveScene || drag == Drag::resizeSceneStart || drag == Drag::resizeSceneEnd) ? s.path == dragScene
+                               : p.player.currentScene == s.name;
+            drawScene (sceneBounds (range.getStart(), range.getEnd()),
+                       s.name + (s.userData.keybinding.isNotEmpty() ? "  [" + s.userData.keybinding + "]" : juce::String()),
+                       current);
         }
 
-        if (! pendingScene.isEmpty())
-        {
-            g.setColour (t.sceneFill.withAlpha (0.4f));
-            g.fillRect (juce::Rectangle<float> (mapping.tickToX (pendingScene.getStart()), 2.0f,
-                                                mapping.tickToX (pendingScene.getEnd()) - mapping.tickToX (pendingScene.getStart()),
-                                                (float) sceneBarHeight - 4.0f));
-        }
+        if (drag == Drag::newScene && ! newScene.isEmpty())
+            drawScene (sceneBounds (newScene.getStart(), newScene.getEnd()), {}, true);
 
         // time ruler
         const double pixelsPerSecond = mapping.pixelsPerTick * rate;
@@ -107,6 +172,11 @@ namespace integra
                                                 mapping.tickToX (p.player.end) - mapping.tickToX (p.player.start), 5.0f));
         }
 
+        // snap lines
+        g.setColour (t.accent);
+        for (int tick : mapping.snapLines)
+            g.drawVerticalLine ((int) mapping.tickToX (tick), 0.0f, (float) getHeight());
+
         // playhead
         const float px = mapping.tickToX (playPosition);
         g.setColour (t.playhead);
@@ -128,30 +198,38 @@ namespace integra
         g.drawHorizontalLine (getHeight() - 1, 0.0f, (float) getWidth());
     }
 
+    void TimelineRuler::mouseMove (const juce::MouseEvent& e)
+    {
+        Zone zone;
+        sceneAt (e.position, zone);
+        setMouseCursor (zone == Zone::resizeStart || zone == Zone::resizeEnd ? juce::MouseCursor::LeftRightResizeCursor
+                      : zone == Zone::move ? juce::MouseCursor::DraggingHandCursor
+                      : juce::MouseCursor::NormalCursor);
+    }
+
     void TimelineRuler::mouseDown (const juce::MouseEvent& e)
     {
         if (e.x < mapping.laneX)
             return;
 
-        auto& p = context.model.get();
-        const int tick = juce::jmax (0, (int) mapping.xToTick ((float) e.x));
         drag = Drag::none;
+        repositioned.clear();
+        newScene = {};
+        lastMouseX = e.position.x;
 
         if (e.y < sceneBarHeight)
         {
-            for (auto& s : p.scenes)
+            Zone zone;
+            if (auto* s = sceneAt (e.position, zone))
             {
-                auto r = sceneBounds (s);
-                if (! r.contains (e.position))
-                    continue;
+                const auto path = s->path;
 
                 if (e.mods.isPopupMenu())
                 {
-                    const auto path = s.path;
                     juce::PopupMenu menu;
                     juce::PopupMenu modes;
                     for (auto mode : { "hold", "play", "loop" })
-                        modes.addItem (mode, true, s.mode == mode, [this, path, mode]
+                        modes.addItem (mode, true, s->mode == mode, [this, path, mode]
                         {
                             if (auto* scene = context.model.get().findScene (path))
                                 context.controller.setScene (path, scene->start, scene->length, mode);
@@ -178,57 +256,139 @@ namespace integra
                     return;
                 }
 
-                context.controller.activateScene (s.path);
-                if (onSceneSelected)
-                    onSceneSelected (s.path);
+                // Timeline.startSceneRepositionDrag
+                auto r = sceneBounds (s->start, s->end());
+                dragScene = path;
+                if (zone == Zone::resizeEnd)
+                {
+                    drag = Drag::resizeSceneEnd;
+                    dragPixelOffset = r.getRight() - e.position.x;
+                }
+                else
+                {
+                    drag = zone == Zone::resizeStart ? Drag::resizeSceneStart : Drag::moveScene;
+                    dragPixelOffset = e.position.x - r.getX();
+                }
 
-                dragScene = s.path;
-                dragStartTick = tick;
-                dragOriginalStart = s.start;
-                dragOriginalLength = s.length;
-                drag = (e.x > r.getRight() - 6) ? Drag::resizeScene : Drag::moveScene;
+                context.controller.activateScene (path);
+                if (onSceneSelected)
+                    onSceneSelected (path);
+                startTimer (50);
                 return;
             }
 
-            // drag in empty scene bar to create a scene
+            if (e.mods.isPopupMenu())
+                return;
+
+            // drag in empty scene bar to create a scene; the selected scene is deselected
             drag = Drag::newScene;
-            dragStartTick = tick;
-            pendingScene = { tick, tick };
+            dragClickX = juce::jmax ((float) mapping.laneX, e.position.x);
+            if (context.model.get().player.currentScene.isNotEmpty())
+                context.controller.activateScene ({});
+            startTimer (50);
             return;
         }
 
+        // ruler: drag the playhead (deselecting the scene, as Timeline.startPlayPositionDrag)
+        if (context.model.get().player.currentScene.isNotEmpty())
+            context.controller.activateScene ({});
         drag = Drag::playhead;
-        context.controller.setPlayPosition (tick);
-        playPosition = tick;
-        repaint();
+        startTimer (50);
+        updateDrag (e.position.x);
     }
 
-    void TimelineRuler::mouseDrag (const juce::MouseEvent& e)
+    void TimelineRuler::updateDrag (float mouseX)
     {
-        const int tick = juce::jmax (0, (int) mapping.xToTick ((float) e.x));
-        const int rate = juce::jmax (1, context.model.get().player.rate);
+        lastMouseX = mouseX;
+        const float x = juce::jlimit ((float) mapping.laneX, (float) getWidth(), mouseX);
+        auto toTicks = [this] (float px) { return juce::jmax (0, juce::roundToInt (mapping.xToTick (px))); };
+        std::vector<int> snapLines;
 
         switch (drag)
         {
             case Drag::playhead:
+            {
+                const int tick = toTicks (x);
                 context.controller.setPlayPosition (tick);
                 playPosition = tick;
                 break;
+            }
 
             case Drag::newScene:
-                pendingScene = { snapTicks (juce::jmin (dragStartTick, tick), rate), snapTicks (juce::jmax (dragStartTick, tick), rate) };
+            {
+                // Timeline.setSceneCreationToMousePosition
+                auto clickSnap = snap (toTicks (dragClickX));
+                auto dragSnap = snap (toTicks (x));
+                const int start = juce::jmin (clickSnap.value, dragSnap.value);
+                const int end = juce::jmax (clickSnap.value, dragSnap.value);
+                newScene = { start, end };
+
+                repositioned.clear();
+                if (end > start)
+                    reschedule (start, end, dragSnap.value > clickSnap.value);
+
+                context.controller.setPlayPosition (start);
+                playPosition = start;
+                if (clickSnap.snapped) snapLines.push_back (clickSnap.value);
+                if (dragSnap.snapped) snapLines.push_back (dragSnap.value);
                 break;
+            }
 
             case Drag::moveScene:
-            case Drag::resizeScene:
+            case Drag::resizeSceneStart:
+            case Drag::resizeSceneEnd:
             {
-                const int delta = snapTicks (tick - dragStartTick, rate);
-                auto* s = context.model.get().findScene (dragScene);
-                if (s == nullptr)
+                // Timeline.repositionSceneToMousePosition
+                auto* scene = context.model.get().findScene (dragScene);
+                if (scene == nullptr)
+                {
+                    drag = Drag::none;
                     break;
-                // preview by temporarily adjusting through the model is avoided; draw a pending range instead
-                pendingScene = drag == Drag::moveScene ? juce::Range<int> (juce::jmax (0, dragOriginalStart + delta), juce::jmax (0, dragOriginalStart + delta) + dragOriginalLength)
-                                                       : juce::Range<int> (dragOriginalStart, dragOriginalStart + juce::jmax (rate / 4, dragOriginalLength + delta));
+                }
+
+                int start = scene->start, length = scene->length;
+                bool movingRight = false;
+
+                if (drag == Drag::moveScene)
+                {
+                    start = toTicks (x - dragPixelOffset);
+                    auto startSnap = snap (start);
+                    auto endSnap = snap (start + length);
+                    if (startSnap.snapped && (! endSnap.snapped || startSnap.distance <= endSnap.distance))
+                    {
+                        start = startSnap.value;
+                        snapLines.push_back (startSnap.value);
+                        if (endSnap.snapped && endSnap.distance == startSnap.distance)
+                            snapLines.push_back (endSnap.value);
+                    }
+                    else if (endSnap.snapped)
+                    {
+                        start = endSnap.value - length;
+                        snapLines.push_back (endSnap.value);
+                    }
+                    start = juce::jmax (0, start);
+                    movingRight = start > scene->start;
+                }
+                else if (drag == Drag::resizeSceneStart)
+                {
+                    const int previousEnd = scene->end();
+                    auto s = snap (juce::jmin (previousEnd - 1, juce::roundToInt (mapping.xToTick (x - dragPixelOffset))));
+                    start = s.value;
+                    length = previousEnd - start;
+                    movingRight = start > scene->start;
+                    if (s.snapped) snapLines.push_back (s.value);
+                }
+                else
+                {
+                    auto s = snap (juce::jmax (scene->start + 1, juce::roundToInt (mapping.xToTick (x + dragPixelOffset))));
+                    length = juce::jmax (1, s.value - start);
+                    movingRight = start + length > scene->end();
+                    if (s.snapped) snapLines.push_back (s.value);
+                }
+
+                repositioned.clear();
+                repositioned[dragScene] = { start, start + length };
+                reschedule (start, start + length, movingRight);
                 break;
             }
 
@@ -236,27 +396,134 @@ namespace integra
                 break;
         }
 
+        if (snapLines != mapping.snapLines)
+        {
+            mapping.snapLines = std::move (snapLines);
+            if (onSnapLinesChanged)
+                onSnapLinesChanged();
+        }
+        repaint();
+    }
+
+    void TimelineRuler::reschedule (int zoneStart, int zoneEnd, bool movingRight)
+    {
+        // Timeline.doSceneRescheduling: nudge the other scenes out of the way, keeping their order
+        struct Span { juce::String path; int start, length; int end() const { return start + length; } };
+        std::vector<Span> others;
+        for (auto& s : context.model.get().scenes)
+            if (repositioned.find (s.path) == repositioned.end())
+                others.push_back ({ s.path, s.start, s.length });
+
+        std::stable_sort (others.begin(), others.end(), [] (const Span& a, const Span& b)
+        {
+            return a.start * 2 + a.length < b.start * 2 + b.length;   // by centre
+        });
+
+        int insertion = (int) others.size();
+        for (int i = 0; i < (int) others.size(); ++i)
+        {
+            if (movingRight ? others[(size_t) i].end() > zoneStart : others[(size_t) i].start >= zoneEnd)
+            {
+                insertion = i;
+                break;
+            }
+        }
+
+        // bump scenes to the right until those on the left fit before the zone
+        int durationToLeft = 0;
+        for (int i = 0; i < insertion; ++i)
+            durationToLeft += others[(size_t) i].length;
+        while (durationToLeft > zoneStart && insertion > 0)
+            durationToLeft -= others[(size_t) --insertion].length;
+
+        int maximumEnd = zoneStart;
+        for (int i = insertion - 1; i >= 0; --i)
+        {
+            auto& s = others[(size_t) i];
+            if (s.end() <= maximumEnd)
+                break;
+            const int start = maximumEnd - s.length;
+            repositioned[s.path] = { start, start + s.length };
+            maximumEnd = start;
+        }
+
+        int minimumStart = zoneEnd;
+        for (int i = insertion; i < (int) others.size(); ++i)
+        {
+            auto& s = others[(size_t) i];
+            if (s.start >= minimumStart)
+                break;
+            repositioned[s.path] = { minimumStart, minimumStart + s.length };
+            minimumStart += s.length;
+        }
+    }
+
+    void TimelineRuler::mouseDrag (const juce::MouseEvent& e)
+    {
+        if (drag != Drag::none)
+            updateDrag (e.position.x);
+    }
+
+    void TimelineRuler::timerCallback()
+    {
+        // Timeline.onScrollTimer: scroll while dragging near the edges
+        if (drag == Drag::none || ! isMouseButtonDown())
+        {
+            stopTimer();
+            return;
+        }
+
+        constexpr float scrollMargin = 5.0f, scrollPixels = 25.0f;
+        double amount = 0.0;
+        if (lastMouseX < (float) mapping.laneX + scrollMargin)
+            amount = -scrollPixels / mapping.pixelsPerTick;
+        else if (lastMouseX > (float) getWidth() - scrollMargin)
+            amount = scrollPixels / mapping.pixelsPerTick;
+
+        if (amount != 0.0 && onAutoScroll != nullptr)
+        {
+            const double before = mapping.scrollTicks;
+            onAutoScroll (amount);
+            if (mapping.scrollTicks != before)
+                updateDrag (lastMouseX);
+        }
+    }
+
+    void TimelineRuler::finishDrag()
+    {
+        stopTimer();
+        const auto finished = drag;
+        drag = Drag::none;
+
+        if (finished == Drag::newScene && ! newScene.isEmpty())
+        {
+            auto scene = context.controller.addScene (newScene.getStart(), newScene.getLength(), repositioned);
+            if (scene.isNotEmpty())
+            {
+                context.controller.activateScene (scene);
+                if (onSceneSelected)
+                    onSceneSelected (scene);
+            }
+        }
+        else if (finished == Drag::moveScene || finished == Drag::resizeSceneStart || finished == Drag::resizeSceneEnd)
+        {
+            context.controller.repositionScenes (repositioned);
+        }
+
+        repositioned.clear();
+        newScene = {};
+        if (! mapping.snapLines.empty())
+        {
+            mapping.snapLines.clear();
+            if (onSnapLinesChanged)
+                onSnapLinesChanged();
+        }
         repaint();
     }
 
     void TimelineRuler::mouseUp (const juce::MouseEvent&)
     {
-        if (drag == Drag::newScene && pendingScene.getLength() > 0)
-        {
-            auto scene = context.controller.addScene (pendingScene.getStart(), pendingScene.getLength());
-            if (scene.isNotEmpty())
-                context.controller.activateScene (scene);
-        }
-        else if ((drag == Drag::moveScene || drag == Drag::resizeScene) && ! pendingScene.isEmpty())
-        {
-            if (auto* s = context.model.get().findScene (dragScene))
-                if (pendingScene.getStart() != s->start || pendingScene.getLength() != s->length)
-                    context.controller.setScene (dragScene, pendingScene.getStart(), pendingScene.getLength(), s->mode);
-        }
-
-        pendingScene = {};
-        drag = Drag::none;
-        repaint();
+        finishDrag();
     }
 
     void TimelineRuler::mouseDoubleClick (const juce::MouseEvent& e)
@@ -264,9 +531,9 @@ namespace integra
         if (e.y >= sceneBarHeight || e.x < mapping.laneX)
             return;
         // double-click in empty scene bar: a 10-second scene
-        for (auto& s : context.model.get().scenes)
-            if (sceneBounds (s).contains (e.position))
-                return;
+        Zone zone;
+        if (sceneAt (e.position, zone) != nullptr)
+            return;
         const int rate = juce::jmax (1, context.model.get().player.rate);
         context.controller.addScene (snapTicks ((int) mapping.xToTick ((float) e.x), rate), rate * 10);
     }
@@ -475,6 +742,15 @@ namespace integra
 
             g.setColour (t.outline);
             g.drawHorizontalLine (row.bounds.getBottom() - 1, 0.0f, (float) getWidth());
+        }
+
+        // snap lines while dragging scenes
+        g.setColour (t.accent);
+        for (int tick : mapping.snapLines)
+        {
+            const float x = mapping.tickToX (tick);
+            if (x >= (float) mapping.laneX)
+                g.drawVerticalLine ((int) x, 0.0f, (float) getHeight());
         }
 
         // playhead
@@ -925,6 +1201,12 @@ namespace integra
 
         lanes.onOpenBlock = [this] (const juce::String& block) { if (onOpenBlock) onOpenBlock (block); };
         lanes.onSelectionChanged = [this] { ruler.repaint(); if (onSelectionChanged) onSelectionChanged(); };
+        ruler.onSnapLinesChanged = [this] { lanes.repaint(); };
+        ruler.onAutoScroll = [this] (double deltaTicks)
+        {
+            mapping.scrollTicks = juce::jmax (0.0, mapping.scrollTicks + deltaTicks);
+            updateScrollBar (true);
+        };
 
         context.model.addChangeListener (this);
         changeListenerCallback (nullptr);

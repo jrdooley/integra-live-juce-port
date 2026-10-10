@@ -90,7 +90,7 @@ platforms; the Windows job uploads a ready-to-run `integra-live-windows-x64` art
 | `integra_smoke` | every module instantiates in Pd and answers pings; all demo blocks load |
 | `integra_host_audio_test` | audio flows through libpd when driven by the host |
 | `IntegraLive --self-test` | 48 end-to-end checks of the app core (undo, routing, envelopes, scenes, scripts, save/reload, Flex files, JUCE audio path) |
-| `IntegraLive --gui-test` | 27 GUI interaction checks with synthesized mouse/keyboard events |
+| `IntegraLive --gui-test` | 34 GUI interaction checks with synthesized mouse/keyboard events |
 
 ## Documentation
 
@@ -102,6 +102,7 @@ platforms; the Windows job uploads a ready-to-run `integra-live-windows-x64` art
 6. [Status, verification and next steps](docs/05-status.md)
 7. [Windows (and macOS) build](docs/06-windows.md)
 8. [macOS packaging and signing](docs/07-macos-packaging.md)
+9. [Feature parity with the Flex GUI](docs/08-flex-parity.md)
 
 ## Licences
 
