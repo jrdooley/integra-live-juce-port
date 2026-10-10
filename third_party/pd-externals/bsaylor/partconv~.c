@@ -149,6 +149,12 @@ static t_int *partconv_perform(t_int *w)
 	float *sumbuf1ptr;
 	float *sumbuf2ptr;
 
+	/* Integra Live port: no impulse response loaded yet (no buffers): output silence */
+	if (x->ir_prepared == 0) {
+		memset(out, 0, n * sizeof(t_float));
+		return (w+5);
+	}
+
 	memcpy(&(x->inbuf[x->inbufpos]), in, n*sizeof(float));  // gather a block of input into input buffer
 	x->inbufpos += n;
 	if (x->inbufpos >= x->partsize) {
@@ -261,8 +267,8 @@ static void partconv_set(t_partconv *x, t_symbol *s)
 	if ( ! (arrayobj = (t_garray *)pd_findbyclass(x->arrayname, garray_class))) {
 		if (*x->arrayname->s_name) {
 			pd_error(x, "partconv~: %s: no such array", x->arrayname->s_name);
-			return;
 		}
+		return;   /* Integra Live port: an empty name went on with an uninitialised array size */
 	} else if ( ! garray_getfloatwords(arrayobj, &arraysize, &array)) {
 		pd_error(x, "%s: bad template", x->arrayname->s_name);
 		return;
@@ -310,9 +316,12 @@ static void partconv_set(t_partconv *x, t_symbol *s)
 	for (i  = 0; i < x->nsumbufs; i++) {
 		x->sumbufs[i].index = i;
 		x->sumbufs[i].fd = fftwf_malloc(sizeof(float) * x->paddedsize);
-		memset(x->sumbufs[i].fd, 0, sizeof(float) * x->paddedsize);
 		x->sumbufs[i].td = (float *) x->sumbufs[i].fd;
 		x->sumbufs[i].plan = fftwf_plan_dft_c2r_1d(x->fftsize, x->sumbufs[i].fd, x->sumbufs[i].td, FFTW_MEASURE);
+		/* Integra Live port: cleared after planning, since FFTW_MEASURE overwrites the
+		   buffer; it used to be cleared before, leaving garbage (even NaN) that was
+		   output and accumulated */
+		memset(x->sumbufs[i].fd, 0, sizeof(float) * x->paddedsize);
 		x->sumbufs[i].readpos = 0;
 	}
 	x->sumbufs[0].next = &(x->sumbufs[1]);

@@ -44,6 +44,7 @@ in the new JUCE code.
 | Pd soundfile reading/writing of 32-bit float files does the same | Reading wrote 8 bytes into each 4-byte sample — a heap overflow at the end of every buffer; writing over-read the stack | `memcpy` through `uint32_t` (`d_soundfile.c`) |
 | flext attribute setters allocated their argument list with `new` and freed it with `delete[]` | Undefined behaviour on every module delete | `new[]` (`flattr.cpp`) |
 | libpd C++ `PdContext` read `bInited` before setting it | Uninitialised read at start-up | Flags set before `clear()` (`PdBase.cpp`) |
+| bsaylor `partconv~` (the Convolution module) cleared its output buffers *before* creating FFTW_MEASURE plans, which overwrite them; with no array name it went on with an uninitialised size | **NaN audio** from Convolution when its file is missing or invalid (seen on macOS in CI) | Buffers cleared after planning; no array → silence (`partconv~.c`) |
 | Signed overflow in `noise~` and 24/32-bit soundfile decoding | Undefined behaviour (worked by luck) | Unsigned arithmetic |
 
 Windows was unaffected by the `long` bugs (`long` is 4 bytes there), which is why
