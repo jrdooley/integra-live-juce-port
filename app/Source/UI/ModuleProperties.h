@@ -22,6 +22,12 @@ namespace integra
 
         void paint (juce::Graphics&) override;
         void resized() override;
+        void mouseDoubleClick (const juce::MouseEvent&) override;
+
+        /** Renames the module in place (double-click the title, as ModuleProperties.title). */
+        void renameModule();
+        juce::TextEditor* getRenameEditor() const noexcept  { return renameEditor.get(); }
+        std::function<void (const juce::String& newPath)> onRenamed;
 
     private:
         class WidgetFrame;
@@ -34,6 +40,7 @@ namespace integra
         juce::Viewport viewport;
         juce::Component content;
         juce::OwnedArray<WidgetFrame> frames;
+        std::unique_ptr<juce::TextEditor> renameEditor;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ModuleProperties)
     };

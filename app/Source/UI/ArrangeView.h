@@ -2,6 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <map>
+#include <set>
 #include <optional>
 #include <vector>
 #include "Core/AppContext.h"
@@ -40,6 +41,10 @@ namespace integra
 
         int playPosition = 0;
         std::function<void (const juce::String& scenePath)> onSceneSelected;
+
+        /** Renames a scene in place (double-click it, or its menu). */
+        void renameScene (const juce::String& scenePath);
+        juce::TextEditor* getRenameEditor() const noexcept  { return renameEditor.get(); }
         /** Scroll the timeline by this many ticks (auto-scroll while dragging at the edges). */
         std::function<void (double deltaTicks)> onAutoScroll;
         /** Called while a drag changes the snap lines, so the lanes can redraw them. */
@@ -67,6 +72,7 @@ namespace integra
         TimelineMapping& mapping;
 
         juce::String dragScene;
+        std::unique_ptr<juce::TextEditor> renameEditor;
         float dragPixelOffset = 0.0f, dragClickX = 0.0f, lastMouseX = 0.0f;
         juce::Range<int> newScene;                          // scene being created
         std::map<juce::String, juce::Range<int>> repositioned;  // dragged and nudged scenes
@@ -124,6 +130,12 @@ namespace integra
         std::function<void()> onSnapLinesChanged;
 
         static constexpr int headerWidth = 170;
+        static constexpr int minimumTrackHeight = 40, maximumTrackHeight = 1000;
+        static constexpr int trackResizeAreaHeight = 6;
+
+        /** Where the bottom edge of a track's header can be dragged to change its height. */
+        juce::Rectangle<int> getTrackResizeArea (const juce::String& trackPath) const;
+        std::function<void()> onLayoutChanged;
         static constexpr int addTrackHeight = 34;
 
         /** Envelope being edited inside the selected block ("" = none). */
@@ -137,6 +149,16 @@ namespace integra
 
         /** Where the curve-mode button of the selected block is drawn (empty if none). */
         juce::Rectangle<float> getCurveButtonBounds() const;
+        /** The envelope lock button of the selected block (when it has several envelopes):
+            clicks then only reach the selected envelope; Shift inverts the lock. */
+        juce::Rectangle<float> getEnvelopeLockBounds() const;
+
+        juce::TextEditor* getRenameEditor() const noexcept  { return renameEditor.get(); }
+
+        /** Selected blocks: the primary selection plus those added with Ctrl/Cmd-click
+            (Flex: SetObjectSelection). Moving one moves them all; Delete removes them all. */
+        std::vector<juce::String> getSelectedBlocks() const;
+        bool isBlockSelected (const juce::String& path) const;
 
     private:
         struct TrackRow
@@ -152,7 +174,13 @@ namespace integra
         void showBlockMenu (const model::Block&);
         void showTrackMenu (const model::Track&);
         void renameNode (const juce::String& path, const juce::String& title);
+        juce::Rectangle<int> nameBounds (const juce::String& path) const;
+        std::unique_ptr<juce::TextEditor> renameEditor;
         void paintEnvelopes (juce::Graphics&, const model::Block&, juce::Rectangle<float>);
+        juce::Path envelopePath (const model::Envelope&, const std::vector<model::ControlPoint>&, const model::Block&,
+                                 juce::Rectangle<float>, const EndpointInfo&) const;
+        const model::Envelope* envelopeAt (const model::Block&, juce::Rectangle<float>, juce::Point<float>, bool shiftDown) const;
+        juce::Point<float> lastDragMouse;
 
         // envelope editing helpers
         const model::Envelope* currentEnvelope (const model::Block*&) const;
@@ -161,7 +189,9 @@ namespace integra
         AppContext& context;
         TimelineMapping& mapping;
 
-        enum class Drag { none, moveBlock, resizeStart, resizeEnd, controlPoint, curve } drag = Drag::none;
+        enum class Drag { none, moveBlock, resizeStart, resizeEnd, controlPoint, curve, resizeTrack, trackPending, reorderTrack } drag = Drag::none;
+        juce::String dragTrack;
+        int dragTrackHeight = 0, dragTrackStartHeight = 0, dragTrackIndex = 0, dragTrackStartIndex = 0;
         juce::String dragBlock, dragPoint;
         int dragStartTick = 0;
         float dragPixelOffset = 0.0f;
@@ -179,6 +209,10 @@ namespace integra
         static constexpr int minimumBlockLength = 10;          // Block._minimumBlockLength (ticks)
 
         std::map<juce::String, std::unique_ptr<AggregateLevel>> trackLevels;
+        std::set<juce::String> groupSelection;
+        std::map<juce::String, juce::String> groupTargets;      // block -> track, while a group is dragged
+        bool collapseGroupOnUp = false;
+        juce::String targetTrackOf (const model::Block&) const;
 
         void updateDropOutline (std::optional<juce::Point<int>>);
         juce::Rectangle<float> dropOutline;

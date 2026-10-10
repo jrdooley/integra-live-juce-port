@@ -1,5 +1,6 @@
 #include "PropertiesPanel.h"
 #include "IntegraLookAndFeel.h"
+#include "InlineRename.h"
 
 namespace integra
 {
@@ -884,6 +885,8 @@ namespace integra
     PropertiesPanel::PropertiesPanel (AppContext& c) : context (c)
     {
         title.setFont (juce::FontOptions (14.0f, juce::Font::bold));
+        title.setInterceptsMouseClicks (false, false);
+        title.setTooltip ("Double-click to rename");
         addAndMakeVisible (title);
 
         info = std::make_unique<InfoTab> (c);
@@ -1003,6 +1006,33 @@ namespace integra
         routing->refresh();
         scripting->refresh();
         midi->refresh();
+    }
+
+    void PropertiesPanel::mouseDoubleClick (const juce::MouseEvent& e)
+    {
+        if (title.getBounds().contains (e.getPosition()))
+            renameShown();
+    }
+
+    void PropertiesPanel::renameShown()
+    {
+        const auto path = getContainerPath();
+        if (path.isEmpty())
+            return;
+        const auto name = path.contains (".") ? lastElement (path) : path;
+        startInlineRename (renameEditor, *this, title.getBounds().withWidth (juce::jmin (title.getWidth(), 260)), name,
+                           [this, path] (const juce::String& newName)
+                           {
+                               // keep the renamed node selected (the rebuild drops the old path)
+                               const bool wasBlock = context.model.selectedBlock == path, wasTrack = context.model.selectedTrack == path;
+                               if (context.controller.rename (path, newName).wasOk())
+                               {
+                                   auto renamed = (path.contains (".") ? parentPath (path) + "." : juce::String()) + newName;
+                                   if (wasBlock)  context.model.selectedBlock = renamed;
+                                   if (wasTrack)  context.model.selectedTrack = renamed;
+                                   selectionChanged();
+                               }
+                           });
     }
 
     void PropertiesPanel::paint (juce::Graphics& g)

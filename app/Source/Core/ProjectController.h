@@ -110,6 +110,11 @@ namespace integra
             then repositions every block in `ranges` (keyed by path before the move). */
         void repositionBlocks (juce::String blockPath, juce::String trackPath, const std::map<juce::String, juce::Range<int>>& ranges);
 
+        /** Finishes a group drag in one undo step: moves blocks to their target tracks
+            (keyed by path before the move), then repositions every block in `ranges`. */
+        void repositionBlockGroup (const std::map<juce::String, juce::String>& targetTracks,
+                                   const std::map<juce::String, juce::Range<int>>& ranges);
+
         /** ArrangeView.doBlockRescheduling: with ranges[blockPath] set to where a block is
             going, pushes the other blocks of the track out of its way, keeping their order,
             and adds their new ranges to `ranges`. */

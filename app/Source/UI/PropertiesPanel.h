@@ -38,6 +38,12 @@ namespace integra
 
         void paint (juce::Graphics&) override;
         void resized() override;
+        void mouseDoubleClick (const juce::MouseEvent&) override;
+
+        /** Renames the shown project / track / block / scene in place (double-click the
+            title, as Flex's editable ViewHolder titles). */
+        void renameShown();
+        juce::TextEditor* getRenameEditor() const noexcept  { return renameEditor.get(); }
 
     private:
         class InfoTab;
@@ -59,6 +65,7 @@ namespace integra
         std::unique_ptr<ScriptingTab> scripting;
         std::unique_ptr<MidiTab> midi;
         std::unique_ptr<juce::Component> titlebar;
+        std::unique_ptr<juce::TextEditor> renameEditor;
         juce::String shownContainer, titlebarFor, watchedPlayer;
         int shownTabs = -1;
     };

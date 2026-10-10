@@ -22,10 +22,13 @@ automated interaction test.
   neighbouring scenes are pushed aside so scenes never overlap
   (`doSceneRescheduling`); the timeline auto-scrolls when dragging at its
   edges; the dragged scene is drawn in place while dragging. A drag, including
-  the scenes it pushed, is one undo step. Right-click for mode
-  (hold/play/loop), rename, key binding, delete.
+  the scenes it pushed, is one undo step. Double-click a scene to rename it in
+  place. Right-click for mode (hold/play/loop), rename, key binding, delete.
 * **Tracks**: coloured headers (right-click: rename, colour from the Flex
   palette, height, move up/down, import block, delete); "+ Add track".
+  Double-click a track's name to rename it in place; drag the bottom edge of
+  its header (grip in the corner) to resize it, or drag the header to move the
+  track up or down.
   Each header has the track's **active button** (switches the track off and
   on, one undo step) and a **VU meter**; the project's are in the top-left
   corner (Flex: the active buttons and `AggregateVUContainer` in the title
@@ -37,16 +40,23 @@ automated interaction test.
   add a block (up to the next block), drag to move (also vertically to another
   track), drag either edge (10 px handles) to resize, double-click to open in
   the Module View, right-click for rename / export / delete / *Edit envelope*.
+  Ctrl/Cmd-click selects several blocks: dragging one moves them all (keeping
+  their time and track offsets), Delete removes them all. Double-click a
+  block's name to rename it in place.
   Blocks don't overlap within a track: as in Flex (`doBlockRescheduling`), a
   dragged or resized block pushes its neighbours along, keeping their order;
   edges snap to blocks on other tracks and to scenes within 10 px; the whole
   drag is one undo step. Delete/Backspace removes the selected block (tracks
   are deleted from their context menu only).
-* **Envelopes** inside blocks: all of a block's envelopes are drawn; choose one
-  with *Edit envelope* to edit it — double-click to add a control point, drag
-  to move (a point stays between its neighbours and the first one stays at
-  tick 0, as in `EnvelopeView.as`; the move is committed on release),
-  right-click to delete (not the first point). **Curve mode** (the curve button
+* **Envelopes** inside blocks: all of a block's envelopes are drawn. Click an
+  envelope's line (within 8 px) to select it, or choose it with *Edit
+  envelope*; click the selected envelope's line to add a control point there
+  and drag it; drag a point to move it (it stays between its neighbours and
+  the first one stays at tick 0, as in `EnvelopeView.as`; the move is
+  committed on release, with a "seconds, value" readout while dragging);
+  double-click or right-click a point to delete it (not the first point). A
+  block with several envelopes has an **envelope lock** button: when locked,
+  clicks only reach the selected envelope (Shift inverts the lock). **Curve mode** (the curve button
   at the bottom right of the selected block, or *Curve mode* in its menu; stored
   in the block's `curvatureMode` userData as in Flex): drag a segment to bend it,
   double-click it to make it straight again. Curvature is drawn exactly as
@@ -68,7 +78,8 @@ automated interaction test.
   shift+wheel; zoom/scroll persist in the project (`timelineZoom`,
   `timelineScroll` userData, same units as Flex).
 * **Properties panel** (below, resizable) for the innermost selection
-  (block → track → scene → project). Clicking a scene in the scene bar shows
+  (block → track → scene → project); double-click its title to rename the
+  selection in place. Clicking a scene in the scene bar shows
   the scene: its title bar has **State** (hold / play / loop), **Key** and
   **MIDI learn** for the scene (a MIDI input in the project routed to the
   scene's `activate`, as `ScenePropertiesTitlebar.as`), and an Info tab. The
@@ -113,13 +124,20 @@ automated interaction test.
   back) to connect (links from a module to itself or that would create a
   feedback loop are refused, as `IntegraModel.canSetAudioLink`), click a
   connection to select it, Delete removes the
-  selection, right-click a module to rename / export / delete. The selected
+  selection, right-click a module to rename / export / delete. Double-click a
+  module's name to rename it in place. Ctrl/Cmd-click or drag a rubber band on
+  empty space to select several modules; dragging one moves them all, Delete
+  removes them all. The selected
   module is saved as the block's `primarySelectedChild`, as in Flex.
 * **Module properties**: the module's widgets from its interface definition,
   at their design positions. Each widget has three toggles:
   **LIVE** (show in Live view), **MIDI** (create a MIDI control input in learn
   mode, routed through a scaler), **ENV** (add/remove a block envelope for that
-  control).
+  control). Double-click a control's value to type a new one (Enter sets it,
+  Escape cancels; numbers are clamped to the range, enumerations accept their
+  names), as Flex's `AttributeLabel`. Right-click a control for *Revert to
+  default* > that control, or *All Controls* of the module (one undo step;
+  locked controls are left alone). Double-click the title to rename the module.
 
 Dark colour scheme (per project, as in Flex; Settings → Dark colour scheme):
 
@@ -245,7 +263,7 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (104 checks, all
+keyboard events and checks the resulting project state (137 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,
@@ -266,7 +284,15 @@ the Module View; scene properties (State, Key, MIDI learn and its removal),
 project Next Scene MIDI learn; Scene Shortcuts (select, drag to rebind,
 collapse); the Live view's track active button, not rebuilding on unrelated
 changes, adding a control at the right-clicked point, snapping, resizing from
-the left edge and removing a control.
+the left edge and removing a control; typing values (Enter, clamping,
+Escape), Revert to default for a control and for all controls (one undo
+step), right-clicking a slider without moving it; in-place renames of modules
+(graph and controls title), scenes, blocks, tracks and the properties title,
+dropping invalid names; resizing and moving tracks by dragging; Ctrl/Cmd-click
+multi-selection of blocks with a group drag and delete; rubber-band selection
+of modules with a group drag and delete; clicking an envelope line to select
+it and to add a point, double-clicking a point to delete it, and the envelope
+lock button.
 
 Bugs it found and that are fixed:
 

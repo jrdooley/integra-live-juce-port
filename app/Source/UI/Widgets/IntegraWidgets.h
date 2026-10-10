@@ -59,6 +59,29 @@ namespace integra
         /** Shows the padlock menu (delete the envelope / routing). */
         void showPadlockMenu();
 
+        /** Flex AttributeLabel: double-click the value under a control to type a value;
+            Enter (or clicking elsewhere) sets it, Escape cancels. */
+        bool startEditingValue();
+        juce::TextEditor* getValueEditor() const noexcept   { return valueEditor.get(); }
+        void finishEditingValue (bool commit);
+        /** Sets an attribute from typed text: numbers are clamped to the endpoint's range,
+            enumerations match their names or labels. False if the text didn't fit. */
+        bool setValueFromText (const juce::String& attribute, const juce::String& text);
+        /** The attribute whose value text can be typed into ("" for none). */
+        virtual juce::String getEditableAttribute() const;
+        juce::Rectangle<int> getValueTextArea() const;
+
+        /** Right-click: Revert to default for this control or all of the module's controls
+            (Flex: ModuleProperties context menu). */
+        void showContextMenu();
+        bool canRevert() const;
+        void revertToDefault();
+        static bool canRevertAll (AppContext&, const juce::String& modulePath);
+        static void revertAllToDefault (AppContext&, const juce::String& modulePath);
+
+        void mouseDown (const juce::MouseEvent&) override;
+        void mouseDoubleClick (const juce::MouseEvent&) override;
+
     protected:
         juce::var get (const juce::String& attribute) const;
         double getUnit (const juce::String& attribute) const;
@@ -88,6 +111,8 @@ namespace integra
         std::set<juce::String> lockedAttributes;
         std::vector<std::pair<juce::String, model::Driver>> drivers;   // attribute, driver
         std::unique_ptr<juce::Component> padlock, lockOverlay;
+        std::unique_ptr<juce::TextEditor> valueEditor;
+        juce::String editedAttribute;
         std::map<juce::String, juce::var> values;
         bool showLabel = true;
         static const EndpointInfo missingInfo;

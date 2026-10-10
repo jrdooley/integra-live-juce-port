@@ -269,8 +269,9 @@ namespace integra
 
         // Successive sets of the same endpoint in quick succession (dragging a slider)
         // stay in one transaction, where SetValueAction coalesces them into one step.
+        // Inside a transaction() the set joins that transaction instead.
         const auto now = juce::Time::getMillisecondCounter();
-        if (endpointPath != lastSetPath || now - lastSetTime > 1000)
+        if (transactionDepth == 0 && (endpointPath != lastSetPath || now - lastSetTime > 1000))
             undoManager.beginNewTransaction ("Set " + lastElement (endpointPath));
 
         lastSetPath = endpointPath;
@@ -293,11 +294,11 @@ namespace integra
         if (name == lastElement (path) || (! path.contains (".") && name == path))
             return juce::Result::ok();
 
-        if (session.getChildNames (parentPath (path)).contains (name))
-            return juce::Result::fail ("There is already something called " + name + " here");
-
         const auto oldName = path.contains (".") ? lastElement (path) : path;
-        const auto parent = parentPath (path);
+        const auto parent = path.contains (".") ? parentPath (path) : juce::String();   // the project is top level
+
+        if (session.getChildNames (parent).contains (name))
+            return juce::Result::fail ("There is already something called " + name + " here");
 
         return transaction ("Rename " + oldName, [&]
         {
@@ -636,6 +637,26 @@ namespace integra
             for (auto& [path, range] : ranges)
             {
                 const auto current = path == blockPath ? movedPath : path;
+                if (auto* b = model.get().findBlock (current))
+                    if (b->start != range.getStart() || b->end != range.getEnd())
+                        repositionBlock (current, range.getStart(), range.getEnd());
+            }
+        });
+    }
+
+    void ProjectController::repositionBlockGroup (const std::map<juce::String, juce::String>& targetTracks,
+                                                  const std::map<juce::String, juce::Range<int>>& ranges)
+    {
+        transaction ("Move Blocks", [&]
+        {
+            std::map<juce::String, juce::String> moved;
+            for (auto& [path, track] : targetTracks)
+                if (track != parentPath (path))
+                    moved[path] = moveBlockToTrack (path, track);
+
+            for (auto& [path, range] : ranges)
+            {
+                const auto current = moved.count (path) > 0 ? moved[path] : path;
                 if (auto* b = model.get().findBlock (current))
                     if (b->start != range.getStart() || b->end != range.getEnd())
                         repositionBlock (current, range.getStart(), range.getEnd());

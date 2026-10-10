@@ -1043,6 +1043,303 @@ namespace integra
             pump();
         }
 
+        // --- Batch 2: everyday editing -----------------------------------------------------
+        {
+            context.controller.newProject();
+            main.showView ("arrange");
+            pump();
+            auto& undo = context.controller.getUndoManager();
+            auto undoOnce = [&] { undo.undo(); model.rebuild(); pump(); };
+            auto pressKey = [&] (juce::TextEditor* editor, int key)
+            {
+                if (editor != nullptr)
+                    editor->keyPressed (juce::KeyPress (key));
+                pump();
+            };
+            auto typeInto = [&] (juce::TextEditor* editor, const juce::String& text, int key = juce::KeyPress::returnKey)
+            {
+                if (editor != nullptr)
+                    editor->setText (text, false);
+                pressKey (editor, key);
+            };
+            const auto cmdClick = juce::ModifierKeys (juce::ModifierKeys::commandModifier | juce::ModifierKeys::leftButtonModifier);
+            const auto trackPath = p.tracks.at (0).path;
+            const auto blockPath = p.tracks[0].blocks.at (0).path;
+
+            // ---- typing values and Revert to default (AttributeLabel, ModuleProperties)
+            auto* tapDelay = context.session.getCatalogue().findByName ("TapDelay");
+            const auto delay = context.controller.addModule (blockPath, tapDelay->guid, { 12.0f, 8.0f });
+            main.getModuleView().setBlock (blockPath);
+            main.showView ("module");
+            main.getModuleView().getGraph().selectModulePath (delay);
+            main.getModuleView().getProperties().setModule (delay);
+            pump();
+
+            std::vector<IntegraWidget*> widgets;
+            findAll (main.getModuleView().getProperties(), widgets);
+            IntegraWidget* delayTime = nullptr;
+            IntegraWidget* feedback = nullptr;
+            for (auto* w : widgets)
+            {
+                if (w->getSpec().label == "delayTime") delayTime = w;
+                if (w->getSpec().label == "feedback")  feedback = w;
+            }
+            t.check (delayTime != nullptr && feedback != nullptr, "TapDelay's delayTime and feedback controls are shown");
+            if (delayTime != nullptr && feedback != nullptr)
+            {
+                const auto delayEndpoint = delay + ".delayTime", feedbackEndpoint = delay + ".feedback";
+                const auto info = EndpointInfo::find (context.session, delayEndpoint);
+
+                doubleClick (*delayTime, delayTime->getValueTextArea().getCentre().toFloat());
+                t.check (delayTime->getValueEditor() != nullptr, "double-clicking a control's value lets you type one");
+                typeInto (delayTime->getValueEditor(), "0.75");
+                t.check (std::abs ((double) context.session.getValue (delayEndpoint) - 0.75) < 1e-4 && delayTime->getValueEditor() == nullptr,
+                         "Enter sets the typed value (" + context.session.getValue (delayEndpoint).toString() + ")");
+
+                delayTime->startEditingValue();
+                typeInto (delayTime->getValueEditor(), "99999");
+                t.check (std::abs ((double) context.session.getValue (delayEndpoint) - info.maximum) < 1e-4, "a typed value is clamped to the range");
+
+                delayTime->startEditingValue();
+                typeInto (delayTime->getValueEditor(), "0.2", juce::KeyPress::escapeKey);
+                t.check (std::abs ((double) context.session.getValue (delayEndpoint) - info.maximum) < 1e-4, "Escape cancels typing");
+
+                t.check (delayTime->canRevert(), "a changed control can be reverted");
+                delayTime->revertToDefault();
+                pump();
+                t.check (std::abs ((double) context.session.getValue (delayEndpoint) - (double) info.defaultValue) < 1e-4 && ! delayTime->canRevert(),
+                         "Revert to default sets the control's default");
+
+                context.controller.setValue (delayEndpoint, 0.5);
+                context.controller.setValue (feedbackEndpoint, 0.9);
+                pump();
+                IntegraWidget::revertAllToDefault (context, delay);
+                pump();
+                const bool bothDefault = ! IntegraWidget::canRevertAll (context, delay);
+                undoOnce();
+                t.check (bothDefault && std::abs ((double) context.session.getValue (feedbackEndpoint) - 0.9) < 1e-4
+                            && std::abs ((double) context.session.getValue (delayEndpoint) - 0.5) < 1e-4,
+                         "Revert to default > All Controls reverts every control, as one undo step");
+
+                // right-clicking a slider opens the menu without moving it
+                std::vector<juce::Slider*> sliders;
+                findAll (*delayTime, sliders);
+                if (! sliders.empty())
+                {
+                    auto& slider = *sliders[0];
+                    const auto far = juce::Point<float> ((float) slider.getWidth() - 2.0f, (float) slider.getHeight() / 2.0f);
+                    slider.mouseDown (makeEvent (slider, far, far, 1, false, juce::ModifierKeys (juce::ModifierKeys::rightButtonModifier)));
+                    slider.mouseUp (makeEvent (slider, far, far, 1, false, juce::ModifierKeys (juce::ModifierKeys::rightButtonModifier)));
+                    pump();
+                    juce::PopupMenu::dismissAllActiveMenus();
+                    pump();
+                }
+                t.check (std::abs ((double) context.session.getValue (delayEndpoint) - 0.5) < 1e-4, "right-clicking a control doesn't change it");
+            }
+
+            // ---- rename in place
+            auto& graph = main.getModuleView().getGraph();
+            graph.renameModule (delay);
+            typeInto (graph.getRenameEditor(), "Echo");
+            const auto echo = blockPath + ".Echo";
+            t.check (context.session.nodeExists (echo) && graph.isModuleSelected (echo), "a module can be renamed in place");
+
+            main.getModuleView().getProperties().renameModule();
+            typeInto (main.getModuleView().getProperties().getRenameEditor(), "Echo2");
+            t.check (context.session.nodeExists (blockPath + ".Echo2"), "...also from the title of its controls");
+            context.controller.rename (blockPath + ".Echo2", "Echo");
+            pump();
+
+            main.showView ("arrange");
+            pump();
+            auto& ruler = arrange.getRuler();
+            const auto scene = context.controller.addScene (0, rate * 4);
+            pump();
+            doubleClick (ruler, { mapping.tickToX (rate * 2), (float) TimelineRuler::sceneBarHeight / 2 });
+            typeInto (ruler.getRenameEditor(), "Intro");
+            t.check (p.findScene (parentPath (scene) + ".Intro") != nullptr, "double-clicking a scene renames it in place");
+
+            const int rowY = juce::jlimit (TrackLanes::minimumTrackHeight, TrackLanes::maximumTrackHeight, p.tracks[0].userData.arrangeViewHeight);
+            const float blockTitleY = 12.0f;
+            doubleClick (lanes, { mapping.tickToX (p.tracks[0].blocks[0].start + rate), blockTitleY });
+            typeInto (lanes.getRenameEditor(), "Verse");
+            const auto verse = trackPath + ".Verse";
+            t.check (p.findBlock (verse) != nullptr, "double-clicking a block's name renames it in place");
+
+            doubleClick (lanes, { 40.0f, 14.0f });
+            typeInto (lanes.getRenameEditor(), "9bad");
+            t.check (p.findTrack (trackPath) != nullptr, "an invalid name is dropped");
+            doubleClick (lanes, { 40.0f, 14.0f });
+            typeInto (lanes.getRenameEditor(), "Drums", juce::KeyPress::escapeKey);
+            t.check (p.findTrack (trackPath) != nullptr, "Escape cancels renaming");
+
+            model.selectedTrack = trackPath;
+            model.selectedBlock = verse;
+            main.getProperties().selectionChanged();
+            main.getProperties().renameShown();
+            typeInto (main.getProperties().getRenameEditor(), "Chorus");
+            const auto chorus = trackPath + ".Chorus";
+            t.check (p.findBlock (chorus) != nullptr && model.selectedBlock == chorus, "the properties title renames the selection in place");
+
+            // ---- track height and order
+            const int heightBefore = p.tracks[0].userData.arrangeViewHeight;
+            auto grip = lanes.getTrackResizeArea (trackPath).getCentre().toFloat();
+            drag (lanes, grip, grip + juce::Point<float> (0.0f, 50.0f));
+            pump();
+            t.check (p.tracks[0].userData.arrangeViewHeight == heightBefore + 50, "dragging a track's bottom edge resizes it ("
+                        + juce::String (p.tracks[0].userData.arrangeViewHeight) + ")");
+            undoOnce();
+            t.check (p.tracks[0].userData.arrangeViewHeight == heightBefore, "...one undo step");
+
+            context.controller.addTrack();
+            pump();
+            const auto second = p.tracks.at (1).path;
+            const float secondHeaderY = (float) rowY + 20.0f;
+            drag (lanes, { 100.0f, secondHeaderY }, { 100.0f, 10.0f });
+            pump();
+            t.check (p.tracks.size() == 2 && p.tracks[0].path == second, "dragging a track header moves the track");
+            undoOnce();
+            t.check (p.tracks[0].path == trackPath, "...and undo moves it back");
+
+            // ---- multi-selection of blocks
+            const auto b2 = context.controller.addBlock (trackPath, rate * 40, rate * 50);
+            pump();
+            auto blockCentre = [&] (const juce::String& path)
+            {
+                auto* b = p.findBlock (path);
+                return juce::Point<float> (mapping.tickToX ((b->start + b->end) / 2), 12.0f);
+            };
+            click (lanes, blockCentre (chorus));
+            {
+                auto pos = blockCentre (b2);
+                lanes.mouseDown (makeEvent (lanes, pos, pos, 1, false, cmdClick));
+                lanes.mouseUp (makeEvent (lanes, pos, pos, 1, false, cmdClick));
+            }
+            t.check (lanes.getSelectedBlocks().size() == 2, "Ctrl/Cmd-click adds a block to the selection");
+            const int chorusStart = p.findBlock (chorus)->start, b2Start = p.findBlock (b2)->start;
+            {
+                auto from = blockCentre (chorus);
+                drag (lanes, from, from + juce::Point<float> ((float) (rate * 5 * mapping.pixelsPerTick), 0.0f));
+                pump();
+            }
+            const int shifted = p.findBlock (chorus) != nullptr ? p.findBlock (chorus)->start - chorusStart : 0;
+            t.check (shifted > 0 && p.findBlock (b2) != nullptr && p.findBlock (b2)->start - b2Start == shifted,
+                     "dragging one selected block moves them all (" + juce::String (shifted) + " ticks)");
+            undoOnce();
+            t.check (p.findBlock (chorus)->start == chorusStart && p.findBlock (b2)->start == b2Start, "...one undo step");
+            {
+                auto pos = blockCentre (b2);
+                lanes.mouseDown (makeEvent (lanes, pos, pos, 1, false, cmdClick));
+                lanes.mouseUp (makeEvent (lanes, pos, pos, 1, false, cmdClick));
+            }
+            t.check (lanes.getSelectedBlocks().size() == 1, "Ctrl/Cmd-clicking a selected block deselects it");
+            {
+                auto pos = blockCentre (b2);
+                lanes.mouseDown (makeEvent (lanes, pos, pos, 1, false, cmdClick));
+                lanes.mouseUp (makeEvent (lanes, pos, pos, 1, false, cmdClick));
+            }
+            lanes.deleteSelection();
+            pump();
+            t.check (p.findBlock (chorus) == nullptr && p.findBlock (b2) == nullptr, "Delete removes every selected block");
+            undoOnce();
+            t.check (p.findBlock (chorus) != nullptr && p.findBlock (b2) != nullptr, "...and undo brings them back");
+
+            // ---- multi-selection of modules: rubber band
+            main.getModuleView().setBlock (chorus);
+            main.showView ("module");
+            pump();
+            auto& g2 = main.getModuleView().getGraph();
+            std::vector<juce::String> modulePaths;
+            if (auto* b = p.findBlock (chorus))
+                for (auto& m : b->modules)
+                    modulePaths.push_back (chorus + "." + m.name);
+            juce::Rectangle<float> all;
+            for (auto& m : modulePaths)
+                if (auto r = g2.getModuleBounds (m))
+                    all = all.isEmpty() ? *r : all.getUnion (*r);
+            drag (g2, all.getBottomRight() + juce::Point<float> (10.0f, 10.0f), all.getTopLeft() - juce::Point<float> (5.0f, 5.0f));
+            pump();
+            t.check (g2.getSelectedModules().size() == modulePaths.size() && modulePaths.size() >= 3,
+                     "a rubber band selects the modules it touches (" + juce::String ((int) g2.getSelectedModules().size()) + ")");
+            if (modulePaths.size() >= 2)
+            {
+                auto before0 = g2.getModuleBounds (modulePaths[0]);
+                auto before1 = g2.getModuleBounds (modulePaths[1]);
+                auto from = before0->getCentre();
+                drag (g2, from, from + juce::Point<float> (0.0f, ModuleGraph::gridSize * 2));
+                pump();
+                auto after0 = g2.getModuleBounds (modulePaths[0]);
+                auto after1 = g2.getModuleBounds (modulePaths[1]);
+                t.check (after0 && after1 && after0->getY() > before0->getY() && std::abs ((after1->getY() - before1->getY()) - (after0->getY() - before0->getY())) < 0.5f,
+                         "dragging one selected module moves them all");
+                g2.deleteSelection();
+                pump();
+                bool allGone = true;
+                for (auto& m : modulePaths)
+                    allGone &= ! context.session.nodeExists (m);
+                t.check (allGone, "Delete removes every selected module");
+                undoOnce();
+            }
+
+            // ---- envelopes: click the line, double-click a point, lock
+            main.showView ("arrange");
+            pump();
+            model.selectedBlock = {};
+            lanes.editedEnvelope = {};
+            const auto echoPath = chorus + ".Echo";
+            const auto envelope = context.controller.addEnvelope (chorus, echoPath + ".feedback");
+            pump();
+            juce::String firstPoint;
+            if (auto* b = p.findBlock (chorus))
+                for (auto& e : b->envelopes)
+                    if (e.path == envelope && ! e.points.empty())
+                        firstPoint = e.points[0].path;
+            auto first = lanes.getControlPointPosition (firstPoint);
+            const auto onLine = first ? juce::Point<float> (first->x + 80.0f, first->y) : juce::Point<float>();
+            click (lanes, onLine);
+            t.check (lanes.editedEnvelope == envelope && model.selectedBlock == chorus, "clicking an envelope's line selects it");
+            auto countPoints = [&]
+            {
+                if (auto* b = p.findBlock (chorus))
+                    for (auto& e : b->envelopes)
+                        if (e.path == envelope)
+                            return (int) e.points.size();
+                return 0;
+            };
+            const int pointsBefore = countPoints();
+            drag (lanes, onLine, onLine + juce::Point<float> (0.0f, -10.0f));
+            pump();
+            t.check (countPoints() == pointsBefore + 1, "clicking the selected envelope's line adds a point there, and drags it");
+            juce::String newPoint;
+            if (auto* b = p.findBlock (chorus))
+                for (auto& e : b->envelopes)
+                    if (e.path == envelope && e.points.size() > 1)
+                        newPoint = e.points[1].path;
+            if (auto pos = lanes.getControlPointPosition (newPoint))
+            {
+                lanes.mouseDoubleClick (makeEvent (lanes, *pos, *pos, 2, false));
+                pump();
+            }
+            t.check (countPoints() == pointsBefore, "double-clicking a control point deletes it");
+            if (first)
+            {
+                lanes.mouseDoubleClick (makeEvent (lanes, *first, *first, 2, false));
+                pump();
+            }
+            t.check (countPoints() == pointsBefore, "...but not the first one");
+
+            context.controller.addEnvelope (chorus, echoPath + ".delayTime");
+            pump();
+            model.selectedBlock = chorus;
+            lanes.repaint();
+            auto lock = lanes.getEnvelopeLockBounds();
+            click (lanes, lock.getCentre());
+            pump();
+            t.check (! lock.isEmpty() && p.findBlock (chorus) != nullptr && p.findBlock (chorus)->userData.envelopeLock,
+                     "a block with several envelopes has an envelope lock button");
+            saveShot (main, "envelope-editing.png");
+        }
+
         main.showView ("arrange");
         context.controller.newProject();
         pump();

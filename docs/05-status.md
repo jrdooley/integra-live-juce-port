@@ -30,7 +30,7 @@ there (the GUI test needs a desktop session).
    JUCE callback path with non-power-of-two buffers, block activation by the playhead, undo/redo
    (including undoing deletes), rename, routing, MIDI control, envelopes, scenes, Lua, block moves,
    save/reopen, and importing all six Flex-saved demo blocks.
-5. `IntegraLive_gui_test` (under `xvfb-run`) — 104 interaction checks with synthesized mouse and
+5. `IntegraLive_gui_test` (under `xvfb-run`) — 137 interaction checks with synthesized mouse and
    keyboard events across all three views.
 
 Screenshots in `docs/images/` are produced by the app itself (`--screenshot`).

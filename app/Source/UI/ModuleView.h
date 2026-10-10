@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <set>
 
 #include "ModuleProperties.h"
 #include "ContainerControls.h"
@@ -123,6 +124,17 @@ namespace integra
 
         void deleteSelection();
 
+        void selectModulePath (const juce::String& path)    { selectModule (path); }
+
+        /** Selected modules: the primary selection plus those added with Ctrl/Cmd-click or
+            the rubber band. Dragging one moves them all; Delete removes them all. */
+        std::vector<juce::String> getSelectedModules() const;
+        bool isModuleSelected (const juce::String& path) const;
+
+        /** Renames a module in place (double-click its name, or its menu). */
+        void renameModule (const juce::String& modulePath);
+        juce::TextEditor* getRenameEditor() const noexcept  { return renameEditor.get(); }
+
         /** Pixel position of an audio pin (endpoint path), for tests. */
         std::optional<juce::Point<float>> getPinPosition (const juce::String& endpointPath) const
         {
@@ -185,6 +197,12 @@ namespace integra
         juce::Rectangle<float> dragOriginal;
         std::optional<Pin> dragPin;     // a copy: `modules` is rebuilt whenever the model changes
         juce::Point<float> dragPinEnd;
+        std::unique_ptr<juce::TextEditor> renameEditor;
+        std::set<juce::String> groupSelection, rubberBandBase;
+        std::map<juce::String, juce::Point<float>> dragStartPositions;
+        std::optional<juce::Rectangle<float>> rubberBand;
+        bool collapseGroupOnUp = false;
+        void updateRubberBand (juce::Rectangle<float>, bool toggle);
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ModuleGraph)
     };

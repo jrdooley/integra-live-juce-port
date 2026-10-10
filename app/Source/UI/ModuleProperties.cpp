@@ -1,4 +1,5 @@
 #include "ModuleProperties.h"
+#include "InlineRename.h"
 #include "IntegraLookAndFeel.h"
 
 namespace integra
@@ -275,6 +276,25 @@ namespace integra
         g.setColour (t.textDim);
         g.setFont (juce::FontOptions (12.0f));
         g.drawText (description, header, juce::Justification::centredLeft, true);
+    }
+
+    void ModuleProperties::mouseDoubleClick (const juce::MouseEvent& e)
+    {
+        if (e.y < 24 && modulePath.isNotEmpty())
+            renameModule();
+    }
+
+    void ModuleProperties::renameModule()
+    {
+        const auto path = modulePath;
+        if (path.isEmpty())
+            return;
+        startInlineRename (renameEditor, *this, { 6, 2, juce::jmin (getWidth() - 12, 240), 22 }, lastElement (path),
+                           [this, path] (const juce::String& name)
+                           {
+                               if (context.controller.rename (path, name).wasOk() && onRenamed != nullptr)
+                                   onRenamed (parentPath (path) + "." + name);
+                           });
     }
 
     void ModuleProperties::resized()

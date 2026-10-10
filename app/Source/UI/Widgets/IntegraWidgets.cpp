@@ -300,8 +300,244 @@ namespace integra
     void IntegraWidget::resized() {}
 
     //==============================================================================
+    juce::String IntegraWidget::getEditableAttribute() const
+    {
+        // the value shown under the control, if it can be typed
+        if (spec.mapping.count ("value") == 0)
+            return {};
+        auto& i = info ("value");
+        return (i.isNumeric() || i.kind == EndpointInfo::Kind::text) && i.canBeTarget && ! i.isInputFile ? juce::String ("value") : juce::String();
+    }
+
+    juce::Rectangle<int> IntegraWidget::getValueTextArea() const
+    {
+        if (! showLabel)
+            return {};
+        auto labelArea = getLocalBounds().reduced (4).removeFromBottom (labelHeight());
+        return labelArea.withTrimmedTop (labelArea.getHeight() / 2);
+    }
+
+    bool IntegraWidget::startEditingValue()
+    {
+        const auto attribute = getEditableAttribute();
+        if (attribute.isEmpty() || isLocked (attribute) || getValueTextArea().isEmpty())
+            return false;
+
+        editedAttribute = attribute;
+        valueEditor = std::make_unique<juce::TextEditor>();
+        valueEditor->setJustification (juce::Justification::centred);
+        valueEditor->setFont (juce::FontOptions (11.0f));
+        valueEditor->setText (info (attribute).format (get (attribute)), false);
+        valueEditor->setInputRestrictions (256);
+        valueEditor->onReturnKey = [this] { juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<IntegraWidget> (this)] { if (safe) safe->finishEditingValue (true); }); };
+        valueEditor->onEscapeKey = [this] { juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<IntegraWidget> (this)] { if (safe) safe->finishEditingValue (false); }); };
+        valueEditor->onFocusLost = [this] { juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<IntegraWidget> (this)] { if (safe) safe->finishEditingValue (true); }); };
+        addAndMakeVisible (*valueEditor);
+        valueEditor->setBounds (getValueTextArea().expanded (2, 1));
+        valueEditor->selectAll();
+        valueEditor->grabKeyboardFocus();
+        repaint();
+        return true;
+    }
+
+    void IntegraWidget::finishEditingValue (bool commit)
+    {
+        if (valueEditor == nullptr)
+            return;
+        auto editor = std::move (valueEditor);    // the editor goes before the value is set
+        if (commit)
+            setValueFromText (editedAttribute, editor->getText());
+        editor.reset();
+        repaint();
+    }
+
+    bool IntegraWidget::setValueFromText (const juce::String& attribute, const juce::String& rawText)
+    {
+        auto& i = info (attribute);
+        const auto text = rawText.trim();
+        if (endpointPath (attribute).isEmpty() || isLocked (attribute))
+            return false;
+
+        for (auto& [label, value] : i.stateLabels)
+        {
+            if (label.equalsIgnoreCase (text))
+            {
+                set (attribute, value);
+                return true;
+            }
+        }
+
+        if (! i.allowedStates.isEmpty())
+        {
+            for (auto& state : i.allowedStates)
+                if (state.equalsIgnoreCase (text))
+                {
+                    set (attribute, i.kind == EndpointInfo::Kind::text ? juce::var (state)
+                                  : i.kind == EndpointInfo::Kind::integer ? juce::var (state.getIntValue()) : juce::var (state.getDoubleValue()));
+                    return true;
+                }
+            if (i.kind == EndpointInfo::Kind::text)
+                return false;
+        }
+
+        if (i.kind == EndpointInfo::Kind::text)
+        {
+            set (attribute, text);
+            return true;
+        }
+
+        if (! i.isNumeric() || ! text.containsAnyOf ("0123456789"))
+            return false;
+
+        double value = text.retainCharacters ("0123456789.-+eE").getDoubleValue();
+        if (i.hasRange)
+            value = juce::jlimit (i.minimum, i.maximum, value);
+        if (i.kind == EndpointInfo::Kind::integer)
+            set (attribute, juce::roundToInt (value));
+        else
+            set (attribute, value);
+        return true;
+    }
+
+    void IntegraWidget::mouseDoubleClick (const juce::MouseEvent& e)
+    {
+        if (getValueTextArea().contains (e.getPosition()))
+            startEditingValue();
+    }
+
+    void IntegraWidget::mouseDown (const juce::MouseEvent& e)
+    {
+        if (e.mods.isPopupMenu())
+            showContextMenu();
+    }
+
+    //==============================================================================
     namespace
     {
+        bool isRevertable (const EndpointInfo& i)
+        {
+            // ModuleProperties: stateful endpoints that can be targets
+            return (i.isNumeric() || i.kind == EndpointInfo::Kind::text) && i.canBeTarget && ! i.defaultValue.isVoid();
+        }
+
+        bool isAtDefault (const EndpointInfo& i, const juce::var& value)
+        {
+            if (i.isNumeric())
+                return std::abs ((double) value - (double) i.defaultValue) < 1e-6;
+            return value.toString() == i.defaultValue.toString();
+        }
+    }
+
+    bool IntegraWidget::canRevert() const
+    {
+        for (auto& [attribute, endpoint] : spec.mapping)
+            if (isRevertable (info (attribute)) && ! isLocked (attribute) && ! isAtDefault (info (attribute), get (attribute)))
+                return true;
+        return false;
+    }
+
+    void IntegraWidget::revertToDefault()
+    {
+        context.controller.transaction ("Revert to Default", [&]
+        {
+            for (auto& [attribute, endpoint] : spec.mapping)
+                if (isRevertable (info (attribute)) && ! isLocked (attribute))
+                    context.controller.setValue (endpointPath (attribute), info (attribute).defaultValue);
+        });
+    }
+
+    bool IntegraWidget::canRevertAll (AppContext& context, const juce::String& modulePath)
+    {
+        auto& project = context.model.get();
+        for (auto& s : WidgetSpec::forModule (context.session, modulePath))
+            for (auto& [attribute, endpoint] : s.mapping)
+            {
+                const auto path = modulePath + "." + endpoint;
+                auto i = EndpointInfo::find (context.session, path);
+                if (isRevertable (i) && project.driversOf (path).empty() && ! isAtDefault (i, context.session.getValue (path)))
+                    return true;
+            }
+        return false;
+    }
+
+    void IntegraWidget::revertAllToDefault (AppContext& context, const juce::String& modulePath)
+    {
+        // ModuleProperties.revertAll: every unlocked control of the module
+        auto& project = context.model.get();
+        context.controller.transaction ("Revert All to Default", [&]
+        {
+            juce::StringArray done;
+            for (auto& s : WidgetSpec::forModule (context.session, modulePath))
+                for (auto& [attribute, endpoint] : s.mapping)
+                {
+                    const auto path = modulePath + "." + endpoint;
+                    auto i = EndpointInfo::find (context.session, path);
+                    if (done.contains (path) || ! isRevertable (i) || ! project.driversOf (path).empty())
+                        continue;
+                    done.add (path);
+                    context.controller.setValue (path, i.defaultValue);
+                }
+        });
+    }
+
+    void IntegraWidget::showContextMenu()
+    {
+        juce::PopupMenu revert;
+        juce::StringArray labels;
+        bool anyRevertable = false;
+        for (auto& [attribute, endpoint] : spec.mapping)
+            if (isRevertable (info (attribute)) && ! isLocked (attribute))
+            {
+                anyRevertable = true;
+                labels.add (info (attribute).label.isNotEmpty() ? info (attribute).label : endpoint);
+            }
+        if (anyRevertable)
+        {
+            revert.addItem (labels.joinIntoString (", "), canRevert(), false, [safe = juce::Component::SafePointer<IntegraWidget> (this)]
+            {
+                if (safe != nullptr)
+                    safe->revertToDefault();
+            });
+            revert.addSeparator();
+        }
+        revert.addItem ("All Controls", canRevertAll (context, modulePath), false, [&ctx = context, path = modulePath]
+        {
+            revertAllToDefault (ctx, path);
+        });
+
+        juce::PopupMenu menu;
+        menu.addSubMenu ("Revert to default", revert);
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
+    }
+
+    //==============================================================================
+    namespace
+    {
+        /** A child control that leaves right-clicks to its widget's context menu. */
+        template <typename Base>
+        class Guarded  : public Base
+        {
+        public:
+            template <typename... Args>
+            explicit Guarded (IntegraWidget& w, Args&&... args) : Base (std::forward<Args> (args)...), widget (w) {}
+
+            void mouseDown (const juce::MouseEvent& e) override
+            {
+                ignoring = e.mods.isPopupMenu();
+                if (ignoring)
+                    widget.showContextMenu();
+                else
+                    Base::mouseDown (e);
+            }
+            void mouseDrag (const juce::MouseEvent& e) override         { if (! ignoring) Base::mouseDrag (e); }
+            void mouseUp (const juce::MouseEvent& e) override           { if (! ignoring) Base::mouseUp (e); }
+            void mouseDoubleClick (const juce::MouseEvent& e) override  { if (! ignoring) Base::mouseDoubleClick (e); }
+
+        private:
+            IntegraWidget& widget;
+            bool ignoring = false;
+        };
+
         /** Slider/Knob/NumberBox: a juce::Slider working in 0..1 control units. */
         class SliderWidget  : public IntegraWidget
         {
@@ -321,7 +557,6 @@ namespace integra
 
                 slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
                 slider.setRange (0.0, 1.0);
-                slider.setDoubleClickReturnValue (true, info ("value").toUnit (info ("value").defaultValue.isVoid() ? 0.0 : (double) info ("value").defaultValue));
                 slider.setVelocityModeParameters (0.6, 1, 0.0, true, juce::ModifierKeys::shiftModifier);
                 slider.onValueChange = [this] { if (! updating) setUnit ("value", slider.getValue()); };
                 slider.textFromValueFunction = [this] (double unit) { return info ("value").format (info ("value").fromUnit (unit)); };
@@ -353,7 +588,7 @@ namespace integra
             }
 
         private:
-            juce::Slider slider;
+            Guarded<juce::Slider> slider { *this };
             bool updating = false;
         };
 
@@ -386,8 +621,10 @@ namespace integra
                 }
             }
 
-            void mouseDown (const juce::MouseEvent&) override
+            void mouseDown (const juce::MouseEvent& e) override
             {
+                if (e.mods.isPopupMenu() || ! getControlArea().contains (e.getPosition()))
+                    return IntegraWidget::mouseDown (e);
                 auto& i = info ("value");
                 set ("value", isOn() ? (i.hasRange ? i.minimum : 0.0) : (i.hasRange ? i.maximum : 1.0));
             }
@@ -439,8 +676,10 @@ namespace integra
                 g.fillPath (p);
             }
 
-            void mouseDown (const juce::MouseEvent&) override
+            void mouseDown (const juce::MouseEvent& e) override
             {
+                if (e.mods.isPopupMenu() || ! getControlArea().contains (e.getPosition()))
+                    return IntegraWidget::mouseDown (e);
                 if (kind == Kind::trigger || kind == Kind::stop || info ("value").kind == EndpointInfo::Kind::bang)
                 {
                     bang ("value");
@@ -523,8 +762,8 @@ namespace integra
             void mouseDown (const juce::MouseEvent& e) override
             {
                 auto area = getControlArea();
-                if (options.empty() || ! area.contains (e.getPosition()))
-                    return;
+                if (e.mods.isPopupMenu() || options.empty() || ! area.contains (e.getPosition()))
+                    return IntegraWidget::mouseDown (e);
                 const int rowHeight = juce::jmin (22, area.getHeight() / (int) options.size());
                 const int index = (e.y - area.getY()) / juce::jmax (1, rowHeight);
                 if (index >= 0 && index < (int) options.size())
@@ -583,7 +822,7 @@ namespace integra
             }
 
         private:
-            juce::Slider slider;
+            Guarded<juce::Slider> slider { *this };
             bool updating = false;
         };
 
@@ -664,7 +903,7 @@ namespace integra
             }
 
             Mode mode;
-            juce::TextButton button;
+            Guarded<juce::TextButton> button { *this };
             std::unique_ptr<juce::FileChooser> chooser;
         };
 
@@ -698,8 +937,15 @@ namespace integra
                 g.fillEllipse (x - 7, y - 7, 14, 14);
             }
 
-            void mouseDown (const juce::MouseEvent& e) override  { update (e); }
-            void mouseDrag (const juce::MouseEvent& e) override  { update (e); }
+            void mouseDown (const juce::MouseEvent& e) override
+            {
+                popup = e.mods.isPopupMenu() || ! getControlArea().contains (e.getPosition());
+                if (popup)
+                    return IntegraWidget::mouseDown (e);
+                update (e);
+            }
+            void mouseDrag (const juce::MouseEvent& e) override  { if (! popup) update (e); }
+            bool popup = false;
 
             juce::String getValueText() const override
             {
@@ -768,7 +1014,7 @@ namespace integra
 
         private:
             juce::String left, right;
-            juce::Slider slider;
+            Guarded<juce::Slider> slider { *this };
             bool updating = false;
         };
     }

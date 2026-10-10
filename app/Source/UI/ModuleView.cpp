@@ -1,5 +1,6 @@
 #include "ModuleView.h"
 #include "IntegraLookAndFeel.h"
+#include "InlineRename.h"
 
 namespace integra
 {
@@ -733,7 +734,7 @@ namespace integra
 
         for (auto& m : modules)
         {
-            const bool selected = m.path == selectedModule;
+            const bool selected = isModuleSelected (m.path);
             g.setColour (juce::Colours::black.withAlpha (0.15f));
             g.fillRoundedRectangle (m.bounds.translated (2, 3), 5.0f);
             g.setColour (t.moduleFill);
@@ -769,6 +770,44 @@ namespace integra
             g.setFont (juce::FontOptions (15.0f));
             g.drawText ("Drag modules here from the library", getLocalBounds(), juce::Justification::centred);
         }
+
+        // rubber band (ModuleGraph: fill alpha 0.1, border alpha 0.2)
+        if (rubberBand.has_value())
+        {
+            g.setColour (t.text.withAlpha (0.1f));
+            g.fillRect (*rubberBand);
+            g.setColour (t.text.withAlpha (0.2f));
+            g.drawRect (*rubberBand, 1.0f);
+        }
+    }
+
+    std::vector<juce::String> ModuleGraph::getSelectedModules() const
+    {
+        // the Ctrl/Cmd-click or rubber-band group, while it still contains the primary selection
+        std::vector<juce::String> result;
+        auto exists = [this] (const juce::String& path)
+        {
+            return std::any_of (modules.begin(), modules.end(), [&] (auto& m) { return m.path == path; });
+        };
+        if (selectedModule.isEmpty() || ! exists (selectedModule))
+            return result;
+        if (groupSelection.count (selectedModule) > 0)
+        {
+            for (auto& path : groupSelection)
+                if (exists (path))
+                    result.push_back (path);
+        }
+        else
+        {
+            result.push_back (selectedModule);
+        }
+        return result;
+    }
+
+    bool ModuleGraph::isModuleSelected (const juce::String& path) const
+    {
+        auto selected = getSelectedModules();
+        return std::find (selected.begin(), selected.end(), path) != selected.end();
     }
 
     const ModuleGraph::Pin* ModuleGraph::pinAt (juce::Point<float> p) const
@@ -835,9 +874,35 @@ namespace integra
             return;
         }
 
+        collapseGroupOnUp = false;
+        rubberBand.reset();
+
         if (auto* module = moduleAt (e.position))
         {
+            // ModuleGraph.onClickModule: Ctrl (Cmd on macOS) adds or removes a module; a
+            // plain click on a module of a group keeps the group for dragging
             selectedLink = {};
+            auto group = getSelectedModules();
+            const bool wasSelected = std::find (group.begin(), group.end(), module->path) != group.end();
+            if (e.mods.isCommandDown() && ! e.mods.isPopupMenu())
+            {
+                groupSelection = { group.begin(), group.end() };
+                if (wasSelected)
+                {
+                    groupSelection.erase (module->path);
+                    selectModule (groupSelection.empty() ? juce::String() : *groupSelection.begin());
+                    return;
+                }
+                groupSelection.insert (module->path);
+            }
+            else if (! wasSelected || e.mods.isPopupMenu())
+            {
+                groupSelection = { module->path };
+            }
+            else
+            {
+                collapseGroupOnUp = group.size() > 1;
+            }
             selectModule (module->path);
 
             if (e.mods.isPopupMenu())
@@ -849,6 +914,10 @@ namespace integra
             draggingModule = module->path;
             dragOffset = e.position - module->bounds.getPosition();
             dragOriginal = module->bounds;
+            dragStartPositions.clear();
+            for (auto& m : modules)
+                if (isModuleSelected (m.path))
+                    dragStartPositions[m.path] = m.bounds.getPosition();
             return;
         }
 
@@ -865,12 +934,54 @@ namespace integra
             return;
         }
 
+        // empty space: rubber-band selection (with Ctrl/Cmd it toggles modules in and out)
         selectedLink = {};
-        selectModule ({});
+        rubberBandBase.clear();
+        if (e.mods.isCommandDown())
+        {
+            for (auto& path : getSelectedModules())
+                rubberBandBase.insert (path);
+        }
+        else
+        {
+            groupSelection.clear();
+            selectModule ({});
+        }
+        if (! e.mods.isPopupMenu())
+            rubberBand = juce::Rectangle<float> (e.position, e.position);
+        repaint();
+    }
+
+    void ModuleGraph::updateRubberBand (juce::Rectangle<float> area, bool toggle)
+    {
+        rubberBand = area;
+        auto selection = rubberBandBase;
+        juce::String first;
+        for (auto& m : modules)
+        {
+            if (! m.bounds.intersects (area))
+                continue;
+            if (toggle && rubberBandBase.count (m.path) > 0)
+                selection.erase (m.path);
+            else
+                selection.insert (m.path);
+            if (first.isEmpty() && selection.count (m.path) > 0)
+                first = m.path;
+        }
+        groupSelection = selection;
+        if (selection.count (selectedModule) == 0)
+            selectModule (first.isNotEmpty() ? first : selection.empty() ? juce::String() : *selection.begin());
+        repaint();
     }
 
     void ModuleGraph::mouseDrag (const juce::MouseEvent& e)
     {
+        if (rubberBand.has_value())
+        {
+            updateRubberBand (juce::Rectangle<float> (e.mouseDownPosition, e.position), e.mods.isCommandDown());
+            return;
+        }
+
         if (dragPin.has_value())
         {
             dragPinEnd = e.position;
@@ -880,20 +991,26 @@ namespace integra
 
         if (draggingModule.isNotEmpty())
         {
+            // every selected module moves with the dragged one (ModuleGraph.doModuleReposition)
+            auto topLeft = e.position - dragOffset;
+            // snap to half grid units
+            topLeft = { std::round (topLeft.x / (gridSize * 0.5f)) * gridSize * 0.5f,
+                        std::round (topLeft.y / (gridSize * 0.5f)) * gridSize * 0.5f };
+            auto delta = topLeft - dragOriginal.getPosition();
+            for (auto& [path, start] : dragStartPositions)
+                delta = { juce::jmax (delta.x, -start.x), juce::jmax (delta.y, -start.y) };
+            collapseGroupOnUp = collapseGroupOnUp && delta.isOrigin();
+
             for (auto& m : modules)
             {
-                if (m.path != draggingModule)
+                auto it = dragStartPositions.find (m.path);
+                if (it == dragStartPositions.end())
                     continue;
-
-                auto topLeft = e.position - dragOffset;
-                // snap to half grid units
-                topLeft = { std::round (topLeft.x / (gridSize * 0.5f)) * gridSize * 0.5f,
-                            std::round (topLeft.y / (gridSize * 0.5f)) * gridSize * 0.5f };
-                topLeft = { juce::jmax (0.0f, topLeft.x), juce::jmax (0.0f, topLeft.y) };
-                const auto delta = topLeft - m.bounds.getPosition();
-                m.bounds.setPosition (topLeft);
+                const auto newPosition = it->second + delta;
+                const auto step = newPosition - m.bounds.getPosition();
+                m.bounds.setPosition (newPosition);
                 for (auto& p : m.pins)
-                    p.position += delta;
+                    p.position += step;
             }
 
             updateLinkEnds();
@@ -920,21 +1037,33 @@ namespace integra
             return;
         }
 
+        if (rubberBand.has_value())
+        {
+            rubberBand.reset();
+            repaint();
+            return;
+        }
+
         if (draggingModule.isNotEmpty())
         {
-            const auto moved = draggingModule;
             draggingModule = {};
 
+            // one undo step for the whole group (SetModulePosition for each)
+            std::map<juce::String, juce::Rectangle<float>> positions;
             for (auto& m : modules)
             {
-                if (m.path == moved && m.bounds.getPosition() != dragOriginal.getPosition())
-                {
-                    std::map<juce::String, juce::Rectangle<float>> positions;
+                auto it = dragStartPositions.find (m.path);
+                if (it != dragStartPositions.end() && m.bounds.getPosition() != it->second)
                     positions[m.name] = { m.bounds.getX() / gridSize, m.bounds.getY() / gridSize,
                                           m.bounds.getWidth() / gridSize, m.bounds.getHeight() / gridSize };
-                    context.controller.setModulePositions (blockPath, positions);
-                }
             }
+            dragStartPositions.clear();
+            if (! positions.empty())
+                context.controller.setModulePositions (blockPath, positions);
+
+            if (collapseGroupOnUp)
+                groupSelection = { selectedModule };    // a click on a module of a group selects just it
+            collapseGroupOnUp = false;
             layout();
         }
     }
@@ -942,7 +1071,30 @@ namespace integra
     void ModuleGraph::mouseDoubleClick (const juce::MouseEvent& e)
     {
         if (auto* module = moduleAt (e.position))
-            selectModule (module->path);
+        {
+            // ModuleGraphElement: double-click the name to rename the module
+            if (module->bounds.withHeight (gridSize).contains (e.position))
+                renameModule (module->path);
+            else
+                selectModule (module->path);
+        }
+    }
+
+    void ModuleGraph::renameModule (const juce::String& path)
+    {
+        for (auto& m : modules)
+        {
+            if (m.path != path)
+                continue;
+            auto bounds = m.bounds.withHeight (gridSize + 4.0f).toNearestInt();
+            startInlineRename (renameEditor, *this, bounds.withWidth (juce::jmax (bounds.getWidth(), 100)), m.name,
+                               [this, path] (const juce::String& name)
+                               {
+                                   if (context.controller.rename (path, name).wasOk())
+                                       selectModule (parentPath (path) + "." + name);
+                               });
+            return;
+        }
     }
 
     bool ModuleGraph::keyPressed (const juce::KeyPress& key)
@@ -962,9 +1114,13 @@ namespace integra
             context.controller.remove (selectedLink);
             selectedLink = {};
         }
-        else if (selectedModule.isNotEmpty())
+        else if (auto selected = getSelectedModules(); ! selected.empty())
         {
-            context.controller.remove (selectedModule);
+            juce::StringArray paths;
+            for (auto& path : selected)
+                paths.add (path);
+            context.controller.remove (paths);      // every selected module (UnloadModule each)
+            groupSelection.clear();
             selectModule ({});
         }
     }
@@ -973,24 +1129,7 @@ namespace integra
     {
         juce::PopupMenu menu;
         const auto path = module.path;
-        menu.addItem ("Rename...", [this, path]
-        {
-            auto* w = new juce::AlertWindow ("Rename module", "New name:", juce::MessageBoxIconType::NoIcon);
-            w->addTextEditor ("name", lastElement (path));
-            w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
-            w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-            w->enterModalState (true, juce::ModalCallbackFunction::create ([this, w, path] (int result)
-            {
-                if (result == 1)
-                {
-                    auto r = context.controller.rename (path, w->getTextEditorContents ("name"));
-                    if (r.failed())
-                        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Rename", r.getErrorMessage());
-                    else
-                        selectModule (parentPath (path) + "." + w->getTextEditorContents ("name").trim());
-                }
-            }), true);
-        });
+        menu.addItem ("Rename", [this, path] { renameModule (path); });
         menu.addItem ("Export module...", [this, path]
         {
             auto chooser = std::make_shared<juce::FileChooser> ("Export module", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
@@ -1048,6 +1187,7 @@ namespace integra
         addAndMakeVisible (*divider);
 
         graph.onModuleSelected = [this] (const juce::String& module) { properties.setModule (module); };
+        properties.onRenamed = [this] (const juce::String& renamed) { graph.refreshLayout(); graph.selectModulePath (renamed); };
         addAndMakeVisible (blockActive);
         addAndMakeVisible (blockMeter);
         blockActive.onChange = [this] { graph.repaint(); };

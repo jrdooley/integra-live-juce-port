@@ -37,24 +37,26 @@ Flex paths are relative to `GUI/src/components/`.
 | Scene properties | `ScenePropertiesTitlebar.as`, `ProjectPropertiesTitlebar.as`, `SelectScene.as` | Clicking a scene shows it in the properties panel with State, Key, MIDI learn (routed to `activate`) and Info; the project's title bar has Prev / Next Scene MIDI learn. |
 | Scene Shortcuts | `KeybindingView.as`, `KeyIcon.as` | On-screen keyboard under the Live view: scene names on keys, current scene highlighted, click to select, drag to a free key to rebind, collapsible and resizable. |
 | Live view editing | `LiveViewBlock.as` | Right-click menu to add a module's control at the click point or remove it; resize from every edge; snapping to the other controls' edges with snap lines; clamped to the block area; no rebuilds during a drag, and only when what is shown changes. |
+| Typing values, Revert to default | `AttributeLabel.as`, `ModuleProperties.as` | Double-click a control's value to type one (Enter sets, Escape cancels, numbers clamped to the range, enumerations by name); double-click no longer resets a slider. Right-click a control for *Revert to default* > this control / All Controls (one undo step), skipping locked controls. |
+| In-place rename | `SceneBar.as`, `BlockView.as`, `ModuleGraphElement.as`, `ViewHolder.as`, `RenameObject.as` | Double-click a scene, a block's name, a track's name, a module's name or the properties / module-controls titles; Enter or clicking away commits, Escape cancels; only legal name characters can be typed; invalid names (leading digit, taken) are dropped, as in Flex. The rename dialogs are gone. |
+| Track height and order | `ViewHolder.as`, `ViewTree.as`, `SetTrackHeight`, `SetTrackOrder` | Drag a track header's bottom edge (grip in the corner) to resize it, drag the header to move the track; one undo step each. |
+| Multi-selection | `ArrangeView.as`, `ModuleGraph.as`, `Utilities.as` (Cmd on macOS, Ctrl elsewhere) | Ctrl/Cmd-click adds or removes blocks and modules; dragging one moves them all (blocks keep their time and track offsets, and push other blocks aside); Delete removes them all; a plain click on one of a group selects just it. Rubber-band selection on empty space in the module graph (Ctrl/Cmd toggles). |
+| Envelope editing | `BlockView.as`, `EnvelopeView.as` | Clicking within 8 px of an envelope selects it; clicking the selected envelope adds a point there and drags it; points are hit 4 px either side; double-click a point to delete it (not the first); envelope lock button (blocks with several envelopes, Shift inverts); "seconds, value" readout while dragging. |
 | MIDI indicator | `MidiInputIndicator.as` | Lights for every incoming message, including repeats of the same message. *(No automated test.)* |
 
 ## Arrange view and timeline
 
 **Missing / partial**
-* Scenes: inline rename by double-click (and in the properties title); Backspace to delete.
+* Scenes: Backspace to delete.
 * Timeline: the drag-to-zoom/scroll strip at the top of the ruler (drag sideways to
   scroll, up/down to zoom, Shift locks an axis).
-* Tracks: collapse button, drag the bottom edge to
-  resize (only 4 preset heights), drag headers to reorder (only move up/down), full colour
-  picker (only 7 colours), import/export track, double-click below the tracks to add one,
-  Ctrl+Shift+T.
-* Blocks: multi-select (Ctrl/Cmd-click) with group move/delete; moving only by the title strip; a new block
-  centred on a double-click that pushes later blocks; Ctrl+B / Ctrl+Shift+B; inline rename.
-* Envelopes: envelope lock / Shift, click the line to select and add a point
-  (now: pick from a menu, then double-click), double-click a point to delete it (now
-  right-click), value/time readout while dragging, add/remove envelopes from the block
-  title bar.
+* Tracks: collapse button, full colour picker (only 7 colours), import/export track,
+  double-click below the tracks to add one, Ctrl+Shift+T; the track being moved isn't
+  drawn as a floating image.
+* Blocks: moving only by the title strip; a new block centred on a double-click that
+  pushes later blocks; Ctrl+B / Ctrl+Shift+B. A group drag pushes other blocks out of
+  the whole span the group covers on each track (Flex pushed around each block).
+* Envelopes: add/remove envelopes from the block title bar.
 * Properties panel: clickable breadcrumbs, Ctrl+E to run a script.
 
 ## Module view
@@ -62,14 +64,13 @@ Flex paths are relative to `GUI/src/components/`.
 **Missing / partial**
 * Library: a ghost preview while dragging, a resizable tag cloud (it fits its tags,
   up to half the library), **dropping a module onto a link to splice it in**.
-* Graph: multi-select and rubber-band selection with group move/delete; snapping to
-  other modules' edges with snap lines; in-place rename by double-click; per-module
+* Graph: Ctrl/Cmd-click and rubber band select modules only (Flex also selected their
+  links); snapping to other modules' edges with snap lines; per-module
   "Live View" checkbox; right-click on empty space for Import Module; Change Track Colour;
   track-colour tint and greyed-out inactive blocks; hover info for pins, links and modules.
-* Properties: editable title (rename), **typing a value** (double-click the value label;
-  double-click currently resets instead), right-click **Revert to default**
-  (this control / all controls), MIDI learn for any endpoint of a multi-endpoint widget
-  (XY pad y, range slider max).
+* Properties: typing is for the main value only (Flex labelled each attribute of a
+  multi-attribute widget, e.g. XY pad x and y); MIDI learn for any endpoint of a
+  multi-endpoint widget (XY pad y, range slider max).
 * Widgets: NumberBox text entry; slider quantising to allowed values; RangeSlider drag
   middle to move both ends, draw a new range, double-click to invert, vertical orientation.
 
