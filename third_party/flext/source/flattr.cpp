@@ -68,7 +68,7 @@ FLEXT_TEMPIMPL(void FLEXT_CLASSDEF(flext_base))::AddAttrib(ItemCont *aa,ItemCont
 
 		// bind attribute to a method
 		MethItem *mi = new MethItem(a);
-		mi->SetArgs(sfun,1,new metharg(tp));
+		{ metharg *a = new metharg[1]; a[0] = tp; mi->SetArgs(sfun,1,a); }   /* Integra Live port: new[] to match the delete[] in ~MethItem */
 		ma->Add(mi,asym);
 	}
 	else

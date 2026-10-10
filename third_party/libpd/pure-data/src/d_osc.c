@@ -475,7 +475,7 @@ static void *noise_new(void)
 {
     t_noise *x = (t_noise *)pd_new(noise_class);
     static int init = 307;
-    x->x_val = (init *= 1319); 
+    x->x_val = init = (int)((unsigned)init * 1319u);   /* Integra Live port: unsigned, no signed overflow */
     outlet_new(&x->x_obj, gensym("signal"));
     return (x);
 }
@@ -490,7 +490,7 @@ static t_int *noise_perform(t_int *w)
     {
         *out++ = ((float)((val & 0x7fffffff) - 0x40000000)) *
             (float)(1.0 / 0x40000000);
-        val = val * 435898247 + 382842987;
+        val = (int)((unsigned)val * 435898247u + 382842987u);
     }
     *vp = val;
     return (w+4);

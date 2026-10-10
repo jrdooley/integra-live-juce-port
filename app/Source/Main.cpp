@@ -5,6 +5,7 @@
 #include "Core/ProjectModel.h"
 #include "Core/ProjectController.h"
 #include "Core/SelfTest.h"
+#include "Core/StressTest.h"
 #include "Core/AppContext.h"
 #include "UI/MainComponent.h"
 #include "UI/IntegraLookAndFeel.h"
@@ -56,6 +57,7 @@ namespace integra
             args.removeEmptyStrings();
 
             const bool selfTest = args.contains ("--self-test");
+            const int stressIndex = args.indexOf ("--stress-test");
             const bool quiet = args.contains ("--quiet");
             CTrace::set_categories_to_trace (! quiet, false, false);
 
@@ -70,7 +72,7 @@ namespace integra
             if (result.failed())
             {
                 juce::Logger::writeToLog (result.getErrorMessage());
-                if (selfTest)
+                if (selfTest || stressIndex >= 0)
                 {
                     setApplicationReturnValue (1);
                     quit();
@@ -93,6 +95,27 @@ namespace integra
                 juce::String log;
                 const int failures = runSelfTest (context.session, context.model, context.controller, context.audioHost, log);
                 std::cout << log << (failures == 0 ? "self test passed" : juce::String (failures) + " self test failure(s)") << std::endl;
+                setApplicationReturnValue (failures == 0 ? 0 : 1);
+                quit();
+                return;
+            }
+
+            // --stress-test [seconds] [project files...]
+            if (stressIndex >= 0)
+            {
+                double seconds = 60.0;
+                juce::Array<juce::File> projects;
+                for (int i = stressIndex + 1; i < args.size(); ++i)
+                {
+                    if (args[i].containsOnly ("0123456789."))
+                        seconds = args[i].getDoubleValue();
+                    else if (juce::File::isAbsolutePath (args[i].unquoted()))
+                        projects.add (juce::File (args[i].unquoted()));
+                }
+
+                juce::String log;
+                const int failures = runStressTest (context.session, context.model, context.controller, context.audioHost, seconds, projects, log);
+                std::cout << (failures == 0 ? "stress test passed" : juce::String (failures) + " stress test failure(s)") << std::endl;
                 setApplicationReturnValue (failures == 0 ? 0 : 1);
                 quit();
                 return;

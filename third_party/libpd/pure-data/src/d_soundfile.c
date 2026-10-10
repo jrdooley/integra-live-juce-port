@@ -24,6 +24,7 @@ objects use Posix-like threads.  */
 #include <errno.h>
 
 #include "m_pd.h"
+#include <stdint.h>
 
 #define MAXSFCHANS 64
 
@@ -445,13 +446,13 @@ static void soundfile_xferin_sample(int sfchannels, int nvecs, t_sample **vecs,
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *fp = SCALE * ((sp2[0] << 24) | (sp2[1] << 16));
+                        *fp = SCALE * (int32_t)(((uint32_t)sp2[0] << 24) | (sp2[1] << 16));
             }
             else
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *fp = SCALE * ((sp2[1] << 24) | (sp2[0] << 16));
+                        *fp = SCALE * (int32_t)(((uint32_t)sp2[1] << 24) | (sp2[0] << 16));
             }
         }
         else if (bytespersamp == 3)
@@ -460,14 +461,14 @@ static void soundfile_xferin_sample(int sfchannels, int nvecs, t_sample **vecs,
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *fp = SCALE * ((sp2[0] << 24) | (sp2[1] << 16)
+                        *fp = SCALE * (int32_t)(((uint32_t)sp2[0] << 24) | (sp2[1] << 16)
                             | (sp2[2] << 8));
             }
             else
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *fp = SCALE * ((sp2[2] << 24) | (sp2[1] << 16)
+                        *fp = SCALE * (int32_t)(((uint32_t)sp2[2] << 24) | (sp2[1] << 16)
                             | (sp2[0] << 8));
             }
         }
@@ -513,13 +514,13 @@ static void soundfile_xferin_float(int sfchannels, int nvecs, t_float **vecs,
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *fp = SCALE * ((sp2[0] << 24) | (sp2[1] << 16));
+                        *fp = SCALE * (int32_t)(((uint32_t)sp2[0] << 24) | (sp2[1] << 16));
             }
             else
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *fp = SCALE * ((sp2[1] << 24) | (sp2[0] << 16));
+                        *fp = SCALE * (int32_t)(((uint32_t)sp2[1] << 24) | (sp2[0] << 16));
             }
         }
         else if (bytespersamp == 3)
@@ -528,14 +529,14 @@ static void soundfile_xferin_float(int sfchannels, int nvecs, t_float **vecs,
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *fp = SCALE * ((sp2[0] << 24) | (sp2[1] << 16)
+                        *fp = SCALE * (int32_t)(((uint32_t)sp2[0] << 24) | (sp2[1] << 16)
                             | (sp2[2] << 8));
             }
             else
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *fp = SCALE * ((sp2[2] << 24) | (sp2[1] << 16)
+                        *fp = SCALE * (int32_t)(((uint32_t)sp2[2] << 24) | (sp2[1] << 16)
                             | (sp2[0] << 8));
             }
         }

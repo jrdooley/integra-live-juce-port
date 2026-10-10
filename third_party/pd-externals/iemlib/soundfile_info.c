@@ -61,7 +61,7 @@ static long soundfile_info_str2long(char *cvec)
 
 static void soundfile_info_read(t_soundfile_info *x, t_symbol *filename)
 {
-  char completefilename[400];
+  char completefilename[MAXPDSTRING];
   int i, n, n2, n4, filesize, read_chars, header_size=0, ch, bps, sr;
   FILE *fh;
   t_atom *at;
@@ -71,19 +71,18 @@ static void soundfile_info_read(t_soundfile_info *x, t_symbol *filename)
   
   if(filename->s_name[0] == '/')/*make complete path + filename*/
   {
-    strcpy(completefilename, filename->s_name);
+    snprintf(completefilename, MAXPDSTRING, "%s", filename->s_name);
   }
   else if(((filename->s_name[0] >= 'A')&&(filename->s_name[0] <= 'Z')||
     (filename->s_name[0] >= 'a')&&(filename->s_name[0] <= 'z'))&&
     (filename->s_name[1] == ':')&&(filename->s_name[2] == '/'))
   {
-    strcpy(completefilename, filename->s_name);
+    snprintf(completefilename, MAXPDSTRING, "%s", filename->s_name);
   }
   else
   {
-    strcpy(completefilename, canvas_getdir(x->x_canvas)->s_name);
-    strcat(completefilename, "/");
-    strcat(completefilename, filename->s_name);
+    /* Integra Live port: bounded (a long file name overflowed the 400-byte buffer) */
+    snprintf(completefilename, MAXPDSTRING, "%s/%s", canvas_getdir(x->x_canvas)->s_name, filename->s_name);
   }
   
   fh = fopen(completefilename,"rb");

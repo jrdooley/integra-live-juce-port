@@ -17,6 +17,12 @@ endif()
 
 option(INTEGRA_BUILD_TESTS "Build libIntegra unit tests (GoogleTest)" ON)
 option(INTEGRA_BUILD_APP "Build the Integra Live JUCE application" ON)
+option(INTEGRA_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer (GCC/Clang)" OFF)
+
+if(INTEGRA_SANITIZE AND NOT MSVC)
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(IntegraDependencies)

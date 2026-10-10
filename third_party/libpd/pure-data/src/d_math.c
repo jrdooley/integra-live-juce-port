@@ -7,6 +7,8 @@
 */
 
 #include "m_pd.h"
+#include <string.h>
+#include <stdint.h>
 #include <math.h>
 #define LOGTEN 2.302585092994
 
@@ -99,7 +101,7 @@ static void init_rsqrt(void)
 t_float q8_rsqrt(t_float f0)
 {
     float f = (float)f0;
-    long l = *(long *)(&f);
+    int32_t l; memcpy(&l, &f, 4);   /* Integra Live port: was *(long *), 8 bytes on LP64 */
     if (f < 0) return (0);
     else return (rsqrt_exptab[(l >> 23) & 0xff] *
             rsqrt_mantissatab[(l >> 13) & 0x3ff]);
@@ -108,7 +110,7 @@ t_float q8_rsqrt(t_float f0)
 t_float q8_sqrt(t_float f0)
 {
     float f = (float)f0;
-    long l = *(long *)(&f);
+    int32_t l; memcpy(&l, &f, 4);   /* Integra Live port: was *(long *), 8 bytes on LP64 */
     if (f < 0) return (0);
     else return (f * rsqrt_exptab[(l >> 23) & 0xff] *
             rsqrt_mantissatab[(l >> 13) & 0x3ff]);
@@ -146,7 +148,7 @@ static t_int *sigrsqrt_perform(t_int *w)
     while (n--)
     {   
         t_sample f = *in;
-        long l = *(long *)(in++);
+        int32_t l; memcpy(&l, in++, 4);   /* Integra Live port: was *(long *) */
         if (f < 0) *out++ = 0;
         else
         {
@@ -200,7 +202,7 @@ t_int *sigsqrt_perform(t_int *w)    /* not static; also used in d_fft.c */
     while (n--)
     {   
         t_sample f = *in;
-        long l = *(long *)(in++);
+        int32_t l; memcpy(&l, in++, 4);   /* Integra Live port: was *(long *) */
         if (f < 0) *out++ = 0;
         else
         {

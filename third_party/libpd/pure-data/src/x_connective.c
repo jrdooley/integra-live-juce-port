@@ -1216,38 +1216,58 @@ typedef struct _makefilename
     int x_intconvert;
 } t_makefilename;
 
+/* Integra Live port: the format can come from user text (a "set" message), so it
+   is made safe here. Only the first conversion is kept; every later '%' is escaped
+   to "%%", and a conversion that isn't one of the accepted ones is escaped too.
+   Without this, "%s%d" read a missing argument and crashed (fixed upstream in
+   later Pd versions). */
 static void makefilename_scanformat(t_makefilename *x)
 {
-    int num=0, infmt=0;
-    char *str,*chr;
+    char safe[MAXPDSTRING];
+    const char *str;
+    int out = 0, found = 0;
     if (!x->x_format) return;
     x->x_accept = A_NULL;
-    for (str=x->x_format->s_name; *str; str++) {
-        if (!infmt && *str=='%') {
-            infmt=1;
+    x->x_intconvert = 0;
+    for (str = x->x_format->s_name; *str && out < MAXPDSTRING - 3; str++)
+    {
+        if (*str != '%')
+        {
+            safe[out++] = *str;
             continue;
         }
-        if (infmt) {
-            if (strchr("-.#0123456789",*str)!=0)
-                continue;
-            if (*str=='s') {
-                x->x_accept = A_SYMBOL;
-                x->x_intconvert = 0;
-                break;
-            }
-            if (strchr("fgGeE",*str)!=0) {
-                x->x_accept = A_FLOAT;
-                x->x_intconvert = 0;
-                break;
-            }
-            if (strchr("xXdiouc",*str)!=0) {
-                x->x_accept = A_FLOAT;
-                x->x_intconvert = 1;
-                break;
-            }
-            infmt=0;
+        if (str[1] == '%')
+        {
+            safe[out++] = '%', safe[out++] = '%';
+            str++;
+            continue;
         }
+        if (!found)
+        {
+            const char *spec = str + 1;
+            while (*spec && strchr("-.#0123456789", *spec))
+                spec++;
+            if (*spec && strchr("sfgGeExXdiouc", *spec) && spec - str < 16
+                && out + (spec - str) + 1 < MAXPDSTRING - 1)
+            {
+                if (*spec == 's')
+                    x->x_accept = A_SYMBOL;
+                else
+                {
+                    x->x_accept = A_FLOAT;
+                    x->x_intconvert = (strchr("xXdiouc", *spec) != 0);
+                }
+                while (str <= spec)
+                    safe[out++] = *str++;
+                str--;
+                found = 1;
+                continue;
+            }
+        }
+        safe[out++] = '%', safe[out++] = '%';
     }
+    safe[out] = 0;
+    x->x_format = gensym(safe);
 }
 
 static void *makefilename_new(t_symbol *s)
@@ -1268,14 +1288,14 @@ static void makefilename_float(t_makefilename *x, t_floatarg f)
     char buf[MAXPDSTRING];
     if (x->x_accept == A_FLOAT) {
         if (x->x_intconvert)
-            sprintf(buf, x->x_format->s_name, (int)f);
-        else sprintf(buf, x->x_format->s_name, f);
+            snprintf(buf, MAXPDSTRING, x->x_format->s_name, (int)f);
+        else snprintf(buf, MAXPDSTRING, x->x_format->s_name, f);
     }
     else
     {
         char buf2[MAXPDSTRING];
-        sprintf(buf2, "%g", f);
-        sprintf(buf, x->x_format->s_name, buf2);
+        snprintf(buf2, MAXPDSTRING, "%g", f);
+        snprintf(buf, MAXPDSTRING, x->x_format->s_name, buf2);
     }
     if (buf[0]!=0)
     outlet_symbol(x->x_obj.ob_outlet, gensym(buf));
@@ -1285,9 +1305,11 @@ static void makefilename_symbol(t_makefilename *x, t_symbol *s)
 {
     char buf[MAXPDSTRING];
     if (x->x_accept == A_SYMBOL)
-    sprintf(buf, x->x_format->s_name, s->s_name);
+    snprintf(buf, MAXPDSTRING, x->x_format->s_name, s->s_name);
+    else if (x->x_accept == A_FLOAT && !x->x_intconvert)
+        snprintf(buf, MAXPDSTRING, x->x_format->s_name, 0.0);
     else
-        sprintf(buf, x->x_format->s_name, 0);
+        snprintf(buf, MAXPDSTRING, x->x_format->s_name, 0);
     if (buf[0]!=0)
     outlet_symbol(x->x_obj.ob_outlet, gensym(buf));
 }

@@ -27,11 +27,14 @@ namespace integra
         // the MIDI lists follow libIntegra's device lists (Flex: SetAvailableMidiDevices)
         const auto settings = context.model.get().midiSettingsPath;
         if (settings.isNotEmpty())
+        {
+            juce::Component::SafePointer<PreferencesPanel> safePanel (this);    // MSVC: no `this` in a nested init-capture
             for (auto endpoint : { "availableInputDevices", "availableOutputDevices", "activeInputDevices", "activeOutputDevices" })
-                context.watcher.watch (settings + "." + endpoint, this, [this] (const juce::String&, CCommandSource)
+                context.watcher.watch (settings + "." + endpoint, this, [safePanel] (const juce::String&, CCommandSource)
                 {
-                    juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<PreferencesPanel> (this)] { if (safe) safe->refreshMidi(); });
+                    juce::MessageManager::callAsync ([safePanel] { if (safePanel != nullptr) safePanel->refreshMidi(); });
                 });
+        }
 
         refreshMidi();
         setSize (620, 660);

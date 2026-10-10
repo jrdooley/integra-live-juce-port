@@ -84,6 +84,10 @@ add_custom_command(TARGET IntegraLive POST_BUILD
 if(INTEGRA_BUILD_TESTS)
     add_test(NAME IntegraLive_self_test COMMAND IntegraLive --self-test)
     set_tests_properties(IntegraLive_self_test PROPERTIES TIMEOUT 300)
+    # robustness: every demo block, every module at extreme values, random edits with
+    # undo/redo, 20 s of playback (run it for longer, and under INTEGRA_SANITIZE, by hand)
+    add_test(NAME IntegraLive_stress_test COMMAND IntegraLive --quiet --stress-test 20)
+    set_tests_properties(IntegraLive_stress_test PROPERTIES TIMEOUT 900)
 endif()
 
 # GUI interaction test: drives the real components with synthesized events.
