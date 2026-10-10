@@ -20,6 +20,7 @@ namespace integra
         struct Entry
         {
             GUID guid {};
+            GUID originGuid {};             // shared by every version of a module
             const IInterfaceDefinition* definition = nullptr;
             juce::String name, label, description, author;
             juce::StringArray tags;
@@ -27,6 +28,9 @@ namespace integra
             bool isCore = false;            // tagged "core": Container, Player, Scene, Connection...
             bool hasImplementation = false; // has a Pd implementation
             int numAudioInputs = 0, numAudioOutputs = 0;
+            juce::Time created, modified;
+
+            juce::String getSourceLabel() const;    // "Shipped", "3rd Party", "Embedded", "In Development"
         };
 
         void rebuild (const IServer& server);
@@ -44,6 +48,13 @@ namespace integra
 
         /** All distinct tags of user modules, sorted. */
         juce::StringArray getAllTags() const;
+
+        /** Every loaded version of a module, best first: shipped, then 3rd party, then
+            embedded, newest first within each (Flex: IntegraModel.originListCompareFunction). */
+        std::vector<const Entry*> getVersions (const GUID& originGuid) const;
+
+        /** The version a module upgrades to ("Latest Official"): the first of getVersions. */
+        const Entry* getBestVersion (const Entry&) const;
 
     private:
         std::vector<Entry> entries;

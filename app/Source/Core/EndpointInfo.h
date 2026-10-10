@@ -24,6 +24,7 @@ namespace integra
         bool canBeSource = false, canBeTarget = false;
         bool isInputFile = false;
         bool isAudioStream = false;
+        bool isAudioInput = false;          // audio stream into the module
 
         bool isNumeric() const noexcept     { return kind == Kind::integer || kind == Kind::real; }
 

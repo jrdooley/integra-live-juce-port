@@ -1,5 +1,7 @@
 #include "GuiTest.h"
 #include "Widgets/IntegraWidgets.h"
+#include "ModuleManager.h"
+#include "Core/SelfTest.h"
 
 namespace integra
 {
@@ -466,6 +468,119 @@ namespace integra
             lanes.toggleCurveMode();
             pump();
             juce::ignoreUnused (pointB);
+        }
+
+        // --- Module Manager -------------------------------------------------------------
+        {
+            auto closeDialogs = [&]
+            {
+                juce::StringArray titles;
+                for (int i = juce::TopLevelWindow::getNumTopLevelWindows(); --i >= 0;)
+                    if (auto* d = dynamic_cast<juce::DialogWindow*> (juce::TopLevelWindow::getTopLevelWindow (i)))
+                    {
+                        titles.add (d->getName());
+                        d->exitModalState (0);
+                    }
+                pump();
+                return titles;
+            };
+            auto findDialog = [] (const juce::String& title) -> juce::DialogWindow*
+            {
+                for (int i = 0; i < juce::TopLevelWindow::getNumTopLevelWindows(); ++i)
+                    if (auto* d = dynamic_cast<juce::DialogWindow*> (juce::TopLevelWindow::getTopLevelWindow (i)))
+                        if (d->getName() == title)
+                            return d;
+                return nullptr;
+            };
+            auto clickButton = [&] (juce::Component& root, const juce::String& text)
+            {
+                std::vector<juce::Button*> found;
+                findAll (root, found);
+                for (auto* b : found)
+                    if (b->getButtonText() == text && b->isEnabled())
+                    {
+                        b->triggerClick();
+                        pump (300);
+                        return true;
+                    }
+                return false;
+            };
+            auto guidOf = [&] (const juce::String& path)
+            {
+                auto* b = p.findBlock (parentPath (path));
+                auto* m = b != nullptr ? b->findModule (lastElement (path)) : nullptr;
+                return m != nullptr && m->entry != nullptr ? m->entry->guid : GUID {};
+            };
+
+            auto& catalogue = context.session.getCatalogue();
+            const GUID shippedGuid = catalogue.findByName ("TapDelay")->guid;
+            auto altFile = makeAlternativeModuleVersion (context.session.getLocations().systemModules.getChildFile ("TapDelay.module"), "frequency",
+                                                         juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("TapDelayGuiTest.module"));
+            t.check (context.controller.installModule (altFile).wasOk(), "install a 2nd version of TapDelay for the Module Manager");
+            altFile.deleteFile();
+            GUID altGuid = shippedGuid;
+            for (auto* v : catalogue.getVersions (catalogue.findByGuid (shippedGuid)->originGuid))
+                if (! guidsEqual (v->guid, shippedGuid))
+                    altGuid = v->guid;
+
+            ModuleManager manager (context, [&] { main.getModuleView().getLibrary().refresh(); });
+            manager.setSize (900, 560);
+            manager.showTab (ModuleManager::Tab::versions);
+            pump();
+
+            std::vector<juce::ListBox*> lists;
+            findAll (manager, lists);
+            const bool listsFound = lists.size() == 2 && lists[0]->getModel()->getNumRows() == 1;
+            t.check (listsFound, "Manage Versions lists TapDelay as a module with alternative versions");
+            if (listsFound)
+            {
+                lists[0]->selectRow (0);
+                pump();
+                t.check (lists[1]->getModel()->getNumRows() == 1, "...and its 3rd party version as the alternative");
+                lists[1]->selectRow (0);
+                pump();
+                if (auto dir = juce::SystemStats::getEnvironmentVariable ("INTEGRA_GUI_TEST_SHOTS", {}); dir.isNotEmpty())
+                    juce::PNGImageFormat().writeImageToStream (manager.createComponentSnapshot (manager.getLocalBounds()),
+                                                               *juce::File (dir).getChildFile ("module-manager-versions.png").createOutputStream());
+                t.check (clickButton (manager, "Switch Versions") && guidsEqual (guidOf (delayPath), altGuid),
+                         "Switch Versions switches the project's TapDelay");
+                t.check (findDialog ("Module Switch Report") != nullptr, "a switch report is shown");
+                closeDialogs();
+            }
+
+            // the upgrade prompt (shown after opening a project) upgrades back to the shipped version
+            ModuleManager::setAlwaysUpgrade (context, false);
+            ModuleManager::checkForUpgrades (context, {});
+            pump();
+            auto* prompt = findDialog ("Upgrade Modules");
+            t.check (prompt != nullptr, "a project with an older module version offers to upgrade it");
+            if (prompt != nullptr)
+            {
+                clickButton (*prompt, "Upgrade");
+                t.check (guidsEqual (guidOf (delayPath), shippedGuid), "Upgrade switches it to the latest official version");
+                t.check (findDialog ("Module Upgrade Report") != nullptr, "an upgrade report is shown");
+            }
+            closeDialogs();
+
+            // remove the backup the upgrade saved
+            for (auto dir : { juce::File::userDesktopDirectory, juce::File::userDocumentsDirectory, juce::File::tempDirectory })
+                for (auto& f : juce::File::getSpecialLocation (dir).findChildFiles (juce::File::findFiles, false, "* (backup *).integra"))
+                    f.deleteFile();
+
+            manager.showTab (ModuleManager::Tab::install);
+            pump();
+            lists.clear();
+            findAll (manager, lists);
+            if (lists.size() == 2)
+                lists[0]->selectRow (0);
+            pump();
+            if (auto dir = juce::SystemStats::getEnvironmentVariable ("INTEGRA_GUI_TEST_SHOTS", {}); dir.isNotEmpty())
+                juce::PNGImageFormat().writeImageToStream (manager.createComponentSnapshot (manager.getLocalBounds()),
+                                                           *juce::File (dir).getChildFile ("module-manager-install.png").createOutputStream());
+            t.check (lists.size() == 2 && lists[0]->getModel()->getNumRows() >= 1, "Install / Uninstall lists the installed 3rd party module");
+            t.check (context.controller.uninstallModule (altGuid, true).wasOk() && catalogue.getVersions (catalogue.findByGuid (shippedGuid)->originGuid).size() == 1,
+                     "uninstall it again");
+            pump();
         }
 
         main.showView ("arrange");

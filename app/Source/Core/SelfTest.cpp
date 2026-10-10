@@ -54,6 +54,52 @@ namespace integra
         }
     }
 
+    juce::File makeAlternativeModuleVersion (const juce::File& moduleFile, const juce::String& endpointToRemove, const juce::File& destination)
+    {
+        auto work = juce::File::createTempFile ("module_version");
+        work.createDirectory();
+        juce::ZipFile (moduleFile).uncompressTo (work);
+
+        auto iidFile = work.getChildFile ("integra_module_data/interface_definition.iid");
+        auto xml = juce::parseXML (iidFile);
+        if (xml == nullptr)
+            return {};
+
+        // a new version of the same module: new module GUID, same origin GUID, newer date
+        xml->setAttribute ("moduleGuid", juce::Uuid().toDashedString());
+        if (auto* info = xml->getChildByName ("InterfaceInfo"))
+            if (auto* modified = info->getChildByName ("ModifiedDate"))
+                modified->deleteAllTextElements(), modified->addTextElement ("2030-01-01 00:00:00.000000");
+
+        // drop an endpoint and the widgets that show it
+        std::function<void (juce::XmlElement&)> prune = [&] (juce::XmlElement& parent)
+        {
+            for (auto* child = parent.getFirstChildElement(); child != nullptr;)
+            {
+                auto* next = child->getNextElement();
+                const bool isEndpoint = child->hasTagName ("Endpoint") && child->getChildElementAllSubText ("Name", {}) == endpointToRemove;
+                const bool isWidget = child->hasTagName ("Widget") && child->getChildElementAllSubText ("Label", {}) == endpointToRemove;
+                if (isEndpoint || isWidget)
+                    parent.removeChildElement (child, true);
+                else
+                    prune (*child);
+                child = next;
+            }
+        };
+        prune (*xml);
+        xml->writeTo (iidFile);
+
+        juce::ZipFile::Builder builder;
+        for (auto& f : work.findChildFiles (juce::File::findFiles, true))
+            builder.addFile (f, 9, f.getRelativePathFrom (work).replaceCharacter ('\\', '/'));
+        destination.deleteFile();
+        juce::FileOutputStream out (destination);
+        builder.writeToStream (out, nullptr);
+        out.flush();
+        work.deleteRecursively();
+        return destination;
+    }
+
     int runSelfTest (IntegraSession& session, ProjectModel& model, ProjectController& controller, AudioHost& host, juce::String& log)
     {
         Checker t { log };
@@ -250,6 +296,77 @@ namespace integra
                     && p.scenes.size() == 1 && p.scalers.size() == 1, "reopened project has same structure");
         t.check (blk (block).userData.modulePositions.count ("Echo") == 1, "reopened userData positions");
         file.deleteFile();
+
+        // --- module versions (Module Manager: SwitchModuleVersion, UpgradeModules) ---
+        {
+            auto& catalogue = session.getCatalogue();
+            const auto* shipped = catalogue.findByName ("TapDelay");
+            const GUID shippedGuid = shipped->guid, origin = shipped->originGuid;
+            auto altFile = makeAlternativeModuleVersion (session.getLocations().systemModules.getChildFile ("TapDelay.module"), "frequency",
+                                                         juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("TapDelayAlternative.module"));
+            auto installed = controller.installModule (altFile);
+            t.check (installed.wasOk(), "install a 3rd party version of TapDelay " + installed.getErrorMessage());
+            altFile.deleteFile();
+
+            auto versions = catalogue.getVersions (origin);
+            t.check (versions.size() == 2 && guidsEqual (versions[0]->guid, shippedGuid)
+                        && versions[1]->source == IInterfaceDefinition::MODULE_3RD_PARTY,
+                     "both versions are listed, the shipped one first");
+            const GUID altGuid = versions.size() == 2 ? versions[1]->guid : shippedGuid;
+
+            const auto echo = block + ".Echo";
+            auto guidOf = [&] (const juce::String& path)
+            {
+                auto* b = p.findBlock (parentPath (path));
+                auto* m = b != nullptr ? b->findModule (lastElement (path)) : nullptr;
+                return m != nullptr && m->entry != nullptr ? m->entry->guid : GUID {};
+            };
+            auto connectionsTo = [&] (const juce::String& endpoint)
+            {
+                int n = 0;
+                for (auto* c : std::initializer_list<const model::Container*> { &p, &blk (block) })
+                    for (auto& conn : c->connections)
+                        n += conn.targetPath == endpoint ? 1 : 0;
+                return n;
+            };
+
+            controller.setValue (echo + ".feedback", 0.4);
+            controller.setValue (echo + ".frequency", 500.0);
+            controller.addRouting (p.path, block + ".StereoAudioOut1.inLevel", echo + ".frequency");
+            model.rebuild();
+            const int audioIn = connectionsTo (echo + ".in1");
+            t.check (audioIn == 1 && p.driversOf (echo + ".frequency").size() == 1, "TapDelay has an audio input and a routing to frequency");
+
+            t.check (controller.switchModuleVersion (echo, altGuid), "switch TapDelay to the 3rd party version");
+            model.rebuild();
+            t.check (guidsEqual (guidOf (echo), altGuid), "the module now uses the 3rd party version");
+            t.check (std::abs ((double) session.getValue (echo + ".feedback") - 0.4) < 1.0e-6, "values carry over to the new version");
+            t.check (connectionsTo (echo + ".in1") == 1 && p.driversOf (echo + ".mix").size() == 1, "still-valid connections and routings are kept");
+            t.check (p.driversOf (echo + ".frequency").empty() && ! session.nodeExists (echo + ".frequency"),
+                     "the routing to the removed endpoint is removed");
+            t.check (controller.hasUpgradableModules(), "the project now has an upgradable module");
+
+            controller.getUndoManager().undo();
+            model.rebuild();
+            t.check (guidsEqual (guidOf (echo), shippedGuid) && p.driversOf (echo + ".frequency").size() == 1
+                        && std::abs ((double) session.getValue (echo + ".frequency") - 500.0) < 1.0e-3,
+                     "undo restores the shipped version, its value and the routing");
+            controller.getUndoManager().redo();
+            model.rebuild();
+            t.check (guidsEqual (guidOf (echo), altGuid), "redo switches again");
+
+            auto upgrade = controller.upgradeAll();
+            model.rebuild();
+            t.check (upgrade.upgradedModules.size() == 1 && guidsEqual (guidOf (echo), shippedGuid) && ! controller.hasUpgradableModules(),
+                     "Upgrade All switches it back to the shipped version");
+            t.check (upgrade.backup.existsAsFile(), "a backup is saved before upgrading (" + upgrade.backup.getFileName() + ")");
+            upgrade.backup.deleteFile();
+            t.check (controller.describeVersionChange (altGuid, shippedGuid).contains ("Added: frequency"),
+                     "the version report lists the endpoint difference");
+
+            auto removed = controller.uninstallModule (altGuid, true);
+            t.check (removed.wasOk() && catalogue.getVersions (origin).size() == 1, "uninstall the 3rd party version " + removed.getErrorMessage());
+        }
 
         // --- open the shipped demo blocks into a project (Flex-saved files) --------
         controller.newProject();

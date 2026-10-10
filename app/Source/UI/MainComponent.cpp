@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "ModuleManager.h"
 #include "PreferencesPanel.h"
 #include "IntegraLookAndFeel.h"
 
@@ -242,6 +243,8 @@ namespace integra
             showView (context.model.get().userData.viewMode == "live" ? "live" : "arrange");
             properties.selectionChanged();
             updateTitle();
+            if (r.wasOk())
+                projectOpened();
         });
     }
 
@@ -256,7 +259,7 @@ namespace integra
         ids.addArray ({ cmdNew, cmdOpen, cmdSave, cmdSaveAs, cmdImportBlock, cmdExportBlock,
                         cmdUndo, cmdRedo, cmdDelete, cmdAddTrack, cmdAddScene,
                         cmdPlayPause, cmdHome, cmdNextScene, cmdPrevScene,
-                        cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule });
+                        cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule, cmdModuleManager });
     }
 
     void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo& info)
@@ -297,6 +300,7 @@ namespace integra
             case cmdAbout:        info.setInfo ("About Integra Live", "", "Help", 0); break;
             case cmdDemo:         info.setInfo ("Open Demo Project", "", "Help", 0); break;
             case cmdInstallModule: info.setInfo ("Install Third-Party Module...", "", "File", 0); break;
+            case cmdModuleManager: info.setInfo ("Module Manager...", "", "View", 0); info.addDefaultKeypress ('4', cmd); break;
             default: break;
         }
     }
@@ -328,6 +332,8 @@ namespace integra
                         showView (context.model.get().userData.viewMode == "live" ? "live" : "arrange");
                         properties.selectionChanged();
                         updateTitle();
+                        if (r.wasOk())
+                            projectOpened();
                     });
                 });
                 return true;
@@ -410,24 +416,21 @@ namespace integra
                     if (fc.getResult() == juce::File())
                         return;
 
-                    CModuleInstallResult result;
-                    CError error;
+                    auto r = context.controller.installModule (fc.getResult());
+                    modulesChanged();
+                    if (r.failed())
                     {
-                        auto server = context.session.lock();
-                        error = server->get_module_manager().install_module (toStd (fc.getResult().getFullPathName()), result);
-                    }
-
-                    if (error != CError::SUCCESS)
-                    {
-                        showError ("Install module", juce::Result::fail (toString (error.get_text())));
+                        showError ("Install module", r);
                         return;
                     }
-
-                    context.session.refreshCatalogue();
-                    moduleView.getLibrary().refresh();
                     juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Install module",
                                                             fc.getResult().getFileNameWithoutExtension() + " is installed and available in the module library.");
+                    ModuleManager::checkForUpgrades (context, [this] { modulesChanged(); });
                 });
+                return true;
+
+            case cmdModuleManager:
+                ModuleManager::show (context, [this] { modulesChanged(); });
                 return true;
 
             case cmdDemo:
@@ -502,6 +505,7 @@ namespace integra
                 menu.addCommandItem (&commands, cmdViewLive);
                 menu.addCommandItem (&commands, cmdViewModule);
                 menu.addSeparator();
+                menu.addCommandItem (&commands, cmdModuleManager);
                 menu.addCommandItem (&commands, cmdPreferences);
                 break;
             case 4:
@@ -513,5 +517,18 @@ namespace integra
                 break;
         }
         return menu;
+    }
+
+    void MainComponent::modulesChanged()
+    {
+        moduleView.getLibrary().refresh();
+        properties.selectionChanged();
+        repaint();
+    }
+
+    void MainComponent::projectOpened()
+    {
+        // IntegraController: PollForUpgradableModules after loading a project
+        ModuleManager::checkForUpgrades (context, [this] { modulesChanged(); });
     }
 }

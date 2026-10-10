@@ -15,4 +15,8 @@ namespace integra
         Returns the number of failed checks.
     */
     int runSelfTest (IntegraSession&, ProjectModel&, ProjectController&, AudioHost&, juce::String& log);
+
+    /** For tests: writes a new version of a module (new module GUID, same origin GUID,
+        newer date) without one of its endpoints and the widgets showing it. */
+    juce::File makeAlternativeModuleVersion (const juce::File& moduleFile, const juce::String& endpointToRemove, const juce::File& destination);
 }

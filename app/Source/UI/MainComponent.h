@@ -59,7 +59,7 @@ namespace integra
             cmdNew = 1, cmdOpen, cmdSave, cmdSaveAs, cmdImportBlock, cmdExportBlock,
             cmdUndo, cmdRedo, cmdDelete, cmdAddTrack, cmdAddScene,
             cmdPlayPause, cmdHome, cmdNextScene, cmdPrevScene,
-            cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule
+            cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule, cmdModuleManager
         };
 
     private:
@@ -70,6 +70,8 @@ namespace integra
         void saveAs (std::function<void (bool saved)> done = {});
         void save (std::function<void (bool saved)> done = {});
         void showError (const juce::String& title, const juce::Result&);
+        void modulesChanged();
+        void projectOpened();
 
         AppContext& context;
         juce::ApplicationCommandManager commands;

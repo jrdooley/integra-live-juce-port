@@ -30,6 +30,7 @@ Flex paths are relative to `GUI/src/components/`.
 | Module library tags | `ModuleLibrary.as` | The tag list is rebuilt when modules are installed. *(No automated test.)* |
 | Pin drag | — | The connection being dragged no longer points into the graph's module list, which is rebuilt on model changes. *(No automated test.)* |
 | Envelope curvature | `EnvelopeView.as`, `BlockView.as` | Curve mode button and menu item (stored per block, as Flex did), drag a segment to bend it, double-click to straighten it; curves drawn as libIntegra interpolates them. |
+| Module Manager | `ModuleManager/`, `SwitchModuleVersion.as`, `UpgradeModules.as`, `UninstallModules.as` | Install / Uninstall and Manage Versions tabs, Switch Versions, Upgrade All with a backup, Always Upgrade, the Upgrade Modules dialog after loading a project or installing modules, and installation / switch / upgrade reports. Version reports list endpoint differences more briefly than Flex's. |
 | MIDI indicator | `MidiInputIndicator.as` | Lights for every incoming message, including repeats of the same message. *(No automated test.)* |
 
 ## Arrange view and timeline
@@ -58,8 +59,6 @@ Flex paths are relative to `GUI/src/components/`.
 ## Module view
 
 **Missing / partial**
-* **Module Manager** (uninstall, install embedded modules, switch/upgrade versions,
-  Upgrade All, Always Upgrade) and the **upgrade dialog on load**.
 * Library: grouping of versions with "Show alternative versions", source labels
   (Shipped / 3rd Party / Embedded / In Development), embedded modules, multi-tag
   filtering, clear buttons, Enter to add, a ghost preview while dragging, **dropping a
@@ -93,12 +92,12 @@ Flex paths are relative to `GUI/src/components/`.
   (Ctrl+3, lock with F2), using the help texts in `assets/viewInfo/`; Help menu links and
   module documentation.
 * View menu: Lighting (Ctrl+L), High contrast (Ctrl+H), text size (Ctrl+= / Ctrl+- /
-  Ctrl+0), Module Manager (Ctrl+4).
+  Ctrl+0).
 * Shortcuts that differ: plain ←/→ for scenes (Ctrl+←/→ in the port), Enter for
   return-to-start (Home in the port), Ctrl+3 is Module view instead of Info view.
 * Files: Save As doesn't rename the project node; the Open dialog doesn't start in the
   current folder; `.ixd` isn't accepted; opening `.module`/`.bundle` files doesn't install
-  them; Install accepts `.module` only and shows no report; no "Loading…" indicator.
+  them; Install accepts `.module` only (no `.bundle`); no "Loading…" indicator.
 * Preferences: Reset to Defaults; MIDI device lists don't refresh; panel sizes, last
   folders and font size aren't persisted.
 * About box (licence/acknowledgements), update check. The crash reporter is mostly

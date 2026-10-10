@@ -643,6 +643,388 @@ namespace integra
         });
     }
 
+    //==============================================================================
+    namespace
+    {
+        std::map<juce::String, EndpointInfo> endpointInfos (const IInterfaceDefinition* definition)
+        {
+            std::map<juce::String, EndpointInfo> result;
+            if (definition != nullptr)
+                for (auto* ep : definition->get_endpoint_definitions())
+                    result[toString (ep->get_name())] = EndpointInfo::fromDefinition (*ep);
+            return result;
+        }
+
+        bool isStateful (const EndpointInfo& e)
+        {
+            return e.kind == EndpointInfo::Kind::integer || e.kind == EndpointInfo::Kind::real || e.kind == EndpointInfo::Kind::text;
+        }
+
+        /** SwitchObjectVersion.isConnectionStillValid */
+        bool connectionStillValid (const std::map<juce::String, EndpointInfo>& oldInfos, const std::map<juce::String, EndpointInfo>& newInfos,
+                                   const juce::String& endpointName, bool isTarget)
+        {
+            auto oldIt = oldInfos.find (endpointName);
+            auto newIt = newInfos.find (endpointName);
+            if (oldIt == oldInfos.end() || newIt == newInfos.end())
+                return false;
+            auto& o = oldIt->second;
+            auto& n = newIt->second;
+            if (o.isAudioStream != n.isAudioStream)
+                return false;
+            if (n.isAudioStream)
+                return isTarget ? n.isAudioInput : ! n.isAudioInput;
+            if (n.kind == EndpointInfo::Kind::text)
+                return false;
+            return isTarget ? n.canBeTarget : n.canBeSource;
+        }
+
+        int levenshtein (const juce::String& a, const juce::String& b)
+        {
+            std::vector<int> row ((size_t) b.length() + 1);
+            for (int j = 0; j <= b.length(); ++j)
+                row[(size_t) j] = j;
+            for (int i = 1; i <= a.length(); ++i)
+            {
+                int previous = row[0];
+                row[0] = i;
+                for (int j = 1; j <= b.length(); ++j)
+                {
+                    const int saved = row[(size_t) j];
+                    row[(size_t) j] = juce::jmin (row[(size_t) j] + 1, row[(size_t) j - 1] + 1, previous + (a[i - 1] == b[j - 1] ? 0 : 1));
+                    previous = saved;
+                }
+            }
+            return row[(size_t) b.length()];
+        }
+
+        /** SwitchModuleVersion.enforceConstraint: fit an old value to the new endpoint. */
+        juce::var fitToEndpoint (const juce::var& value, const EndpointInfo& e)
+        {
+            if (! e.allowedStates.isEmpty())
+            {
+                juce::String best;
+                double bestDistance = 0.0;
+                for (auto& allowed : e.allowedStates)
+                {
+                    const double distance = e.kind == EndpointInfo::Kind::text ? (double) levenshtein (value.toString(), allowed)
+                                                                                : std::abs ((double) value - allowed.getDoubleValue());
+                    if (best.isEmpty() || distance < bestDistance)
+                        best = allowed, bestDistance = distance;
+                }
+                if (e.kind == EndpointInfo::Kind::integer)  return best.getIntValue();
+                if (e.kind == EndpointInfo::Kind::real)     return best.getDoubleValue();
+                return best;
+            }
+
+            switch (e.kind)
+            {
+                case EndpointInfo::Kind::integer:
+                {
+                    int v = juce::roundToInt ((double) value);
+                    return e.hasRange ? juce::jlimit ((int) e.minimum, (int) e.maximum, v) : v;
+                }
+                case EndpointInfo::Kind::real:
+                {
+                    double v = (double) value;
+                    return e.hasRange ? juce::jlimit (e.minimum, e.maximum, v) : v;
+                }
+                case EndpointInfo::Kind::text:
+                {
+                    auto s = value.toString();
+                    if (e.hasRange)
+                    {
+                        while (s.length() < (int) e.minimum)
+                            s << "*";
+                        if (s.length() > (int) e.maximum)
+                            s = s.substring (0, (int) e.maximum);
+                    }
+                    return s;
+                }
+                default:
+                    return value;
+            }
+        }
+    }
+
+    juce::StringArray ProjectController::findInstances (const GUID& moduleGuid) const
+    {
+        juce::StringArray paths;
+        for (auto& t : model.get().tracks)
+            for (auto& b : t.blocks)
+                for (auto& m : b.modules)
+                    if (m.entry != nullptr && guidsEqual (m.entry->guid, moduleGuid))
+                        paths.add (m.path);
+        return paths;
+    }
+
+    bool ProjectController::hasUpgradableModules() const
+    {
+        auto& catalogue = session.getCatalogue();
+        for (auto& t : model.get().tracks)
+            for (auto& b : t.blocks)
+                for (auto& m : b.modules)
+                    if (m.entry != nullptr && catalogue.getBestVersion (*m.entry) != m.entry)
+                        return true;
+        return false;
+    }
+
+    bool ProjectController::switchModuleVersion (juce::String modulePath, const GUID& toGuid)
+    {
+        auto& catalogue = session.getCatalogue();
+        auto* block = model.get().findBlock (parentPath (modulePath));
+        auto* module = block != nullptr ? block->findModule (lastElement (modulePath)) : nullptr;
+        auto* target = catalogue.findByGuid (toGuid);
+        if (module == nullptr || module->entry == nullptr || target == nullptr
+             || ! guidsEqual (module->entry->originGuid, target->originGuid) || guidsEqual (module->entry->guid, toGuid))
+            return false;   // SwitchObjectVersion.initialize
+
+        const auto oldInfos = endpointInfos (module->entry->definition);
+        const auto newInfos = endpointInfos (target->definition);
+        const auto prefix = modulePath + ".";
+
+        // SwitchObjectVersion.removeObsoleteConnections
+        juce::StringArray obsolete;
+        auto check = [&] (const model::Container& c)
+        {
+            for (auto& s : c.scalers)
+            {
+                if ((s.sourcePath.startsWith (prefix) && ! connectionStillValid (oldInfos, newInfos, lastElement (s.sourcePath), false))
+                     || (s.targetPath.startsWith (prefix) && ! connectionStillValid (oldInfos, newInfos, lastElement (s.targetPath), true)))
+                    obsolete.addIfNotAlreadyThere (s.path);
+            }
+            for (auto& conn : c.connections)
+            {
+                if ((conn.sourcePath.startsWith (prefix) && ! connectionStillValid (oldInfos, newInfos, lastElement (conn.sourcePath), false))
+                     || (conn.targetPath.startsWith (prefix) && ! connectionStillValid (oldInfos, newInfos, lastElement (conn.targetPath), true)))
+                    obsolete.addIfNotAlreadyThere (conn.path);
+            }
+        };
+        auto& p = model.get();
+        check (p);
+        for (auto& t : p.tracks)
+        {
+            check (t);
+            for (auto& b : t.blocks)
+            {
+                check (b);
+                // an envelope whose target goes away goes with it
+                for (auto& e : b.envelopes)
+                    if (e.targetPath.startsWith (prefix) && ! connectionStillValid (oldInfos, newInfos, lastElement (e.targetPath), true))
+                        obsolete.addIfNotAlreadyThere (e.path);
+            }
+        }
+
+        // SwitchModuleVersion.generateNewAttributeValues
+        std::vector<std::pair<juce::String, juce::var>> values;
+        for (auto& [name, info] : newInfos)
+        {
+            if (! isStateful (info))
+                continue;
+            auto old = oldInfos.find (name);
+            auto value = old != oldInfos.end() && isStateful (old->second) ? fitToEndpoint (session.getValue (prefix + name), info)
+                                                                           : info.defaultValue;
+            // a data directory goes first: modules may not cope with it being set after file names
+            if (name == "dataDirectory")
+                values.insert (values.begin(), { name, value });
+            else
+                values.push_back ({ name, value });
+        }
+
+        // live view controls whose widget is gone (correctLiveViewControls)
+        juce::StringArray newWidgets;
+        if (target->definition != nullptr)
+            for (auto* w : target->definition->get_widget_definitions())
+                newWidgets.add (toString (w->get_label()));
+
+        const auto blockPath = block->path, moduleName = module->name;
+        const GUID newGuid = toGuid;
+
+        transaction ("Switch Module Version", [&]
+        {
+            if (! obsolete.isEmpty())
+            {
+                removeInTransaction (obsolete);
+                model.rebuild();
+            }
+
+            perform (new DeleteNodeAction (session, modulePath));
+            perform (new CreateNodeAction (session, newGuid, moduleName, blockPath));
+            for (auto& [name, value] : values)
+                setValueInTransaction (prefix + name, value);
+
+            updateBlockUserData (blockPath, [&] (BlockUserData& d)
+            {
+                auto& controls = d.liveViewControls;
+                controls.erase (std::remove_if (controls.begin(), controls.end(), [&] (const BlockUserData::LiveViewControl& c)
+                {
+                    return c.moduleName == moduleName && ! newWidgets.contains (c.widgetLabel);
+                }), controls.end());
+
+                // correctModulePosition: the height follows the new version's pins
+                auto it = d.modulePositions.find (moduleName);
+                if (it != d.modulePositions.end())
+                    it->second.setHeight (moduleHeight (target));
+            });
+            model.rebuild();
+        });
+        return true;
+    }
+
+    juce::StringArray ProjectController::switchAllVersions (const GUID& fromGuid, const GUID& toGuid)
+    {
+        juce::StringArray switched;
+        transaction ("Switch Module Versions", [&]
+        {
+            for (auto& path : findInstances (fromGuid))
+                if (switchModuleVersion (path, toGuid))
+                    switched.add (path);
+        });
+        return switched;
+    }
+
+    ProjectController::UpgradeResult ProjectController::upgradeAll()
+    {
+        UpgradeResult result;
+        if (! hasUpgradableModules())
+            return result;
+
+        // UpgradeModules.getBackupName: "<name> (backup <n>).integra" next to the project, or on the desktop
+        auto directory = projectFile.existsAsFile() ? projectFile.getParentDirectory() : juce::File();
+        for (auto fallback : { juce::File::userDesktopDirectory, juce::File::userDocumentsDirectory, juce::File::tempDirectory })
+            if (! directory.isDirectory())
+                directory = juce::File::getSpecialLocation (fallback);
+        const auto name = projectFile.existsAsFile() ? projectFile.getFileNameWithoutExtension() : juce::String (projectDefaultName);
+        for (int n = 1;; ++n)
+        {
+            result.backup = directory.getChildFile (name + " (backup " + juce::String (n) + ").integra");
+            if (! result.backup.exists())
+                break;
+        }
+        if (session.saveFile (result.backup, model.get().path) != CError::SUCCESS)
+            result.backup = juce::File();
+
+        auto& catalogue = session.getCatalogue();
+        transaction ("Upgrade Modules", [&]
+        {
+            std::vector<GUID> outdated;
+            for (auto& t : model.get().tracks)
+                for (auto& b : t.blocks)
+                    for (auto& m : b.modules)
+                        if (m.entry != nullptr && catalogue.getBestVersion (*m.entry) != m.entry)
+                            if (std::none_of (outdated.begin(), outdated.end(), [&] (const GUID& g) { return guidsEqual (g, m.entry->guid); }))
+                                outdated.push_back (m.entry->guid);
+
+            for (auto& from : outdated)
+            {
+                auto* entry = catalogue.findByGuid (from);
+                auto switched = switchAllVersions (from, catalogue.getBestVersion (*entry)->guid);
+                if (! switched.isEmpty())
+                {
+                    result.upgradedModules.addArray (switched);
+                    result.upgradedFrom.push_back (from);
+                }
+            }
+        });
+        return result;
+    }
+
+    juce::Result ProjectController::installModule (const juce::File& moduleFile)
+    {
+        CModuleInstallResult result;
+        CError error;
+        {
+            auto server = session.lock();
+            error = server->get_module_manager().install_module (toStd (moduleFile.getFullPathName()), result);
+        }
+        if (error != CError::SUCCESS)
+            return juce::Result::fail (moduleFile.getFileName() + ": " + toString (error.get_text()));
+
+        // the catalogue's entries move, so the model (which points into it) must follow
+        session.refreshCatalogue();
+        model.rebuild();
+        return juce::Result::ok();
+    }
+
+    juce::Result ProjectController::installEmbeddedModule (const GUID& guid)
+    {
+        CError error;
+        {
+            auto server = session.lock();
+            error = server->get_module_manager().install_embedded_module (guid);
+        }
+        if (error != CError::SUCCESS)
+            return juce::Result::fail (toString (error.get_text()));
+
+        session.refreshCatalogue();
+        model.rebuild();
+        return juce::Result::ok();
+    }
+
+    juce::Result ProjectController::uninstallModule (const GUID& guid, bool deleteInstances)
+    {
+        auto instances = findInstances (guid);
+        if (deleteInstances && ! instances.isEmpty())
+            remove (instances);
+
+        CModuleUninstallResult result;
+        CError error;
+        {
+            auto server = session.lock();
+            error = server->get_module_manager().uninstall_module (guid, result);
+        }
+
+        session.refreshCatalogue();
+        model.rebuild();
+        undoManager.clearUndoHistory();
+        markChanged();
+
+        if (error != CError::SUCCESS)
+            return juce::Result::fail (toString (error.get_text()));
+        return juce::Result::ok();
+    }
+
+    juce::String ProjectController::describeVersionChange (const GUID& fromGuid, const GUID& toGuid) const
+    {
+        // ModuleManagementInfoGenerator.getDifferences, simplified
+        auto& catalogue = session.getCatalogue();
+        auto* from = catalogue.findByGuid (fromGuid);
+        auto* to = catalogue.findByGuid (toGuid);
+        if (from == nullptr || to == nullptr)
+            return {};
+
+        auto dateText = [] (juce::Time t) { return t.formatted ("%d %b %Y"); };
+        juce::String md;
+        md << "The **" << from->getSourceLabel() << "** version of **" << from->label << "** (updated " << dateText (from->modified)
+           << ") will be swapped for the **" << to->getSourceLabel() << "** version (updated " << dateText (to->modified) << ").\n\n";
+
+        const auto oldInfos = endpointInfos (from->definition);
+        const auto newInfos = endpointInfos (to->definition);
+        juce::StringArray added, removed, changed;
+        for (auto& [name, info] : newInfos)
+        {
+            auto old = oldInfos.find (name);
+            if (old == oldInfos.end())
+                added.add (name);
+            else if (old->second.kind != info.kind || old->second.isAudioStream != info.isAudioStream
+                     || old->second.hasRange != info.hasRange || old->second.minimum != info.minimum || old->second.maximum != info.maximum
+                     || old->second.allowedStates != info.allowedStates || old->second.defaultValue != info.defaultValue)
+                changed.add (name);
+        }
+        for (auto& [name, info] : oldInfos)
+            if (newInfos.find (name) == newInfos.end())
+                removed.add (name);
+
+        if (added.isEmpty() && removed.isEmpty() && changed.isEmpty())
+            md << "No endpoints change.\n";
+        if (! added.isEmpty())    md << "* Added: " << added.joinIntoString (", ") << "\n";
+        if (! removed.isEmpty())  md << "* Removed: " << removed.joinIntoString (", ") << " (connections, envelopes and live controls using them are removed)\n";
+        if (! changed.isEmpty())  md << "* Changed type, range or default: " << changed.joinIntoString (", ") << " (values are fitted to the new ranges)\n";
+        if (to->description != from->description && to->description.isNotEmpty())
+            md << "\n" << to->description << "\n";
+        return md;
+    }
+
     juce::String ProjectController::moveBlockToTrack (juce::String blockPath, juce::String trackPath)
     {
         auto* block = model.get().findBlock (blockPath);

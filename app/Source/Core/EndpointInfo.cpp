@@ -12,6 +12,7 @@ namespace integra
             info.description = {};
 
         info.isAudioStream = def.is_audio_stream();
+        info.isAudioInput = info.isAudioStream && def.get_stream_info()->get_direction() == IStreamInfo::INPUT;
 
         auto* control = def.get_control_info();
         if (control == nullptr)

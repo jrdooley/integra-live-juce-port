@@ -71,6 +71,41 @@ namespace integra
         juce::String addBlock (juce::String trackPath, int startTick, int endTick, bool withDefaultContents = true);
         void repositionBlock (juce::String blockPath, int startTick, int endTick);
         juce::String moveBlockToTrack (juce::String blockPath, juce::String trackPath);
+
+        //==============================================================================
+        // Module versions (Flex: SwitchModuleVersion, SwitchAllObjectVersions, UpgradeModules)
+
+        /** Paths of every module instance in the project using this module version. */
+        juce::StringArray findInstances (const GUID& moduleGuid) const;
+        /** True if some module in the project isn't its best ("Latest Official") version. */
+        bool hasUpgradableModules() const;
+        /** Replaces a module by another version of it, keeping its name, values (fitted to the
+            new version's constraints), connections that are still valid and live view
+            controls whose widget still exists. One undo step. */
+        bool switchModuleVersion (juce::String modulePath, const GUID& toGuid);
+        /** Switches every instance of one version to another, as one undo step. Returns
+            the paths of the switched modules. */
+        juce::StringArray switchAllVersions (const GUID& fromGuid, const GUID& toGuid);
+
+        struct UpgradeResult
+        {
+            juce::StringArray upgradedModules;          // module paths
+            std::vector<GUID> upgradedFrom;             // the versions that were replaced
+            juce::File backup;                          // project saved before upgrading
+        };
+        /** Upgrades every module to its best version (UpgradeModules), saving a backup first. */
+        UpgradeResult upgradeAll();
+        /** Installs a 3rd party .module file (IModuleManager::install_module). */
+        juce::Result installModule (const juce::File& moduleFile);
+        /** Copies a module embedded in the project to the 3rd party modules directory. */
+        juce::Result installEmbeddedModule (const GUID&);
+        /** Uninstalls a 3rd party module. Instances in the project are deleted when
+            deleteInstances is set, else they stay as embedded modules (UninstallModules).
+            Clears the undo history: earlier steps may refer to the uninstalled module. */
+        juce::Result uninstallModule (const GUID&, bool deleteInstances);
+
+        /** Markdown summary of what changes between two versions (ModuleManagementInfoGenerator). */
+        juce::String describeVersionChange (const GUID& fromGuid, const GUID& toGuid) const;
         /** Finishes a block drag in one undo step: optionally moves `blockPath` to `trackPath`,
             then repositions every block in `ranges` (keyed by path before the move). */
         void repositionBlocks (juce::String blockPath, juce::String trackPath, const std::map<juce::String, juce::Range<int>>& ranges);

@@ -93,6 +93,39 @@ block area, as Flex stored it. Scene buttons across the top select scenes,
 and each scene's key binding (0-9 or A-Z, stored upper-case as in Flex) works
 anywhere in the window while the Live view is shown, except in text fields.
 
+### Module Manager — `ModuleManager.{h,cpp}` (Flex: `ModuleManager/`, `UpgradeDialog.as`)
+
+View › Module Manager... (Ctrl/Cmd+4), as in Flex, with two tabs:
+
+![Module Manager, Manage Versions](images/module-manager-versions.png)
+
+* **Manage Versions**: the modules in the project that have other versions
+  loaded (shipped, 3rd party or embedded in the project), their alternative
+  versions (the *Latest Official* one marked), and a report of what switching
+  would change: endpoints added, removed or changed, and the affected modules.
+  **Switch Versions** replaces every instance of the selected version, as
+  Flex's `SwitchModuleVersion` did: the module is recreated under the same name,
+  its values are carried over and fitted to the new version's ranges and allowed
+  values, connections, routings and envelopes to endpoints that no longer exist
+  are removed (the others stay), and live view controls whose widget is gone are
+  removed. **Upgrade All** switches every module to its latest official version
+  (shipped before 3rd party before embedded, newest first), saving a backup of
+  the project first. Both are one undo step. **Always Upgrade** is stored in the
+  application settings.
+
+![Module Manager, Install / Uninstall](images/module-manager-install.png)
+
+* **Install / Uninstall**: installed 3rd party modules (Uninstall: modules in use
+  are either deleted or kept embedded in the project, as Flex asked), modules
+  embedded in the project (Install To Disk), Install From File..., and an info
+  panel for the selected module.
+
+After a project is opened or a module is installed, if any module in the
+project isn't its latest official version, the **Upgrade Modules** dialog lists
+them and offers *Don't Upgrade*, *Module Manager...*, *Upgrade* and *Always
+Upgrade* (with Always Upgrade set, they're upgraded straight away). Upgrades and
+installs end with a report window.
+
 ## Widgets — `Widgets/IntegraWidgets.{h,cpp}` (Flex: `controls/`, `controlSDK/`)
 
 All 18 widget types found in the module library are implemented and bound to
@@ -151,7 +184,7 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (45 checks, all
+keyboard events and checks the resulting project state (55 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,
