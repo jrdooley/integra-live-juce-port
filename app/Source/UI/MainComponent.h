@@ -75,7 +75,8 @@ namespace integra
             cmdUndo, cmdRedo, cmdDelete, cmdAddTrack, cmdAddScene,
             cmdPlayPause, cmdHome, cmdNextScene, cmdPrevScene,
             cmdViewArrange, cmdViewLive, cmdViewModule, cmdPreferences, cmdAbout, cmdDemo, cmdInstallModule, cmdModuleManager,
-            cmdInfoView, cmdInfoLock, cmdLighting, cmdHighContrast, cmdTextLarger, cmdTextSmaller, cmdTextReset, cmdHelp
+            cmdInfoView, cmdInfoLock, cmdLighting, cmdHighContrast, cmdTextLarger, cmdTextSmaller, cmdTextReset, cmdHelp,
+            cmdImportTrack, cmdExportTrack, cmdCreateBlock, cmdDeleteTrack
         };
 
         /** View > Text Size (Flex FontSize: 7 / 9 / 11 / 15 / 20 pt). The port scales the

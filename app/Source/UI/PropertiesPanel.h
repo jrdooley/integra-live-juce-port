@@ -38,6 +38,44 @@ namespace integra
 
         class MidiLearnRow;
 
+        /** The title (Flex: Breadcrumbs.as + the editable title): "Kind: Project » Track »
+            Block", where the project and track are links. Clicking the project shows the
+            project (deselecting the track, block and scene), clicking the track deselects the
+            block. Double-clicking the last name renames it. */
+        class Breadcrumbs  : public juce::Component,
+                             public juce::SettableTooltipClient
+        {
+        public:
+            struct Crumb { juce::String label; std::function<void()> onClick; };
+            void set (const juce::String& kind, std::vector<Crumb> ancestors, const juce::String& current);
+            int getNumCrumbs() const noexcept                   { return (int) crumbs.size(); }
+            juce::Rectangle<int> getCrumbBounds (int index) const;
+            juce::Rectangle<int> getCurrentBounds() const;
+            void click (int index)
+            {
+                // a copy: the click changes the selection, which replaces the crumbs
+                if (index >= 0 && index < (int) crumbs.size())
+                    if (auto action = crumbs[(size_t) index].onClick)
+                        action();
+            }
+
+            void paint (juce::Graphics&) override;
+            void mouseMove (const juce::MouseEvent&) override;
+            void mouseExit (const juce::MouseEvent&) override;
+            void mouseUp (const juce::MouseEvent&) override;
+            void mouseDoubleClick (const juce::MouseEvent&) override;
+            std::function<void()> onRename;
+
+        private:
+            int crumbAt (juce::Point<int>) const;
+            juce::String kind, current;
+            std::vector<Crumb> crumbs;
+            int hovered = -1;
+        };
+        Breadcrumbs& getBreadcrumbs() noexcept          { return title; }
+        /** Called after a breadcrumb changes the selection. */
+        std::function<void()> onSelectionChanged;
+
         void paint (juce::Graphics&) override;
         void resized() override;
         void mouseDoubleClick (const juce::MouseEvent&) override;
@@ -56,12 +94,19 @@ namespace integra
 
         class SceneTitlebar;
         class ProjectTitlebar;
+    public:
+        class BlockTitlebar;
+        /** The envelope edited in the Arrange view (TrackLanes::editedEnvelope), which the
+            block title bar shows and changes (Flex: the block's primary selected envelope). */
+        std::function<juce::String()> getEditedEnvelope;
+        std::function<void (const juce::String&)> setEditedEnvelope;
+    private:
 
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
         void showTabs (bool sceneOnly);
 
         AppContext& context;
-        juce::Label title;
+        Breadcrumbs title;
         juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
         std::unique_ptr<InfoTab> info;
         std::unique_ptr<RoutingTab> routing;

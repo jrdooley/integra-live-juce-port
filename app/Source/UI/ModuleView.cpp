@@ -1,4 +1,5 @@
 #include "ModuleView.h"
+#include "TrackColourPicker.h"
 #include "IntegraLookAndFeel.h"
 #include "InlineRename.h"
 
@@ -991,6 +992,16 @@ namespace integra
         }
         if (! e.mods.isPopupMenu())
             rubberBand = juce::Rectangle<float> (e.position, e.position);
+        else
+        {
+            // ModuleGraph context menu: Change Track Color... for the block's track
+            const auto track = parentPath (blockPath);
+            const auto at = e.getPosition();
+            juce::PopupMenu menu;
+            menu.addItem ("Change Track Colour...", context.model.get().findTrack (track) != nullptr && ActiveButton::isEffectivelyActive (context, track), false,
+                          [this, track, at] { TrackColourPicker::show (context, track, *this, at); });
+            menu.showMenuAsync (juce::PopupMenu::Options());
+        }
         repaint();
     }
 

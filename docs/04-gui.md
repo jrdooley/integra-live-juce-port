@@ -14,7 +14,10 @@ automated interaction test.
 
 * **Timeline ruler** with time grid that adapts to zoom, **scene bar**,
   playhead (click/drag the ruler to locate; this deselects the scene, as in
-  Flex), loop range.
+  Flex), loop range. The strip along its top is Flex's zoom / scroll area:
+  drag sideways to scroll and down / up to zoom in / out (15 px dead zone,
+  zoom doubles every 50 px), about the clicked time; Shift locks one axis.
+  It shows where the view is in the project.
 * **Scenes** behave as in Flex (`Timeline.as`, `SceneBar.as`): drag in empty
   space to create one; each scene has a 10 px resize handle inside either edge
   (resize cursor) and moves when dragged in the middle (hand cursor). Edges snap
@@ -23,12 +26,24 @@ automated interaction test.
   (`doSceneRescheduling`); the timeline auto-scrolls when dragging at its
   edges; the dragged scene is drawn in place while dragging. A drag, including
   the scenes it pushed, is one undo step. Double-click a scene to rename it in
-  place. Right-click for mode (hold/play/loop), rename, key binding, delete.
-* **Tracks**: coloured headers (right-click: rename, colour from the Flex
-  palette, height, move up/down, import block, delete); "+ Add track".
-  Double-click a track's name to rename it in place; drag the bottom edge of
-  its header (grip in the corner) to resize it, or drag the header to move the
-  track up or down.
+  place. Right-click for mode (hold/play/loop), rename, key binding, delete;
+  Backspace deletes the selected scene when the ruler has the keyboard focus
+  and the scene is in view.
+* **Tracks**: coloured headers (right-click: rename, *Change Track Colour...*,
+  collapse, create block, height, move up/down, import block, import / export
+  track, delete); "+ Add track", or double-click below the tracks (a click
+  there shows the project). Double-click a track's name to rename it in
+  place; drag the bottom edge of its header (grip in the corner) to resize it,
+  or drag the header to move the track up or down. The **collapse button**
+  left of the name (or a double-click elsewhere in the title row) shrinks the
+  track to its title bar; its blocks are hidden and can't be dropped on
+  (`arrangeViewExpanded` userData, undoable). *Change Track Colour...* (also in
+  the Module View's menu) opens Flex's **colour wheel** at the mouse: press and
+  drag on it to try colours on the track, release to set one (one undo step);
+  a click outside closes it (`TrackColourPicker.{h,cpp}`). *Import Track...*
+  adds a saved track (`.integra`, Flex `.tixd`) as the last track, with its
+  envelopes connected to the player again; *Export Track...* saves the
+  selected one (both also in the File menu).
   Each header has the track's **active button** (switches the track off and
   on, one undo step) and a **VU meter**; the project's are in the top-left
   corner (Flex: the active buttons and `AggregateVUContainer` in the title
@@ -37,9 +52,15 @@ automated interaction test.
   tracks, and everything when the project is off, are drawn grey
   (`ContainerControls.{h,cpp}`).
 * **Blocks** positioned by their block envelopes: double-click an empty lane to
-  add a block (up to the next block), drag to move (also vertically to another
-  track), drag either edge (10 px handles) to resize, double-click to open in
-  the Module View, right-click for rename / export / delete / *Edit envelope*.
+  add a 20-second block centred on the click (starting at the end of a block
+  it would start in, and pushing later blocks along, as
+  `ArrangeView.createBlock`); Ctrl+B adds one after the selected track's last
+  block. Drag a block by its **name strip** to move it (also vertically to
+  another track); drag either edge below the strip (10 px handles) to resize
+  it; elsewhere a click only selects it (`BlockView.getDragInfo`; Flex's strip
+  is at the bottom of the block, the port's at the top). Double-click to open
+  it in the Module View (Ctrl+Shift+B), right-click for rename / export /
+  delete / *Edit envelope*.
   Ctrl/Cmd-click selects several blocks: dragging one moves them all (keeping
   their time and track offsets), Delete removes them all. Double-click a
   block's name to rename it in place.
@@ -79,7 +100,16 @@ automated interaction test.
   `timelineScroll` userData, same units as Flex).
 * **Properties panel** (below, resizable) for the innermost selection
   (block → track → scene → project); double-click its title to rename the
-  selection in place. Clicking a scene in the scene bar shows
+  selection in place. The title's **breadcrumbs** (`Breadcrumbs.as`) link the
+  project and track above it: clicking the project shows the project
+  (deselecting track, block and scene), clicking the track deselects the
+  block. A block's title bar has Flex's **envelope selection**
+  (`BlockPropertiesTitlebar.as`): pick a module and one of its numeric
+  attributes to select its envelope, or add one starting at the attribute's
+  current value (attributes driven by a routing or MIDI are listed but
+  disabled); x deletes the selected envelope.
+
+  ![Breadcrumbs and envelope selection](images/arrange-breadcrumbs-envelope.png) Clicking a scene in the scene bar shows
   the scene: its title bar has **State** (hold / play / loop), **Key** and
   **MIDI learn** for the scene (a MIDI input in the project routed to the
   scene's `activate`, as `ScenePropertiesTitlebar.as`), and an Info tab. The
@@ -94,6 +124,7 @@ automated interaction test.
   * *Routing* – scaled connections (`Connection → Scaler → Connection`):
     source / target endpoint pickers, input & output ranges and scale types
   * *Scripting* – Lua script list, editor with Lua syntax highlighting, Run
+    (Ctrl/Cmd+E, also from the editor)
   * *MIDI* – MIDI control inputs: device, channel, CC/note, number, learn,
     target
 
@@ -244,8 +275,8 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
   scene, time and current scene display, input/output level meters, MIDI
   activity light, Settings.
 * **Menus & keys**: File (New, Open, Save, Save As, Import/Export Block,
-  Install Third-Party Module), Edit (Undo/Redo with descriptions, Delete, Add
-  Track, Add Scene), Transport (Space play/pause, Enter or Home to return to
+  Import/Export Track, Install Third-Party Module), Edit (Undo/Redo with descriptions, Delete, Add
+  Track, Delete Track Ctrl+Shift+T, Create Block Ctrl+B, Add Scene), Transport (Space play/pause, Enter or Home to return to
   the start, ←/→ or Ctrl+←/→ for scenes, as Flex's `onStageKeyDown`), View
   (Ctrl+1/2 for Arrange/Live, Module View, Info View Ctrl+3, Lock Info View F2
   — Ctrl+3 on macOS —, Module Manager, Lighting Ctrl+L, High Contrast Ctrl+H,
@@ -296,7 +327,7 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (159 checks, all
+keyboard events and checks the resulting project state (191 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,
@@ -328,7 +359,14 @@ it and to add a point, double-clicking a point to delete it, and the envelope
 lock button; the Info view (texts loaded, block and ribbon help under the
 mouse, Ctrl+3, F2 lock, editing a block's info), Lighting, High Contrast and
 Text Size, plain arrow keys and Enter, and splicing a module into a
-connection (preview, wiring, one undo).
+connection (preview, wiring, one undo); collapsing tracks (button and title
+bar, hidden blocks, undo), the colour wheel (one undo step), new blocks
+centred on a double-click pushing later ones, Ctrl+B, clicking and
+double-clicking below the tracks, Ctrl+Shift+T, exporting and importing a
+track (last, selected, envelopes driven, undo, block files refused), the
+ruler's zoom / scroll strip (zoom about the click, Shift for scrolling only),
+Backspace on a scene, the breadcrumbs, adding and deleting an envelope from
+the block title bar, and Ctrl+E in the script editor.
 
 Bugs it found and that are fixed:
 

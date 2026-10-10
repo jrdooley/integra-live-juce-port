@@ -414,12 +414,8 @@ namespace integra
                 pendingSelection = script;
             };
             removeButton.onClick = [this] { if (current.isNotEmpty()) context.controller.remove (current); };
-            runButton.onClick = [this]
-            {
-                storeEdits();
-                if (current.isNotEmpty())
-                    context.controller.runScript (current);
-            };
+            runButton.onClick = [this] { execute(); };
+            runButton.setTooltip ("Run the script (Ctrl+E)");
             applyButton.onClick = [this] { storeEdits(); };
             for (auto* b : { &addButton, &removeButton, &runButton, &applyButton })
                 addAndMakeVisible (b);
@@ -431,6 +427,25 @@ namespace integra
             help.setColour (juce::Label::textColourId, Theme::get().textDim);
             help.setFont (juce::FontOptions (11.0f));
             addAndMakeVisible (help);
+        }
+
+        /** ScriptingView.execute: store the text, then trigger the script. */
+        void execute()
+        {
+            storeEdits();
+            if (current.isNotEmpty())
+                context.controller.runScript (current);
+        }
+
+        bool keyPressed (const juce::KeyPress& key) override
+        {
+            // ScriptingView context menu: Execute, Ctrl+E (Cmd+E on macOS), also from the editor
+            if (key == juce::KeyPress ('e', juce::ModifierKeys::commandModifier, 0))
+            {
+                execute();
+                return true;
+            }
+            return false;
         }
 
         void setTarget (const juce::String& path)
@@ -511,7 +526,18 @@ namespace integra
         juce::TextButton addButton { "+ New" }, removeButton { "Delete" }, runButton { "Run" }, applyButton { "Apply" };
         juce::CodeDocument document;
         juce::LuaTokeniser tokeniser;
-        juce::CodeEditorComponent editor { document, &tokeniser };
+        /** The editor would type Cmd+E (macOS) as an "e", so the tab sees keys first. */
+        struct ScriptEditor  : public juce::CodeEditorComponent
+        {
+            using juce::CodeEditorComponent::CodeEditorComponent;
+            bool keyPressed (const juce::KeyPress& key) override
+            {
+                if (auto* tab = findParentComponentOfClass<ScriptingTab>(); tab != nullptr && tab->ScriptingTab::keyPressed (key))
+                    return true;
+                return juce::CodeEditorComponent::keyPressed (key);
+            }
+        };
+        ScriptEditor editor { document, &tokeniser };
         juce::Label help;
     };
 
@@ -857,6 +883,143 @@ namespace integra
     };
 
     //==============================================================================
+    /** BlockPropertiesTitlebar: "Envelope" <module> <attribute> [x] - picking an attribute
+        selects its envelope, or adds one starting at the attribute's current value; the
+        button deletes the selected envelope. Attributes driven by a routing or MIDI are
+        listed but can't be picked (LockableComboBox). */
+    class PropertiesPanel::BlockTitlebar  : public juce::Component
+    {
+    public:
+        BlockTitlebar (AppContext& c, PropertiesPanel& p, const juce::String& path)
+            : context (c), panel (p), block (path)
+        {
+            label.setColour (juce::Label::textColourId, Theme::get().textDim);
+            addAndMakeVisible (label);
+            module.setTextWhenNothingSelected ("<module>");
+            module.onChange = [this] { fillAttributes ({}); };
+            addAndMakeVisible (module);
+            attribute.setTextWhenNothingSelected ("<attribute>");
+            attribute.onChange = [this] { attributeChosen(); };
+            addAndMakeVisible (attribute);
+            remove.setTooltip ("Delete the selected envelope");
+            remove.onClick = [this]
+            {
+                auto envelope = selectedEnvelope();
+                if (envelope.isEmpty())
+                    return;
+                context.controller.remove (envelope);
+                if (panel.setEditedEnvelope) panel.setEditedEnvelope ({});
+            };
+            addAndMakeVisible (remove);
+            refresh();
+        }
+
+        juce::String selectedEnvelope() const
+        {
+            auto envelope = panel.getEditedEnvelope ? panel.getEditedEnvelope() : juce::String();
+            if (auto* b = context.model.get().findBlock (block))
+                for (auto& e : b->envelopes)
+                    if (e.path == envelope)
+                        return envelope;
+            return {};
+        }
+
+        void refresh()
+        {
+            auto* b = context.model.get().findBlock (block);
+            if (b == nullptr)
+                return;
+
+            // the selected envelope's target, else whatever module was picked
+            juce::String target;
+            for (auto& e : b->envelopes)
+                if (e.path == selectedEnvelope())
+                    target = e.targetPath;
+            auto chosenModule = target.isNotEmpty() ? lastElement (parentPath (target)) : module.getText();
+
+            modules.clear();
+            module.clear (juce::dontSendNotification);
+            for (auto& m : b->modules)
+                modules.add (m.name);
+            modules.sort (true);
+            for (int i = 0; i < modules.size(); ++i)
+                module.addItem (modules[i], i + 1);
+            module.setSelectedId (modules.indexOf (chosenModule) + 1, juce::dontSendNotification);
+            module.setEnabled (! modules.isEmpty());
+            fillAttributes (target.isNotEmpty() ? lastElement (target) : juce::String());
+        }
+
+        void resized() override
+        {
+            auto area = getLocalBounds().reduced (8, 3);
+            label.setBounds (area.removeFromLeft (62));
+            module.setBounds (area.removeFromLeft (juce::jmin (150, area.getWidth() / 2)));
+            area.removeFromLeft (10);
+            attribute.setBounds (area.removeFromLeft (juce::jmin (150, area.getWidth() - 30)));
+            area.removeFromLeft (10);
+            remove.setBounds (area.removeFromLeft (22));
+        }
+
+        juce::ComboBox module, attribute;
+        juce::TextButton remove { "x" };
+
+    private:
+        void fillAttributes (const juce::String& selectedAttribute)
+        {
+            attribute.clear (juce::dontSendNotification);
+            attributes.clear();
+            const auto modulePath = block + "." + module.getText();
+            auto* b = context.model.get().findBlock (block);
+            const model::Module* m = b != nullptr ? b->findModule (module.getText()) : nullptr;
+            if (m != nullptr && m->entry != nullptr && m->entry->definition != nullptr)
+            {
+                int id = 1;
+                for (auto* ep : m->entry->definition->get_endpoint_definitions())
+                {
+                    // stateful numeric endpoints that can be connection targets
+                    auto info = EndpointInfo::fromDefinition (*ep);
+                    if (! info.canBeTarget || ! info.isNumeric() || info.isAudioStream)
+                        continue;
+                    const auto path = modulePath + "." + info.name;
+                    bool locked = false;
+                    for (auto& d : context.model.get().driversOf (path))
+                        locked |= d.kind != model::Driver::Kind::envelope;
+                    attribute.addItem (info.name, id);
+                    attribute.setItemEnabled (id, ! locked);
+                    attributes.add (info.name);
+                    ++id;
+                }
+            }
+            attribute.setSelectedId (attributes.indexOf (selectedAttribute) + 1, juce::dontSendNotification);
+            attribute.setEnabled (! attributes.isEmpty());
+            remove.setVisible (module.getSelectedId() > 0);
+            remove.setEnabled (selectedEnvelope().isNotEmpty());
+        }
+
+        void attributeChosen()
+        {
+            if (attribute.getSelectedId() <= 0)
+                return;
+            const auto target = block + "." + module.getText() + "." + attribute.getText();
+            juce::String envelope;
+            if (auto* b = context.model.get().findBlock (block))
+                if (auto* e = b->findEnvelopeForTarget (target))
+                    envelope = e->path;
+            if (envelope.isEmpty())
+                envelope = context.controller.addEnvelope (block, target);
+            if (envelope.isNotEmpty() && panel.setEditedEnvelope)
+                panel.setEditedEnvelope (envelope);
+            refresh();
+        }
+
+        AppContext& context;
+        PropertiesPanel& panel;
+        juce::String block;
+        juce::StringArray modules, attributes;
+        juce::Label label { {}, "Envelope" };
+    };
+
+    //==============================================================================
     /** ProjectPropertiesTitlebar: MIDI learn for the player's previous / next scene. */
     class PropertiesPanel::ProjectTitlebar  : public juce::Component
     {
@@ -884,9 +1047,7 @@ namespace integra
     //==============================================================================
     PropertiesPanel::PropertiesPanel (AppContext& c) : context (c)
     {
-        title.setFont (juce::FontOptions (14.0f, juce::Font::bold));
-        title.setInterceptsMouseClicks (false, false);
-        title.setTooltip ("Double-click to rename");
+        title.onRename = [this] { renameShown(); };
         addAndMakeVisible (title);
 
         info = std::make_unique<InfoTab> (c);
@@ -967,16 +1128,43 @@ namespace integra
 
         const bool isScene = p.findScene (container) != nullptr;
         juce::String kind = container == p.path ? "Project" : isScene ? "Scene" : p.findTrack (container) != nullptr ? "Track" : "Block";
-        title.setText (container.isEmpty() ? juce::String() : kind + ":  " + container.replace (".", "  >  "), juce::dontSendNotification);
+        // Breadcrumbs.update: the project and track above what is shown
+        std::vector<Breadcrumbs::Crumb> crumbs;
+        auto deselectEverything = [this]
+        {
+            auto& m = context.model;
+            m.selectedBlock = {};
+            m.selectedTrack = {};
+            if (m.sceneInProperties && m.get().player.currentScene.isNotEmpty())
+                context.controller.activateScene ({});
+            m.sceneInProperties = false;
+            selectionChanged();
+            if (onSelectionChanged) onSelectionChanged();
+        };
+        if (container.isNotEmpty() && container != p.path)
+            crumbs.push_back ({ p.name, deselectEverything });
+        if (p.findBlock (container) != nullptr)
+            crumbs.push_back ({ lastElement (parentPath (container)), [this]
+            {
+                context.model.selectedBlock = {};
+                selectionChanged();
+                if (onSelectionChanged) onSelectionChanged();
+            } });
+        title.set (container.isEmpty() ? juce::String() : kind, std::move (crumbs),
+                   container.isEmpty() ? juce::String() : container == p.path ? p.name : lastElement (container));
 
         // title bar row
-        const auto titlebarKey = isScene ? "scene:" + container : container == p.path && p.player.path.isNotEmpty() ? "project:" + p.player.path : juce::String();
+        const bool isBlock = p.findBlock (container) != nullptr;
+        const auto titlebarKey = isScene ? "scene:" + container : isBlock ? "block:" + container
+                               : container == p.path && p.player.path.isNotEmpty() ? "project:" + p.player.path : juce::String();
         if (titlebarKey != titlebarFor)
         {
             titlebarFor = titlebarKey;
             titlebar.reset();
             if (isScene)
                 titlebar = std::make_unique<SceneTitlebar> (context, container);
+            else if (isBlock)
+                titlebar = std::make_unique<BlockTitlebar> (context, *this, container);
             else if (titlebarKey.isNotEmpty())
                 titlebar = std::make_unique<ProjectTitlebar> (context, p.player.path);
             if (titlebar != nullptr)
@@ -984,6 +1172,8 @@ namespace integra
             resized();
         }
 
+        if (auto* bt = dynamic_cast<BlockTitlebar*> (titlebar.get()))
+            bt->refresh();
         showTabs (isScene);
         if (container != shownContainer)
         {
@@ -1011,6 +1201,9 @@ namespace integra
     Info PropertiesPanel::getInfoAt (juce::Point<int> p)
     {
         // ArrangeViewProperties.getInfoToDisplay: title bars, title, else the shown tab
+        if (auto* bt = dynamic_cast<BlockTitlebar*> (titlebar.get()); bt != nullptr && bt->getBounds().contains (p))
+            return InfoTexts::forView (bt->remove.getBounds().contains (p - bt->getPosition()) ? "ArrangeViewProperties/DeleteEnvelopeButton"
+                                                                                               : "ArrangeViewProperties/EnvelopeSelection");
         if (titlebar != nullptr && titlebar->getBounds().contains (p))
             return InfoTexts::forView (dynamic_cast<SceneTitlebar*> (titlebar.get()) != nullptr ? "ArrangeViewProperties/ScenePropertiesTitlebar"
                                                                                                : "ArrangeViewProperties/ProjectPropertiesTitlebar");
@@ -1029,13 +1222,116 @@ namespace integra
             renameShown();
     }
 
+    //==============================================================================
+    namespace
+    {
+        const juce::FontOptions crumbFont (14.0f, juce::Font::bold);
+        constexpr const char* crumbSeparator = "  \xc2\xbb  ";     // " » " in UTF-8
+        int textWidth (const juce::String& text)    { return juce::GlyphArrangement::getStringWidthInt (juce::Font (crumbFont), text); }
+    }
+
+    void PropertiesPanel::Breadcrumbs::set (const juce::String& k, std::vector<Crumb> ancestors, const juce::String& name)
+    {
+        kind = k;
+        crumbs = std::move (ancestors);
+        current = name;
+        hovered = -1;
+        repaint();
+    }
+
+    juce::Rectangle<int> PropertiesPanel::Breadcrumbs::getCrumbBounds (int index) const
+    {
+        int x = textWidth (kind + ":  ");
+        for (int i = 0; i < (int) crumbs.size(); ++i)
+        {
+            const int w = textWidth (crumbs[(size_t) i].label);
+            if (i == index)
+                return { x, 0, w, getHeight() };
+            x += w + textWidth (juce::CharPointer_UTF8 (crumbSeparator));
+        }
+        return {};
+    }
+
+    juce::Rectangle<int> PropertiesPanel::Breadcrumbs::getCurrentBounds() const
+    {
+        int x = textWidth (kind + ":  ");
+        for (auto& c : crumbs)
+            x += textWidth (c.label) + textWidth (juce::CharPointer_UTF8 (crumbSeparator));
+        return { x, 0, juce::jmax (20, textWidth (current)), getHeight() };
+    }
+
+    int PropertiesPanel::Breadcrumbs::crumbAt (juce::Point<int> p) const
+    {
+        for (int i = 0; i < (int) crumbs.size(); ++i)
+            if (getCrumbBounds (i).contains (p))
+                return i;
+        return -1;
+    }
+
+    void PropertiesPanel::Breadcrumbs::paint (juce::Graphics& g)
+    {
+        if (kind.isEmpty())
+            return;
+        auto& t = Theme::get();
+        const auto link = Theme::isDarkScheme() ? juce::Colour (0xff8c8c8c) : juce::Colour (0xff747474);
+        g.setFont (juce::Font (crumbFont));
+        int x = 0;
+        auto draw = [&] (const juce::String& text, juce::Colour colour, bool underline)
+        {
+            const int w = textWidth (text);
+            g.setColour (colour);
+            g.drawText (text, x, 0, w + 2, getHeight(), juce::Justification::centredLeft, false);
+            if (underline)
+                g.fillRect (x, getHeight() / 2 + 8, w, 1);
+            x += w;
+        };
+        draw (kind + ":  ", t.textDim, false);
+        for (int i = 0; i < (int) crumbs.size(); ++i)
+        {
+            draw (crumbs[(size_t) i].label, link, i == hovered);
+            draw (juce::CharPointer_UTF8 (crumbSeparator), link, false);
+        }
+        draw (current, t.text, false);
+    }
+
+    void PropertiesPanel::Breadcrumbs::mouseMove (const juce::MouseEvent& e)
+    {
+        const int now = crumbAt (e.getPosition());
+        setMouseCursor (now >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+        setTooltip (now >= 0 ? juce::String() : "Double-click to rename");
+        if (now != hovered)
+        {
+            hovered = now;
+            repaint();
+        }
+    }
+
+    void PropertiesPanel::Breadcrumbs::mouseExit (const juce::MouseEvent&)
+    {
+        hovered = -1;
+        repaint();
+    }
+
+    void PropertiesPanel::Breadcrumbs::mouseUp (const juce::MouseEvent& e)
+    {
+        if (e.mouseWasClicked() && e.getNumberOfClicks() == 1)
+            click (crumbAt (e.getPosition()));
+    }
+
+    void PropertiesPanel::Breadcrumbs::mouseDoubleClick (const juce::MouseEvent& e)
+    {
+        if (crumbAt (e.getPosition()) < 0 && onRename)
+            onRename();
+    }
+
     void PropertiesPanel::renameShown()
     {
         const auto path = getContainerPath();
         if (path.isEmpty())
             return;
         const auto name = path.contains (".") ? lastElement (path) : path;
-        startInlineRename (renameEditor, *this, title.getBounds().withWidth (juce::jmin (title.getWidth(), 260)), name,
+        auto bounds = title.getCurrentBounds() + title.getPosition();
+        startInlineRename (renameEditor, *this, bounds.withWidth (juce::jlimit (120, 260, bounds.getWidth() + 40)), name,
                            [this, path] (const juce::String& newName)
                            {
                                // keep the renamed node selected (the rebuild drops the old path)

@@ -54,11 +54,25 @@ namespace integra
         std::function<void()> onSnapLinesChanged;
 
         static constexpr int sceneBarHeight = 22;
+        /** The zoom / scroll strip above the scene bar (Timeline: _markingTop = 15 px):
+            drag sideways to scroll, down to zoom in, up to zoom out; Shift locks an axis. */
+        static constexpr int zoomStripHeight = 12;
+        static constexpr int sceneBarTop = zoomStripHeight, sceneBarBottom = zoomStripHeight + sceneBarHeight;
+        static constexpr int height = sceneBarBottom + 24;
+        /** Called when the strip changes the zoom or scroll. */
+        std::function<void()> onTimelineChanged;
+        /** The length of the project in ticks (for the scroll indicator). */
+        std::function<int()> getProjectLength;
+        bool keyPressed (const juce::KeyPress&) override;
         static constexpr float sceneResizeAreaWidth = 10.0f;   // SceneBar._resizeAreaWidth
 
     private:
         enum class Zone { none, move, resizeStart, resizeEnd };
-        enum class Drag { none, playhead, newScene, moveScene, resizeSceneStart, resizeSceneEnd } drag = Drag::none;
+        enum class Drag { none, playhead, newScene, moveScene, resizeSceneStart, resizeSceneEnd, zoomScroll } drag = Drag::none;
+        void updateZoomScroll (juce::Point<float> mouse, bool shiftDown);
+        juce::Point<float> zoomClick;
+        double zoomClickTicks = 0.0, zoomStartPixelsPerTick = 0.4;
+        bool zoomShift = false;
 
         juce::Rectangle<float> sceneBounds (int start, int end) const;
         const model::Scene* sceneAt (juce::Point<float>, Zone&) const;
@@ -143,6 +157,19 @@ namespace integra
         juce::Rectangle<int> getTrackResizeArea (const juce::String& trackPath) const;
         std::function<void()> onLayoutChanged;
         static constexpr int addTrackHeight = 34;
+        /** A collapsed track shows only its title bar (ViewHolder: the title row). */
+        static constexpr int collapsedTrackHeight = 30;
+        /** The collapse button left of a track's name (ViewHolder.canCollapse). */
+        juce::Rectangle<float> getCollapseButtonBounds (const juce::String& trackPath) const;
+        /** Where a block can be dragged to move it: its name strip (BlockView._nameEdit). */
+        juce::Rectangle<float> getBlockMoveArea (const juce::String& blockPath) const;
+        /** Opens the colour wheel for a track at a point of this component. */
+        void showColourPicker (const juce::String& trackPath, juce::Point<int>);
+        /** Arrange view menu items (ArrangeView.as context menu): import / export a track. */
+        void importTrack();
+        void exportTrack (const juce::String& trackPath);
+        /** Ctrl+B: a new block after the last block of the selected track. */
+        void createBlockOnSelectedTrack();
 
         /** Envelope being edited inside the selected block ("" = none). */
         juce::String editedEnvelope;
@@ -175,10 +202,16 @@ namespace integra
 
         std::vector<TrackRow> rows() const;
         const model::Track* trackAt (int y) const;
+        /** The track under y, unless it is collapsed (ArrangeView.getTrackUnderMouse). */
+        const model::Track* expandedTrackAt (int y) const;
+        int bottomOfTracks() const;
         const model::Block* blockAt (juce::Point<int>, const model::Track** trackOut = nullptr) const;
         juce::Rectangle<float> blockBounds (const model::Block&, juce::Rectangle<int> row) const;
         void showBlockMenu (const model::Block&);
         void showTrackMenu (const model::Track&);
+        void showLanesMenu();
+        void addImportExportItems (juce::PopupMenu&);
+        std::unique_ptr<juce::FileChooser> chooser;
         void renameNode (const juce::String& path, const juce::String& title);
         juce::Rectangle<int> nameBounds (const juce::String& path) const;
         std::unique_ptr<juce::TextEditor> renameEditor;

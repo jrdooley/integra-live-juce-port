@@ -25,6 +25,14 @@ namespace integra
         ribbon.onPreferences = [this] { commands.invokeDirectly (cmdPreferences, true); };
         arrange.onOpenBlock = [this] (const juce::String& block) { openBlock (block); };
         arrange.onSelectionChanged = [this] { properties.selectionChanged(); };
+        properties.getEditedEnvelope = [this] { return arrange.getLanes().editedEnvelope; };
+        properties.setEditedEnvelope = [this] (const juce::String& envelope)
+        {
+            arrange.getLanes().editedEnvelope = envelope;
+            arrange.getLanes().repaint();
+            properties.selectionChanged();
+        };
+        properties.onSelectionChanged = [this] { arrange.getLanes().repaint(); arrange.getRuler().repaint(); commands.commandStatusChanged(); };
         moduleView.onBack = [this] { showView ("arrange"); };
 
         commands.registerAllCommandsForTarget (this);
@@ -424,6 +432,7 @@ namespace integra
     //==============================================================================
     void MainComponent::getAllCommands (juce::Array<juce::CommandID>& ids)
     {
+        ids.addArray ({ cmdImportTrack, cmdExportTrack, cmdCreateBlock, cmdDeleteTrack });
         ids.addArray ({ cmdNew, cmdOpen, cmdSave, cmdSaveAs, cmdImportBlock, cmdExportBlock,
                         cmdUndo, cmdRedo, cmdDelete, cmdAddTrack, cmdAddScene,
                         cmdPlayPause, cmdHome, cmdNextScene, cmdPrevScene,
@@ -453,6 +462,14 @@ namespace integra
                                   info.addDefaultKeypress ('z', cmd | shift); info.setActive (undo.canRedo()); break;
             case cmdDelete:       info.setInfo ("Delete", "", "Edit", 0); break;
             case cmdAddTrack:     info.setInfo ("Add Track", "", "Edit", 0);                info.addDefaultKeypress ('t', cmd); break;
+            // ArrangeView context menu accelerators
+            case cmdDeleteTrack:  info.setInfo ("Delete Track", "", "Edit", 0);             info.addDefaultKeypress ('t', cmd | shift);
+                                  info.setActive (context.model.get().findTrack (context.model.selectedTrack) != nullptr); break;
+            case cmdCreateBlock:  info.setInfo ("Create Block", "", "Edit", 0);             info.addDefaultKeypress ('b', cmd);
+                                  info.setActive (context.model.get().findTrack (context.model.selectedTrack) != nullptr); break;
+            case cmdImportTrack:  info.setInfo ("Import Track...", "", "File", 0); break;
+            case cmdExportTrack:  info.setInfo ("Export Track...", "", "File", 0);
+                                  info.setActive (context.model.get().findTrack (context.model.selectedTrack) != nullptr); break;
             case cmdAddScene:     info.setInfo ("Add Scene At Playhead", "", "Edit", 0); break;
             case cmdPlayPause:    info.setInfo ("Play / Pause", "", "Transport", 0);        info.addDefaultKeypress (juce::KeyPress::spaceKey, 0); break;
             // IntegraLive.onStageKeyDown: Enter, Left and Right work without modifiers
@@ -484,7 +501,7 @@ namespace integra
                                   info.setTicked (currentView == "arrange"); break;
             case cmdViewLive:     info.setInfo ("Live View", "", "View", 0);                info.addDefaultKeypress ('2', cmd);
                                   info.setTicked (currentView == "live"); break;
-            case cmdViewModule:   info.setInfo ("Module View (Selected Block)", "", "View", 0);
+            case cmdViewModule:   info.setInfo ("Module View (Selected Block)", "", "View", 0);  info.addDefaultKeypress ('b', cmd | shift);   // Flex: Open Block
                                   info.setTicked (currentView == "module");
                                   info.setActive (context.model.get().findBlock (context.model.selectedBlock) != nullptr); break;
             case cmdPreferences:  info.setInfo ("Settings...", "", "View", 0);              info.addDefaultKeypress (',', cmd); break;
@@ -577,6 +594,24 @@ namespace integra
                 properties.selectionChanged();
                 return true;
 
+            case cmdDeleteTrack:
+                if (context.model.get().findTrack (context.model.selectedTrack) != nullptr)
+                {
+                    context.controller.remove (context.model.selectedTrack);
+                    context.model.selectedTrack = {};
+                    context.model.selectedBlock = {};
+                    properties.selectionChanged();
+                }
+                return true;
+
+            case cmdCreateBlock:
+                arrange.getLanes().createBlockOnSelectedTrack();
+                properties.selectionChanged();
+                return true;
+
+            case cmdImportTrack:  showView ("arrange"); arrange.getLanes().importTrack(); return true;
+            case cmdExportTrack:  arrange.getLanes().exportTrack (context.model.selectedTrack); return true;
+
             case cmdAddScene:
             {
                 const int rate = juce::jmax (1, context.model.get().player.rate);
@@ -665,6 +700,8 @@ namespace integra
                 menu.addCommandItem (&commands, cmdSave);
                 menu.addCommandItem (&commands, cmdSaveAs);
                 menu.addSeparator();
+                menu.addCommandItem (&commands, cmdImportTrack);
+                menu.addCommandItem (&commands, cmdExportTrack);
                 menu.addCommandItem (&commands, cmdImportBlock);
                 menu.addCommandItem (&commands, cmdExportBlock);
                 menu.addSeparator();
@@ -681,6 +718,8 @@ namespace integra
                 menu.addCommandItem (&commands, cmdDelete);
                 menu.addSeparator();
                 menu.addCommandItem (&commands, cmdAddTrack);
+                menu.addCommandItem (&commands, cmdDeleteTrack);
+                menu.addCommandItem (&commands, cmdCreateBlock);
                 menu.addCommandItem (&commands, cmdAddScene);
                 break;
             case 2:

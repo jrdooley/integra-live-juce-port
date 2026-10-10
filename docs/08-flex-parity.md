@@ -47,22 +47,25 @@ Flex paths are relative to `GUI/src/components/`.
 | View menu | `IntegraLive.mxml` menus, `ColorScheme.as`, `FontSize.as` | Lighting (Ctrl/Cmd+L) switches light / dark, High Contrast (Ctrl/Cmd+H, stored in the project), Text Size larger / smaller / reset (Ctrl/Cmd+= / - / 0; five steps, remembered). The port scales the whole window for text size, as its layout is in pixels. |
 | Flex shortcuts | `IntegraLive.onStageKeyDown` | Plain ←/→ select the previous / next scene and Enter returns to the start (Ctrl/Cmd+←/→ and Home still work), wherever the focus is: ribbon buttons no longer take the keyboard focus. Ctrl/Cmd+3 is the Info view, as in Flex (the Module View is reached from a block). |
 | Splice | `ModuleGraph.onDragDrop`, `onDragOver` | Dragging a module from the library shows it half transparent where it would go, and highlights a connection it covers; dropping it there replaces the connection with links into the module's first audio input and out of its first audio output (one undo step). |
+| Track collapse | `ViewHolder.canCollapse`, `CollapseButtonSkin.as`, `SetTrackExpanded` | Collapse button left of the track name (a disc in the track colour with an arrow); double-clicking the rest of the title row toggles it too; a collapsed track shows only its title bar and its blocks can't be hit or dropped on; stored in `arrangeViewExpanded`, undoable. |
+| Track colour | `TrackColorPicker.as`, `ArrangeView.as`, `ModuleGraph.as` | *Change Track Colour...* (track menu and Module View menu, for active tracks) opens a 128 px colour wheel at the mouse; dragging shows colours on the track live, releasing sets it in one undo step, a click outside closes it. The 7-colour palette is gone. |
+| Import / export track | `ImportTrack.as`, `IntegraController.exportTrack` | File menu and track menu; the imported track goes last, is selected, and its envelopes are connected to the player again; block files are refused. One undo step. |
+| New blocks and tracks | `ArrangeView.createBlockOnDoubleClick`, `createBlock`, `createBlockFromMenu`, `onDoubleClick` | A double-click on a lane adds a 20 s block centred on the click (at the end of a block it would start in), pushing later blocks along, in one undo step; Ctrl+B adds one after the selected track's last block; double-clicking below the tracks adds a track, clicking there shows the project; Ctrl+Shift+T deletes the selected track; Ctrl+Shift+B opens the selected block. |
+| Block drag zones | `BlockView.getDragInfo` | A block moves only by its name strip, resizes by the 10 px edges below the strip, and anywhere else is only selected. The port's strip is at the top of the block (Flex: bottom). |
+| Envelope selection | `BlockPropertiesTitlebar.as`, `AddEnvelope.as`, `RemoveEnvelope.as` | A block's properties title bar: Envelope <module> <attribute> [x]. Picking an attribute selects its envelope or adds one at its current value; attributes driven by routing or MIDI are disabled; x deletes the selected envelope. Kept in step with the envelope selected in the Arrange view. |
+| Timeline zoom / scroll strip | `Timeline.as` (`_markingTop`, `_zoomCoefficient`) | A 12 px strip above the scene bar (Flex 15 px) with the scroll indicator: drag sideways to scroll, down / up to zoom in / out about the clicked time (15 px dead zone, doubling per 50 px); Shift locks an axis. |
+| Scene delete key, breadcrumbs, Ctrl+E | `Timeline.as`, `Breadcrumbs.as`, `ScriptingView.as` | Backspace deletes the selected scene (ruler focused, scene in view). The properties title's project and track names are links that deselect down to them. Ctrl/Cmd+E runs the selected script, also from inside the editor (Flex only outside it). |
 | MIDI indicator | `MidiInputIndicator.as` | Lights for every incoming message, including repeats of the same message. *(No automated test.)* |
 
 ## Arrange view and timeline
 
 **Missing / partial**
-* Scenes: Backspace to delete.
-* Timeline: the drag-to-zoom/scroll strip at the top of the ruler (drag sideways to
-  scroll, up/down to zoom, Shift locks an axis).
-* Tracks: collapse button, full colour picker (only 7 colours), import/export track,
-  double-click below the tracks to add one, Ctrl+Shift+T; the track being moved isn't
-  drawn as a floating image.
-* Blocks: moving only by the title strip; a new block centred on a double-click that
-  pushes later blocks; Ctrl+B / Ctrl+Shift+B. A group drag pushes other blocks out of
-  the whole span the group covers on each track (Flex pushed around each block).
-* Envelopes: add/remove envelopes from the block title bar.
-* Properties panel: clickable breadcrumbs, Ctrl+E to run a script.
+* Tracks: the track being moved isn't drawn as a floating image; Flex's Live view
+  collapse state (which, through an upstream bug, wrote the Arrange view's) isn't used.
+* Blocks: a group drag pushes other blocks out of the whole span the group covers on
+  each track (Flex pushed around each block); Flex's open-block button in the name
+  strip (double-click or Ctrl+Shift+B instead).
+* The colour wheel's shading follows Flex's formula but isn't pixel-identical.
 
 ## Module view
 
@@ -70,7 +73,7 @@ Flex paths are relative to `GUI/src/components/`.
 * Library: a resizable tag cloud (it fits its tags, up to half the library).
 * Graph: Ctrl/Cmd-click and rubber band select modules only (Flex also selected their
   links); snapping to other modules' edges with snap lines; per-module
-  "Live View" checkbox; right-click on empty space for Import Module; Change Track Colour;
+  "Live View" checkbox; right-click on empty space for Import Module;
   track-colour tint and greyed-out inactive blocks.
 * Properties: typing is for the main value only (Flex labelled each attribute of a
   multi-attribute widget, e.g. XY pad x and y); MIDI learn for any endpoint of a

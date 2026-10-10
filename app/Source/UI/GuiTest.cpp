@@ -2,6 +2,8 @@
 #include "Widgets/IntegraWidgets.h"
 #include "ModuleManager.h"
 #include "LiveViewParts.h"
+#include "TrackColourPicker.h"
+#include "PropertiesPanel.h"
 #include "Core/SelfTest.h"
 
 namespace integra
@@ -108,15 +110,21 @@ namespace integra
         pump();
 
         // --- Arrange view ---------------------------------------------------------
-        doubleClick (lanes, { mapping.tickToX (1200), (float) rowMiddle });
+        // a new block is centred on the double-click (ArrangeView.createBlockOnDoubleClick);
+        // blocks move by their name strip at the top (BlockView._nameEdit)
+        const float stripY = 12.0f;
+        doubleClick (lanes, { mapping.tickToX (1200 + 10 * rate), (float) rowMiddle });
         pump();
-        t.check (p.tracks[0].blocks.size() == 2 && p.tracks[0].blocks[1].start == 1200,
-                 "double-click empty lane adds a block at the clicked time");
+        t.check (p.tracks[0].blocks.size() == 2 && p.tracks[0].blocks[1].start == 1200 && p.tracks[0].blocks[1].length() == 20 * rate,
+                 "double-click empty lane adds a 20 s block centred on the click");
 
         const auto block2 = p.tracks[0].blocks.size() > 1 ? p.tracks[0].blocks[1].path : juce::String();
         const int length = p.tracks[0].blocks.size() > 1 ? p.tracks[0].blocks[1].length() : 0;
         const float blockMiddle = mapping.tickToX (1200 + length / 2);
         drag (lanes, { blockMiddle, (float) rowMiddle }, { blockMiddle + (float) (10 * rate * mapping.pixelsPerTick), (float) rowMiddle });
+        pump();
+        t.check (p.findBlock (block2) != nullptr && p.findBlock (block2)->start == 1200, "dragging inside a block below its name strip doesn't move it");
+        drag (lanes, { blockMiddle, stripY }, { blockMiddle + (float) (10 * rate * mapping.pixelsPerTick), stripY });
         pump();
         t.check (p.findBlock (block2) != nullptr && p.findBlock (block2)->start == 1200 + 10 * rate,
                  "dragging a block moves it 10 s later (start " + juce::String (p.findBlock (block2) ? p.findBlock (block2)->start : -1) + ")");
@@ -136,7 +144,7 @@ namespace integra
         };
         auto describeRange = [] (juce::Range<int> r) { return juce::String (r.getStart()) + ".." + juce::String (r.getEnd()); };
         auto describeBlocks = [&] { return " (" + describeRange (blockRange (block1Path)) + " / " + describeRange (blockRange (block2)) + ")"; };
-        drag (lanes, { mapping.tickToX (100), (float) rowMiddle }, { mapping.tickToX (1300), (float) rowMiddle });
+        drag (lanes, { mapping.tickToX (100), stripY }, { mapping.tickToX (1300), stripY });
         pump();
         t.check (blockRange (block1Path) == juce::Range<int> (1200, 2000) && blockRange (block2) == juce::Range<int> (2000, 2600),
                  "dropping a block onto another pushes it along" + describeBlocks());
@@ -163,19 +171,20 @@ namespace integra
         const auto secondTrackY = (float) juce::jlimit (40, 600, p.tracks[0].userData.arrangeViewHeight)
                                   + juce::jlimit (40, 600, p.tracks[1].userData.arrangeViewHeight) / 2.0f;
         const float b2x = mapping.tickToX (p.findBlock (block2) ? p.findBlock (block2)->start + 40 : 0);
-        drag (lanes, { b2x, (float) rowMiddle }, { b2x, secondTrackY });
+        drag (lanes, { b2x, stripY }, { b2x, secondTrackY });
         pump();
         t.check (p.tracks.size() == 2 && p.tracks[1].blocks.size() == 1 && p.tracks[0].blocks.size() == 1,
                  "dragging a block down moves it to the next track");
 
         // scene by dragging in the ruler's scene bar
         auto& ruler = arrange.getRuler();
-        drag (ruler, { mapping.tickToX (0) + 0.5f, 8.0f }, { mapping.tickToX (8 * rate), 8.0f });
+        const float sceneY = TimelineRuler::sceneBarTop + TimelineRuler::sceneBarHeight / 2.0f;
+        drag (ruler, { mapping.tickToX (0) + 0.5f, sceneY }, { mapping.tickToX (8 * rate), sceneY });
         pump();
         t.check (p.scenes.size() == 1 && p.scenes[0].start == 0 && p.scenes[0].length == 8 * rate,
                  "dragging in the scene bar creates an 8 s scene");
 
-        click (ruler, { mapping.tickToX (20 * rate), 30.0f });
+        click (ruler, { mapping.tickToX (20 * rate), TimelineRuler::sceneBarBottom + 10.0f });
         pump();
         t.check (context.controller.getPlayPosition() == 20 * rate, "clicking the ruler moves the playhead");
 
@@ -198,19 +207,19 @@ namespace integra
             };
             auto describe = [] (juce::Range<int> r) { return " (" + juce::String (r.getStart()) + ".." + juce::String (r.getEnd()) + ")"; };
 
-            drag (ruler, { mapping.tickToX (320) - 3.0f, 8.0f }, { mapping.tickToX (480) - 3.0f, 8.0f });
+            drag (ruler, { mapping.tickToX (320) - 3.0f, sceneY }, { mapping.tickToX (480) - 3.0f, sceneY });
             pump();
             t.check (sceneRange (scene1) == juce::Range<int> (0, 480), "dragging a scene's end handle extends it" + describe (sceneRange (scene1)));
 
-            drag (ruler, { mapping.tickToX (480) - 3.0f, 8.0f }, { mapping.tickToX (200) - 3.0f, 8.0f });
+            drag (ruler, { mapping.tickToX (480) - 3.0f, sceneY }, { mapping.tickToX (200) - 3.0f, sceneY });
             pump();
             t.check (sceneRange (scene1) == juce::Range<int> (0, 200), "dragging a scene's end handle shortens it" + describe (sceneRange (scene1)));
 
-            drag (ruler, { mapping.tickToX (0) + 3.0f, 8.0f }, { mapping.tickToX (80) + 3.0f, 8.0f });
+            drag (ruler, { mapping.tickToX (0) + 3.0f, sceneY }, { mapping.tickToX (80) + 3.0f, sceneY });
             pump();
             t.check (sceneRange (scene1) == juce::Range<int> (80, 200), "dragging a scene's start handle shortens it from the left" + describe (sceneRange (scene1)));
 
-            drag (ruler, { mapping.tickToX (400), 8.0f }, { mapping.tickToX (600), 8.0f });
+            drag (ruler, { mapping.tickToX (400), sceneY }, { mapping.tickToX (600), sceneY });
             pump();
             juce::String scene2;
             for (auto& s : p.scenes)
@@ -218,7 +227,7 @@ namespace integra
                     scene2 = s.path;
             t.check (sceneRange (scene2) == juce::Range<int> (400, 600), "a second scene is created" + describe (sceneRange (scene2)));
 
-            drag (ruler, { mapping.tickToX (200) - 3.0f, 8.0f }, { mapping.tickToX (480) - 3.0f, 8.0f });
+            drag (ruler, { mapping.tickToX (200) - 3.0f, sceneY }, { mapping.tickToX (480) - 3.0f, sceneY });
             pump();
             t.check (sceneRange (scene1) == juce::Range<int> (80, 480) && sceneRange (scene2) == juce::Range<int> (480, 680),
                      "extending a scene pushes the next scene along" + describe (sceneRange (scene1)) + describe (sceneRange (scene2)));
@@ -229,7 +238,7 @@ namespace integra
                      "one undo restores both scenes" + describe (sceneRange (scene1)) + describe (sceneRange (scene2)));
 
             // end handle snaps to the end of the first block (800) within 10 pixels
-            drag (ruler, { mapping.tickToX (200) - 3.0f, 8.0f }, { mapping.tickToX (790) - 3.0f, 8.0f });
+            drag (ruler, { mapping.tickToX (200) - 3.0f, sceneY }, { mapping.tickToX (790) - 3.0f, sceneY });
             pump();
             t.check (sceneRange (scene1) == juce::Range<int> (80, 800) && sceneRange (scene2) == juce::Range<int> (800, 1000),
                      "a scene edge snaps to a block edge" + describe (sceneRange (scene1)) + describe (sceneRange (scene2)));
@@ -859,7 +868,7 @@ namespace integra
             const auto scene = context.controller.addScene (rate * 2, rate * 4);
             pump();
             const float sceneX = mapping.tickToX (rate * 4);
-            click (ruler, { sceneX, (float) TimelineRuler::sceneBarHeight / 2 });
+            click (ruler, { sceneX, TimelineRuler::sceneBarTop + TimelineRuler::sceneBarHeight / 2.0f });
             pump();
             t.check (properties.getContainerPath() == scene && properties.getTabs().getNumTabs() == 1 && properties.getTitlebar() != nullptr,
                      "clicking a scene shows its properties (" + properties.getContainerPath() + ")");
@@ -1155,7 +1164,7 @@ namespace integra
             auto& ruler = arrange.getRuler();
             const auto scene = context.controller.addScene (0, rate * 4);
             pump();
-            doubleClick (ruler, { mapping.tickToX (rate * 2), (float) TimelineRuler::sceneBarHeight / 2 });
+            doubleClick (ruler, { mapping.tickToX (rate * 2), TimelineRuler::sceneBarTop + TimelineRuler::sceneBarHeight / 2.0f });
             typeInto (ruler.getRenameEditor(), "Intro");
             t.check (p.findScene (parentPath (scene) + ".Intro") != nullptr, "double-clicking a scene renames it in place");
 
@@ -1477,6 +1486,266 @@ namespace integra
                         restored |= c.sourcePath == audioIn + ".out" && c.targetPath == audioOut + ".in1";
                 t.check (restored && ! context.session.nodeExists (delayPath), "one undo takes the splice back");
             }
+        }
+
+        // --- Arrange view gaps: collapse, colour wheel, new blocks and tracks, import /
+        //     export track, ruler zoom strip, scene Backspace, breadcrumbs, envelope
+        //     title bar, Ctrl+E ---------------------------------------------------------
+        {
+            context.controller.newProject();
+            main.showView ("arrange");
+            pump();
+            auto& undo = context.controller.getUndoManager();
+            auto undoOnce = [&] { undo.undo(); model.rebuild(); pump(); };
+            const auto track = p.tracks.at (0).path;
+            const auto firstBlock = p.tracks[0].blocks.at (0).path;
+            const int blockY = juce::jlimit (40, 600, p.tracks[0].userData.arrangeViewHeight) / 2;
+
+            // collapse button and title bar double-click (ViewHolder)
+            click (lanes, lanes.getCollapseButtonBounds (track).getCentre());
+            pump();
+            t.check (p.tracks.size() == 1 && ! p.tracks[0].userData.arrangeViewExpanded
+                        && lanes.getTotalHeight() == TrackLanes::collapsedTrackHeight + TrackLanes::addTrackHeight,
+                     "the collapse button collapses a track to its title bar");
+            lanes.mouseDoubleClick (makeEvent (lanes, { mapping.tickToX (100), 15.0f }, { mapping.tickToX (100), 15.0f }, 2, false));
+            pump();
+            t.check (p.tracks[0].blocks.size() == 1 && main.getCurrentView() == "arrange", "...its blocks are hidden and can't be hit");
+            undoOnce();
+            t.check (p.tracks[0].userData.arrangeViewExpanded, "...undoable");
+            const float titleX = (float) lanes.getActiveButtonBounds (track).getX() - 12.0f;
+            lanes.mouseDoubleClick (makeEvent (lanes, { titleX, 40.0f }, { titleX, 40.0f }, 2, false));
+            pump();
+            const bool collapsedByTitle = ! p.tracks[0].userData.arrangeViewExpanded;
+            lanes.mouseDoubleClick (makeEvent (lanes, { titleX, 15.0f }, { titleX, 15.0f }, 2, false));
+            pump();
+            t.check (! collapsedByTitle && ! p.tracks[0].userData.arrangeViewExpanded, "double-clicking the title bar collapses it (not lower in the header)");
+            click (lanes, lanes.getCollapseButtonBounds (track).getCentre());
+            pump();
+            t.check (p.tracks[0].userData.arrangeViewExpanded, "...and the button expands it again");
+
+            // colour wheel (TrackColorPicker): one undo step per drag
+            const auto originalColour = p.tracks[0].userData.getColour();
+            auto* picker = TrackColourPicker::show (context, track, lanes, { 40, 20 });
+            t.check (picker != nullptr && picker->isVisible() && picker->getWidth() == TrackColourPicker::diameter, "Change Track Colour opens the colour wheel");
+            if (picker != nullptr)
+            {
+                const juce::Point<float> from (40.0f, 64.0f), to (110.0f, 30.0f);
+                drag (*picker, from, to);
+                pump();
+                const auto chosen = p.tracks[0].userData.getColour();
+                t.check (chosen != originalColour && chosen.getARGB() == picker->colourAt (to).getARGB() && TrackColourPicker::getCurrent() == nullptr,
+                         "dragging on the wheel sets the track colour and closes it");
+                undoOnce();
+                t.check (p.tracks[0].userData.getColour() == originalColour, "...in one undo step");
+            }
+            picker = TrackColourPicker::show (context, track, lanes, { 40, 20 });
+            if (picker != nullptr)
+            {
+                picker->close();    // what a click outside it does
+                pump();
+            }
+            t.check (TrackColourPicker::getCurrent() == nullptr && p.tracks[0].userData.getColour() == originalColour, "...closing it leaves the colour");
+
+            // a new block centred on a double-click pushes later blocks (createBlock)
+            const int rate = p.player.rate;
+            const auto later = context.controller.addBlock (track, 1000, 1800);
+            pump();
+            lanes.mouseDoubleClick (makeEvent (lanes, { mapping.tickToX (900), (float) blockY }, { mapping.tickToX (900), (float) blockY }, 2, false));
+            pump();
+            auto rangeOf = [&] (const juce::String& path) { auto* b = p.findBlock (path); return b != nullptr ? juce::Range<int> (b->start, b->end) : juce::Range<int>(); };
+            const auto created = model.selectedBlock;
+            t.check (rangeOf (created) == juce::Range<int> (800, 800 + 20 * rate) && rangeOf (later) == juce::Range<int> (800 + 20 * rate, 1600 + 20 * rate),
+                     "a block created inside another starts at its end and pushes later blocks along");
+            undoOnce();
+            t.check (p.findBlock (created) == nullptr && rangeOf (later) == juce::Range<int> (1000, 1800), "...in one undo step");
+
+            model.selectedTrack = track;
+            main.invokeCommand (MainComponent::cmdCreateBlock);
+            pump();
+            t.check (p.tracks[0].blocks.size() == 3 && p.tracks[0].blocks[2].start == 1800, "Ctrl+B creates a block after the track's last block");
+
+            // below the tracks: click selects the project, double-click adds a track
+            const float below = (float) lanes.getTotalHeight() - TrackLanes::addTrackHeight + 10.0f;
+            click (lanes, { mapping.tickToX (400), below });
+            pump();
+            t.check (model.selectedTrack.isEmpty() && model.selectedBlock.isEmpty() && main.getProperties().getContainerPath() == p.path,
+                     "clicking below the tracks shows the project");
+            lanes.mouseDoubleClick (makeEvent (lanes, { mapping.tickToX (400), below }, { mapping.tickToX (400), below }, 2, false));
+            pump();
+            t.check (p.tracks.size() == 2, "double-clicking below the tracks adds a track");
+            model.selectedTrack = p.tracks.at (1).path;
+            main.invokeCommand (MainComponent::cmdDeleteTrack);
+            pump();
+            t.check (p.tracks.size() == 1, "Ctrl+Shift+T deletes the selected track");
+
+            // export and import a track (ImportTrack: last, envelopes driven by the player)
+            context.controller.addEnvelope (firstBlock, firstBlock + ".StereoAudioOut1.inLevel");
+            pump();
+            auto file = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("integra-gui-test-track.integra");
+            file.deleteFile();
+            t.check (context.controller.exportNode (track, file).wasOk() && file.existsAsFile(), "Export Track saves the track");
+            auto envelopeDrives = [&] (const juce::String& trackPath)
+            {
+                int envelopes = 0, driven = 0;
+                if (auto* tr = p.findTrack (trackPath))
+                {
+                    std::vector<juce::String> paths;
+                    for (auto& e : tr->blockEnvelopes) paths.push_back (e.path);
+                    for (auto& b : tr->blocks) for (auto& e : b.envelopes) paths.push_back (e.path);
+                    for (auto& path : paths)
+                    {
+                        ++envelopes;
+                        for (auto& c : p.connections)
+                            if (c.targetPath == path + ".currentTick" && c.sourcePath == p.player.path + ".tick")
+                            {
+                                ++driven;
+                                break;
+                            }
+                    }
+                }
+                return std::make_pair (envelopes, driven);
+            };
+            juce::String imported;
+            t.check (context.controller.importTrack (file, &imported).wasOk() && p.tracks.size() == 2 && p.tracks[1].path == imported
+                        && model.selectedTrack == imported && p.tracks[1].blocks.size() == p.tracks[0].blocks.size(),
+                     "Import Track adds it as the last track, selected");
+            const auto drives = envelopeDrives (imported);
+            t.check (drives.first >= 4 && drives.first == drives.second,
+                     "...with every envelope driven by the player (" + juce::String (drives.second) + " of " + juce::String (drives.first) + ")");
+            undoOnce();
+            t.check (p.tracks.size() == 1, "...one undo removes it");
+            auto blockFile = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("integra-gui-test-block.integra");
+            context.controller.exportNode (firstBlock, blockFile);
+            t.check (context.controller.importTrack (blockFile).failed() && p.tracks.size() == 1, "...and refuses a block file");
+            file.deleteFile();
+            blockFile.deleteFile();
+
+            // the ruler's zoom / scroll strip (Timeline: 15 px dead zone, 50 px per doubling)
+            auto& ruler = arrange.getRuler();
+            const double zoomBefore = mapping.pixelsPerTick;
+            const juce::Point<float> grab (mapping.tickToX (400), 5.0f);
+            drag (ruler, grab, grab + juce::Point<float> (0.0f, 65.0f));
+            pump();
+            t.check (std::abs (mapping.pixelsPerTick - zoomBefore * 2.0) < zoomBefore * 0.01 && std::abs (mapping.xToTick (grab.x) - 400.0) < 2.0,
+                     "dragging the ruler's top strip down zooms in about the clicked time");
+            const double scrollBefore = mapping.scrollTicks, zoomNow = mapping.pixelsPerTick;
+            {
+                const auto shift = juce::ModifierKeys (juce::ModifierKeys::shiftModifier | juce::ModifierKeys::leftButtonModifier);
+                ruler.mouseDown (makeEvent (ruler, grab, grab, 1, false, shift));
+                for (int i = 1; i <= 8; ++i)
+                {
+                    auto at = grab + juce::Point<float> (-10.0f * i, 4.0f * i);
+                    ruler.mouseDrag (makeEvent (ruler, at, grab, 1, true, shift));
+                }
+                ruler.mouseUp (makeEvent (ruler, grab + juce::Point<float> (-80.0f, 32.0f), grab, 1, true, shift));
+                pump();
+            }
+            t.check (juce::approximatelyEqual (mapping.pixelsPerTick, zoomNow) && mapping.scrollTicks > scrollBefore,
+                     "...with Shift, a mostly sideways drag only scrolls");
+            arrange.zoom (zoomBefore / mapping.pixelsPerTick, (float) mapping.laneX);
+            pump();
+
+            // Backspace deletes the selected scene (Timeline context menu)
+            const auto scene = context.controller.addScene (juce::roundToInt (mapping.xToTick ((float) mapping.laneX + 40.0f)), 200);
+            context.controller.activateScene (scene);
+            pump();
+            ruler.keyPressed (juce::KeyPress (juce::KeyPress::backspaceKey));
+            pump();
+            t.check (p.scenes.empty(), "Backspace deletes the selected scene");
+
+            // breadcrumbs (Breadcrumbs.as): project and track links above the block
+            auto& properties = main.getProperties();
+            model.selectedTrack = track;
+            model.selectedBlock = firstBlock;
+            properties.selectionChanged();
+            auto& crumbs = properties.getBreadcrumbs();
+            t.check (crumbs.getNumCrumbs() == 2, "a block's title shows project and track breadcrumbs");
+            click (crumbs, crumbs.getCrumbBounds (1).getCentre().toFloat());
+            pump();
+            t.check (model.selectedBlock.isEmpty() && model.selectedTrack == track && crumbs.getNumCrumbs() == 1, "clicking the track crumb shows the track");
+            click (crumbs, crumbs.getCrumbBounds (0).getCentre().toFloat());
+            pump();
+            t.check (model.selectedTrack.isEmpty() && properties.getContainerPath() == p.path && crumbs.getNumCrumbs() == 0,
+                     "clicking the project crumb shows the project");
+
+            // envelope title bar (BlockPropertiesTitlebar)
+            model.selectedTrack = track;
+            model.selectedBlock = firstBlock;
+            lanes.editedEnvelope = {};
+            properties.selectionChanged();
+            // its controls: the module and attribute lists and the delete button
+            auto titlebarParts = [&]
+            {
+                std::vector<juce::ComboBox*> combos;
+                std::vector<juce::TextButton*> deleteButtons;
+                if (auto* bar = properties.getTitlebar())
+                {
+                    findAll (*bar, combos);
+                    findAll (*bar, deleteButtons);
+                }
+                return std::make_pair (combos, deleteButtons);
+            };
+            auto parts = titlebarParts();
+            t.check (parts.first.size() == 2 && parts.second.size() == 1, "a block's title bar has the envelope selection");
+            if (parts.first.size() == 2 && parts.second.size() == 1)
+            {
+                auto envelopeCount = [&] { auto* b = p.findBlock (firstBlock); return b != nullptr ? (int) b->envelopes.size() : 0; };
+                const int before = envelopeCount();
+                auto choose = [] (juce::ComboBox& box, const juce::String& text)
+                {
+                    for (int i = 0; i < box.getNumItems(); ++i)
+                        if (box.getItemText (i) == text)
+                            box.setSelectedItemIndex (i);
+                };
+                choose (*parts.first[0], "AudioIn1");
+                pump();     // the attribute list follows the module asynchronously
+                parts = titlebarParts();
+                choose (*parts.first[1], "outLevel");
+                pump();
+                parts = titlebarParts();
+                t.check (envelopeCount() == before + 1 && lanes.editedEnvelope.isNotEmpty() && ! parts.second.empty() && parts.second[0]->isEnabled(),
+                         "choosing a module and attribute adds an envelope and selects it");
+                if (! parts.second.empty())
+                    parts.second[0]->triggerClick();
+                pump();
+                t.check (envelopeCount() == before && lanes.editedEnvelope.isEmpty(), "the delete button removes the selected envelope");
+            }
+
+            // Ctrl+E runs the script (ScriptingView.execute)
+            auto& tabs = properties.getTabs();
+            for (int i = 0; i < tabs.getNumTabs(); ++i)
+                if (tabs.getTabNames()[i] == "Scripting")
+                    tabs.setCurrentTabIndex (i);
+            pump();
+            if (auto* content = tabs.getCurrentContentComponent())
+            {
+                std::vector<juce::TextButton*> scriptButtons;
+                findAll (*content, scriptButtons);
+                for (auto* b : scriptButtons)
+                    if (b->getButtonText() == "+ New")
+                        b->triggerClick();
+                pump();
+                std::vector<juce::CodeEditorComponent*> editors;
+                findAll (*content, editors);
+                if (! editors.empty())
+                {
+                    editors[0]->getDocument().replaceAllContent ("StereoAudioOut1.inLevel = 0.25");
+                    editors[0]->grabKeyboardFocus();
+                    if (auto* peer = main.getPeer())
+                        peer->handleKeyPress (juce::KeyPress ('e', juce::ModifierKeys::commandModifier, 'e'));
+                    pump (300);
+                    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+                    t.check (std::abs ((double) context.session.getValue (firstBlock + ".StereoAudioOut1.inLevel") - 0.25) < 1.0e-6,
+                             "Ctrl+E in the script editor runs the script (value " + context.session.getValue (firstBlock + ".StereoAudioOut1.inLevel").toString()
+                                + ", scripts " + juce::String (p.findBlock (firstBlock) ? (int) p.findBlock (firstBlock)->scripts.size() : -1)
+                                + ", focus " + (focused ? typeid (*focused).name() : "none") + ")");
+                    t.check (editors[0]->getDocument().getAllContent() == "StereoAudioOut1.inLevel = 0.25", "...without typing into it");
+                }
+                else
+                    t.check (false, "script editor found");
+            }
+            tabs.setCurrentTabIndex (0);
+            saveShot (main, "arrange-batch5.png");
         }
 
         // --- "Loading..." message ------------------------------------------------------

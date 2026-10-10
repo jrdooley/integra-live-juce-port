@@ -73,8 +73,20 @@ namespace integra
         void setTrackColour (juce::String trackPath, juce::Colour);
         void setTrackHeight (juce::String trackPath, int height);
         void moveTrack (juce::String trackPath, int newIndex);
+        /** Arrange view collapse button (SetTrackExpanded): a collapsed track shows only its
+            title bar. */
+        void setTrackExpanded (juce::String trackPath, bool expanded);
+        /** Shows a colour on a track without an undo step, while the colour wheel is dragged;
+            the release then sets it with setTrackColour (TrackColorPicker: one step per drag). */
+        void previewTrackColour (juce::String trackPath, juce::Colour);
+        /** Imports a saved track (.integra) as the last track (ImportTrack): its envelopes are
+            connected to the player again, and it is selected. One undo step. */
+        juce::Result importTrack (const juce::File&, juce::String* newTrackPath = nullptr);
 
         juce::String addBlock (juce::String trackPath, int startTick, int endTick, bool withDefaultContents = true);
+        /** ArrangeView.createBlock: a new block of newBlockSeconds starting at startTick (or at
+            the end of a block it falls inside), pushing later blocks along. One undo step. */
+        juce::String createBlock (juce::String trackPath, int startTick);
         void repositionBlock (juce::String blockPath, int startTick, int endTick);
         juce::String moveBlockToTrack (juce::String blockPath, juce::String trackPath);
 

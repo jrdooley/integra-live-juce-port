@@ -521,6 +521,22 @@ namespace integra
         updateTrackUserData (trackPath, [height] (TrackUserData& d) { d.arrangeViewHeight = juce::jlimit (24, 600, height); });
     }
 
+    void ProjectController::setTrackExpanded (juce::String trackPath, bool expanded)
+    {
+        updateTrackUserData (trackPath, [expanded] (TrackUserData& d) { d.arrangeViewExpanded = expanded; });
+    }
+
+    void ProjectController::previewTrackColour (juce::String trackPath, juce::Colour colour)
+    {
+        if (auto* track = model.get().findTrack (trackPath))
+        {
+            auto data = track->userData;
+            data.colour = colour.getARGB() & 0xffffff;
+            session.setValue (trackPath + ".userData", data.toString());
+            model.rebuild();
+        }
+    }
+
     void ProjectController::moveTrack (juce::String trackPath, int newIndex)
     {
         auto tracks = model.get().tracks;
@@ -595,6 +611,39 @@ namespace integra
                 if (out) addModule (block, out->guid, { moduleWidth * 4 + margin, top });
                 if (in)  addModule (block, in->guid, { margin, top });
             }
+
+            model.rebuild();
+            model.selectedTrack = trackPath;
+            model.selectedBlock = block;
+            return block;
+        });
+    }
+
+    juce::String ProjectController::createBlock (juce::String trackPath, int startTick)
+    {
+        auto* track = model.get().findTrack (trackPath);
+        if (track == nullptr)
+            return {};
+
+        startTick = juce::jmax (0, startTick);
+        for (auto& b : track->blocks)
+            if (b.start <= startTick && startTick < b.end)
+                startTick = b.end;
+        const int endTick = startTick + newBlockSeconds * juce::jmax (1, model.get().player.rate);
+
+        return transaction ("Add Block", [&]
+        {
+            auto block = addBlock (trackPath, startTick, endTick);
+            if (block.isEmpty())
+                return block;
+
+            // doBlockRescheduling with the new block as the dragged one
+            std::map<juce::String, juce::Range<int>> ranges { { block, { startTick, endTick } } };
+            if (auto* t = model.get().findTrack (trackPath))
+                rescheduleBlocks (*t, block, true, ranges);
+            ranges.erase (block);
+            for (auto& [path, range] : ranges)
+                repositionBlock (path, range.getStart(), range.getEnd());
 
             model.rebuild();
             model.selectedTrack = trackPath;
@@ -1232,6 +1281,82 @@ namespace integra
         });
     }
 
+    namespace
+    {
+        /** A node loaded from a file, as an undoable "create": undo deletes it, redo loads it again. */
+        struct LoadedNodeAction  : IntegraAction
+        {
+            LoadedNodeAction (IntegraSession& s, juce::String p, juce::File f)
+                : IntegraAction (s), path (p), source (f) {}
+            bool perform() override { return firstTime ? ! (firstTime = false) : session.loadFile (source, parentPath (path)) == CError::SUCCESS; }
+            bool undo() override    { return session.deleteNode (path) == CError::SUCCESS; }
+            juce::String path; juce::File source; bool firstTime = true;
+        };
+    }
+
+    juce::Result ProjectController::importTrack (const juce::File& file, juce::String* newTrackPath)
+    {
+        auto& p = model.get();
+        if (! p.valid)
+            return juce::Result::fail ("No project");
+
+        const auto projectPath = p.path, playerPath = p.player.path;
+        auto before = session.getChildNames (projectPath);
+        int zIndex = 0;
+        for (auto& t : p.tracks)
+            zIndex = juce::jmax (zIndex, (int) session.getValue (t.path + ".zIndex") + 1);
+
+        return transaction ("Import Track", [&]
+        {
+            if (session.loadFile (file, projectPath) != CError::SUCCESS)
+                return juce::Result::fail ("Cannot import \"" + file.getFileName() + "\":\n" + session.getLastError());
+
+            juce::String imported;
+            for (auto& name : session.getChildNames (projectPath))
+                if (! before.contains (name))
+                    imported = projectPath + "." + name;
+
+            // a track holds blocks, envelopes and routing; a block file has modules in it
+            bool isTrack = imported.isNotEmpty() && session.getModuleName (imported) == "Container";
+            if (isTrack)
+                for (auto& child : session.getChildNames (imported))
+                    if (! juce::StringArray { "Container", "Envelope", "Connection", "Scaler", "Script", "MidiControlInput" }
+                              .contains (session.getModuleName (imported + "." + child)))
+                        isTrack = false;
+            if (! isTrack)
+            {
+                if (imported.isNotEmpty())
+                    session.deleteNode (imported);
+                return juce::Result::fail ("This file cannot be imported as a track");
+            }
+
+            perform (new LoadedNodeAction (session, imported, file));
+
+            // ImportTrack.onLoaded: the player drives every envelope in it, and it goes last
+            std::function<void (const juce::String&)> connectEnvelopes = [&] (const juce::String& container)
+            {
+                for (auto& child : session.getChildNames (container))
+                {
+                    const auto path = container + "." + child;
+                    const auto kind = session.getModuleName (path);
+                    if (kind == "Envelope" && playerPath.isNotEmpty())
+                        addConnectionNode (projectPath, playerPath + ".tick", path + ".currentTick");
+                    else if (kind == "Container")
+                        connectEnvelopes (path);
+                }
+            };
+            connectEnvelopes (imported);
+            setValueInTransaction (imported + ".zIndex", zIndex);
+
+            model.rebuild();
+            model.selectedTrack = imported;
+            model.selectedBlock = {};
+            if (newTrackPath != nullptr)
+                *newTrackPath = imported;
+            return juce::Result::ok();
+        });
+    }
+
     juce::Result ProjectController::importBlock (const juce::File& file, juce::String trackPath, int startTick, juce::String* newBlockPath)
     {
         if (model.get().findTrack (trackPath) == nullptr)
@@ -1262,14 +1387,6 @@ namespace integra
             }
 
             // record the load as an undoable "create" so undo removes it
-            struct LoadedNodeAction  : IntegraAction
-            {
-                LoadedNodeAction (IntegraSession& s, juce::String p, juce::File f)
-                    : IntegraAction (s), path (p), source (f) {}
-                bool perform() override { return firstTime ? ! (firstTime = false) : session.loadFile (source, parentPath (path)) == CError::SUCCESS; }
-                bool undo() override    { return session.deleteNode (path) == CError::SUCCESS; }
-                juce::String path; juce::File source; bool firstTime = true;
-            };
             perform (new LoadedNodeAction (session, imported, file));
 
             // Blocks exported from the Flex GUI don't carry their block envelope (it lives
