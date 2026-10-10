@@ -99,3 +99,19 @@ initialiser; built into a static library with nothing referencing that object fi
 linker left it out. `fsplay::Setup` now references the global. All six demo blocks play
 since (four were silent). Also fixed: the app never set `EndpointInfo::isInputFile`
 (libIntegra's public API had no way to ask; `IStateInfo::get_is_input_file()` added).
+
+### Platform fixes after the upgrade
+
+- **macOS and Linux**: `copy` and `partconv~` called `error()`, which Pd 0.56 no longer
+  declares. Apple clang refused; on Linux the call silently linked against glibc's
+  unrelated `error(status, errnum, fmt)`, which exits the process. They use `pd_error()`,
+  and implicit function declarations are now compile errors for Pd and the externals on
+  every compiler.
+- **Windows**: `iemlib.h` relied on Pd 0.43's `int32`; and since Pd 0.56's `m_pd.h`
+  declares everything `dllimport` outside libpd itself, the static build defines
+  `EXTERN=extern` (libpd's own CMake has the same switch, `PD_DEFINE_EXTERN`).
+- **Convolution on macOS**: CI's stress test still saw NaN from `partconv~` after its
+  file was set to an empty or invalid value. Not reproducible on Linux, so the exact
+  origin is unconfirmed; `partconv~` now replaces non-finite impulse-response samples with
+  0 and, if a block's output is ever non-finite, outputs silence and clears its
+  accumulators so it recovers instead of staying NaN.

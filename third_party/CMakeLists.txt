@@ -61,6 +61,9 @@ target_compile_definitions(integra_libpd
     PRIVATE PD_INTERNAL=1)
 if(WIN32)
     # 64-bit Windows: long is 32 bits, Pd needs a pointer-sized integer
+    # statically linked: plain extern (m_pd.h otherwise declares everything dllimport
+    # outside libpd itself; libpd's CMake offers the same through PD_DEFINE_EXTERN)
+    target_compile_definitions(integra_libpd PUBLIC "EXTERN=extern")
     target_compile_definitions(integra_libpd PUBLIC "PD_LONGINTTYPE=long long" WINVER=0x0601 _WIN32_WINNT=0x0601
                                              PRIVATE WIN32 _WIN32 _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
     if(MSVC)

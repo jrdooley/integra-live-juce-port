@@ -225,8 +225,21 @@ static t_int *partconv_perform(t_int *w)
 	// and the second half of the previous one
 	sumbuf1ptr = &(x->sumbuf->td[x->sumbuf->readpos]);
 	sumbuf2ptr = &(x->sumbuf->prev->td[x->sumbuf->prev->readpos]);
-	for (i = 0; i < n; i++) {
-		out[i] = (sumbuf1ptr[i] + sumbuf2ptr[i]) * x->scale;
+	{
+		int finite = 1;
+		for (i = 0; i < n; i++) {
+			out[i] = (sumbuf1ptr[i] + sumbuf2ptr[i]) * x->scale;
+			if (!isfinite(out[i]))
+				finite = 0;
+		}
+		/* Integra Live port: if the convolution ever goes non-finite (seen on macOS with
+		   an empty or invalid impulse response), output silence and clear the
+		   accumulators so it recovers, rather than producing NaN forever */
+		if (!finite) {
+			memset(out, 0, n * sizeof(t_float));
+			for (i = 0; i < x->nsumbufs; i++)
+				memset(x->sumbufs[i].fd, 0, sizeof(float) * x->paddedsize);
+		}
 	}
 	x->sumbuf->readpos += n;
 	x->sumbuf->prev->readpos += n;
@@ -292,7 +305,8 @@ static void partconv_set(t_partconv *x, t_symbol *s)
 		x->irpart_fd[i] = (fftwf_complex *) x->irpart_td[i];
 		x->irpart_plan = fftwf_plan_dft_r2c_1d(x->fftsize, x->irpart_td[i], x->irpart_fd[i], FFTW_MEASURE);
 		for (j = 0; j < x->partsize && arraypos < arraysize; j++, arraypos++) {
-			x->irpart_td[i][j] = array[arraypos].w_float;
+			/* Integra Live port: a non-finite sample would poison every later output */
+			x->irpart_td[i][j] = isfinite(array[arraypos].w_float) ? array[arraypos].w_float : 0;
 		}
 		for ( ; j < x->paddedsize; j++) {
 			x->irpart_td[i][j] = 0;
