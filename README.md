@@ -103,6 +103,7 @@ platforms; the Windows job uploads a ready-to-run `integra-live-windows-x64` art
 7. [Windows (and macOS) build](docs/06-windows.md)
 8. [macOS packaging and signing](docs/07-macos-packaging.md)
 9. [Feature parity with the Flex GUI](docs/08-flex-parity.md)
+10. [Robustness pass: stress test, sanitizers, crash fixes](docs/09-robustness.md)
 
 ## Licences
 

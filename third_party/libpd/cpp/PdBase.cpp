@@ -848,12 +848,12 @@ void PdBase::PdContext::addMessage(pd::Message& msg) {
 PdBase::PdContext::PdContext() {
     receiver = NULL;
     midiReceiver = NULL;
-    clear();
-    maxMsgLen = 32;
-
+    // Integra Live port: the flags are set before clear(), which reads bInited
 	bLibPDInited = false;
     bInited = false;
     numBases = false;
+    clear();
+    maxMsgLen = 32;
 
     maxQueueLen = 1000;
 }

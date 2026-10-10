@@ -364,9 +364,12 @@ namespace integra
                                 if (auto i = EndpointInfo::fromDefinition (*ep); i.isNumeric() && i.canBeTarget && random.nextBool())
                                 {
                                     action = "add envelope";
-                                    auto envelope = controller.addEnvelope (b->path, m.path + "." + i.name);
+                                    // copy first: each edit rebuilds the model, freeing `b` and `m`
+                                    const auto blockPath = b->path, target = m.path + "." + i.name;
+                                    const int length = juce::jmax (1, b->end - b->start);
+                                    auto envelope = controller.addEnvelope (blockPath, target);
                                     if (envelope.isNotEmpty())
-                                        controller.addControlPoint (envelope, random.nextInt (juce::jmax (1, b->end - b->start)), random.nextFloat());
+                                        controller.addControlPoint (envelope, random.nextInt (length), random.nextFloat());
                                     break;
                                 }
                     }

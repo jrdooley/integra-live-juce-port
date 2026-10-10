@@ -421,6 +421,7 @@ namespace integra
         if (auto* blk = p.findBlock (block1); blk != nullptr && ! blk->envelopes.empty())
         {
             const auto envelope = blk->envelopes.front().path;
+            const int blockStart = blk->start;     // `blk` dies at the next model rebuild
             const auto pointA = context.controller.addControlPoint (envelope, 200, 0.2f);
             const auto pointB = context.controller.addControlPoint (envelope, 400, 0.2f);
             pump();
@@ -440,7 +441,7 @@ namespace integra
 
             if (auto pos = lanes.getControlPointPosition (pointA))
             {
-                drag (lanes, *pos, { mapping.tickToX (blk->start + 600), pos->y });
+                drag (lanes, *pos, { mapping.tickToX (blockStart + 600), pos->y });
                 pump();
             }
             t.check (pointTick (pointA) == 399, "a control point can't be dragged past the next one (tick " + juce::String (pointTick (pointA)) + ")");
@@ -1533,10 +1534,11 @@ namespace integra
             if (picker != nullptr)
             {
                 const juce::Point<float> from (40.0f, 64.0f), to (110.0f, 30.0f);
+                const auto expected = picker->colourAt (to);     // the wheel deletes itself on release
                 drag (*picker, from, to);
                 pump();
                 const auto chosen = p.tracks[0].userData.getColour();
-                t.check (chosen != originalColour && chosen.getARGB() == picker->colourAt (to).getARGB() && TrackColourPicker::getCurrent() == nullptr,
+                t.check (chosen != originalColour && chosen.getARGB() == expected.getARGB() && TrackColourPicker::getCurrent() == nullptr,
                          "dragging on the wheel sets the track colour and closes it");
                 undoOnce();
                 t.check (p.tracks[0].userData.getColour() == originalColour, "...in one undo step");

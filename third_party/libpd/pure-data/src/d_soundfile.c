@@ -478,15 +478,15 @@ static void soundfile_xferin_sample(int sfchannels, int nvecs, t_sample **vecs,
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *(long *)fp = ((sp2[0] << 24) | (sp2[1] << 16)
-                            | (sp2[2] << 8) | sp2[3]);
+                        { uint32_t u = (((uint32_t)sp2[0] << 24) | (sp2[1] << 16)
+                            | (sp2[2] << 8) | sp2[3]); memcpy(fp, &u, 4); }   /* Integra Live port: was *(long *)fp, 8 bytes on LP64 */
             }
             else
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *(long *)fp = ((sp2[3] << 24) | (sp2[2] << 16)
-                            | (sp2[1] << 8) | sp2[0]);
+                        { uint32_t u = (((uint32_t)sp2[3] << 24) | (sp2[2] << 16)
+                            | (sp2[1] << 8) | sp2[0]); memcpy(fp, &u, 4); }   /* Integra Live port: was *(long *)fp, 8 bytes on LP64 */
             }
         }
     }
@@ -546,15 +546,15 @@ static void soundfile_xferin_float(int sfchannels, int nvecs, t_float **vecs,
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *(long *)fp = ((sp2[0] << 24) | (sp2[1] << 16)
-                            | (sp2[2] << 8) | sp2[3]);
+                        { uint32_t u = (((uint32_t)sp2[0] << 24) | (sp2[1] << 16)
+                            | (sp2[2] << 8) | sp2[3]); memcpy(fp, &u, 4); }   /* Integra Live port: was *(long *)fp, 8 bytes on LP64 */
             }
             else
             {
                 for (j = 0, sp2 = sp, fp=vecs[i] + spread * itemsread;
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
-                        *(long *)fp = ((sp2[3] << 24) | (sp2[2] << 16)
-                            | (sp2[1] << 8) | sp2[0]);
+                        { uint32_t u = (((uint32_t)sp2[3] << 24) | (sp2[2] << 16)
+                            | (sp2[1] << 8) | sp2[0]); memcpy(fp, &u, 4); }   /* Integra Live port: was *(long *)fp, 8 bytes on LP64 */
             }
         }
     }
@@ -992,7 +992,7 @@ static void soundfile_xferout_sample(int nchannels, t_sample **vecs,
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
                 {
                     t_sample f2 = *fp * normalfactor;
-                    xx = *(long *)&f2;
+                    { uint32_t u; memcpy(&u, &f2, 4); xx = (long)u; }   /* Integra Live port: was *(long *)&f2 */
                     sp2[0] = (xx >> 24); sp2[1] = (xx >> 16);
                     sp2[2] = (xx >> 8); sp2[3] = xx;
                 }
@@ -1003,7 +1003,7 @@ static void soundfile_xferout_sample(int nchannels, t_sample **vecs,
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
                 {
                     t_sample f2 = *fp * normalfactor;
-                    xx = *(long *)&f2;
+                    { uint32_t u; memcpy(&u, &f2, 4); xx = (long)u; }   /* Integra Live port: was *(long *)&f2 */
                     sp2[3] = (xx >> 24); sp2[2] = (xx >> 16);
                     sp2[1] = (xx >> 8); sp2[0] = xx;
                 }
@@ -1100,7 +1100,7 @@ static void soundfile_xferout_float(int nchannels, t_float **vecs,
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
                 {
                     t_sample f2 = *fp * normalfactor;
-                    xx = *(long *)&f2;
+                    { uint32_t u; memcpy(&u, &f2, 4); xx = (long)u; }   /* Integra Live port: was *(long *)&f2 */
                     sp2[0] = (xx >> 24); sp2[1] = (xx >> 16);
                     sp2[2] = (xx >> 8); sp2[3] = xx;
                 }
@@ -1111,7 +1111,7 @@ static void soundfile_xferout_float(int nchannels, t_float **vecs,
                     j < nitems; j++, sp2 += bytesperframe, fp += spread)
                 {
                     t_sample f2 = *fp * normalfactor;
-                    xx = *(long *)&f2;
+                    { uint32_t u; memcpy(&u, &f2, 4); xx = (long)u; }   /* Integra Live port: was *(long *)&f2 */
                     sp2[3] = (xx >> 24); sp2[2] = (xx >> 16);
                     sp2[1] = (xx >> 8); sp2[0] = xx;
                 }
