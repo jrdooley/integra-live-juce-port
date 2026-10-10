@@ -29,6 +29,7 @@ Flex paths are relative to `GUI/src/components/`.
 | File and folder widgets | `FileLoadDialogControl.as`, `LocateFolderDialogControl.as` | FileLoadDialog and LocateFolderDialog are real file/folder choosers instead of a slider; choosers start at the current file. *(No automated test.)* |
 | Module library tags | `ModuleLibrary.as` | The tag list is rebuilt when modules are installed. *(No automated test.)* |
 | Pin drag | — | The connection being dragged no longer points into the graph's module list, which is rebuilt on model changes. *(No automated test.)* |
+| Envelope curvature | `EnvelopeView.as`, `BlockView.as` | Curve mode button and menu item (stored per block, as Flex did), drag a segment to bend it, double-click to straighten it; curves drawn as libIntegra interpolates them. |
 | MIDI indicator | `MidiInputIndicator.as` | Lights for every incoming message, including repeats of the same message. *(No automated test.)* |
 
 ## Arrange view and timeline
@@ -48,8 +49,7 @@ Flex paths are relative to `GUI/src/components/`.
 * Blocks: multi-select (Ctrl/Cmd-click) with group move/delete; moving only by the title strip; a new block
   centred on a double-click that pushes later blocks; Ctrl+B / Ctrl+Shift+B; inline rename;
   **Block Library panel** with drag onto a track.
-* Envelopes: **curvature editing** (drag a segment, double-click to straighten; curves
-  are also drawn straight), envelope lock / Shift, click the line to select and add a point
+* Envelopes: envelope lock / Shift, click the line to select and add a point
   (now: pick from a menu, then double-click), double-click a point to delete it (now
   right-click), value/time readout while dragging, add/remove envelopes from the block
   title bar.

@@ -614,6 +614,78 @@ namespace integra
         return { x, r.getBottom() - 3.0f - unit * (r.getHeight() - 20.0f) };
     }
 
+    bool TrackLanes::isCurveMode() const
+    {
+        auto* block = context.model.get().findBlock (context.model.selectedBlock);
+        return block != nullptr && block->userData.curvatureMode;
+    }
+
+    void TrackLanes::toggleCurveMode()
+    {
+        if (context.model.get().findBlock (context.model.selectedBlock) == nullptr)
+            return;
+        context.controller.updateBlockUserData (context.model.selectedBlock, [] (BlockUserData& d) { d.curvatureMode = ! d.curvatureMode; });
+        repaint();
+    }
+
+    juce::Rectangle<float> TrackLanes::getCurveButtonBounds() const
+    {
+        const model::Block* block = nullptr;
+        if (currentEnvelope (block) == nullptr || block == nullptr)
+            return {};
+        for (auto& r : rows())
+            if (r.track->path == parentPath (block->path))
+                return blockBounds (*block, r.bounds).removeFromBottom (20.0f).removeFromRight (20.0f).reduced (2.0f);
+        return {};
+    }
+
+    const model::ControlPoint* TrackLanes::segmentStartAt (const model::Envelope& env, int tick) const
+    {
+        // EnvelopeView.getPreviousControlPoint: the last point at or before the tick
+        // that has a point after it
+        const model::ControlPoint* result = nullptr;
+        for (size_t i = 0; i + 1 < env.points.size(); ++i)
+            if (env.points[i].tick <= tick)
+                result = &env.points[i];
+        return result;
+    }
+
+    float TrackLanes::curvatureFromMouse (juce::Point<float> mouse) const
+    {
+        // EnvelopeView.getDragCurvatureFromMouse
+        const model::Block* block = nullptr;
+        auto* env = currentEnvelope (block);
+        if (env == nullptr)
+            return 0.0f;
+
+        for (auto& r : rows())
+        {
+            if (r.track->path != parentPath (block->path))
+                continue;
+            auto bb = blockBounds (*block, r.bounds);
+            auto target = EndpointInfo::find (context.session, env->targetPath);
+            for (size_t i = 0; i + 1 < env->points.size(); ++i)
+            {
+                if (env->points[i].path != dragCurvePoint)
+                    continue;
+                const auto prev = pointPosition (*env, env->points[i], *block, bb, target);
+                const auto next = pointPosition (*env, env->points[i + 1], *block, bb, target);
+                const float xRange = next.x - prev.x, yRange = next.y - prev.y;
+                if (xRange == 0.0f || yRange == 0.0f)
+                    return 0.0f;
+                const double xProportion = (mouse.x - prev.x) / xRange, yProportion = (mouse.y - prev.y) / yRange;
+                constexpr float minimum = -2.0f, maximum = 2.0f;   // ControlPoint.curvature range
+                if (xProportion <= 0.0 || yProportion >= 1.0)
+                    return maximum;
+                if (yProportion <= 0.0 || xProportion >= 1.0)
+                    return minimum;
+                const double baseXLogOfY = std::log (yProportion) / std::log (xProportion);
+                return juce::jlimit (minimum, maximum, (float) (-std::log (baseXLogOfY) / std::log (2.0)));
+            }
+        }
+        return 0.0f;
+    }
+
     std::optional<juce::Point<float>> TrackLanes::getControlPointPosition (const juce::String& controlPointPath) const
     {
         for (auto& r : rows())
@@ -644,6 +716,11 @@ namespace integra
                     if (cp.path == dragPoint)
                         cp.tick = dragPointTick, cp.value = dragPointValue;
 
+            if (drag == Drag::curve)
+                for (auto& cp : points)
+                    if (cp.path == dragCurvePoint)
+                        cp.curvature = dragCurvature;
+
             juce::Path path;
             for (size_t i = 0; i < points.size(); ++i)
             {
@@ -652,11 +729,22 @@ namespace integra
                 {
                     path.startNewSubPath (r.getX(), pt.y);
                     path.lineTo (pt);
+                    continue;
                 }
-                else
+
+                // EnvelopeView.drawCurvedTransition: y follows t^(2^-curvature) of the previous point
+                const auto prev = pointPosition (env, points[i - 1], block, r, target);
+                const float curvature = points[i - 1].curvature;
+                if (curvature != 0.0f && pt.x > prev.x + 1.0f && pt.y != prev.y)
                 {
-                    path.lineTo (pt);
+                    const double exponent = std::pow (2.0, -curvature);
+                    for (float x = prev.x + 1.0f; x < pt.x; x += 1.0f)
+                    {
+                        const double t = std::pow ((x - prev.x) / (pt.x - prev.x), exponent);
+                        path.lineTo (x, prev.y + (float) t * (pt.y - prev.y));
+                    }
                 }
+                path.lineTo (pt);
             }
             auto last = pointPosition (env, points.back(), block, r, target);
             path.lineTo (r.getRight(), last.y);
@@ -673,7 +761,18 @@ namespace integra
                 }
                 g.setFont (juce::FontOptions (11.0f));
                 g.drawText (lastElement (parentPath (env.targetPath)) + "." + lastElement (env.targetPath),
-                            r.reduced (6, 2).toNearestInt(), juce::Justification::bottomRight);
+                            r.reduced (6, 2).withTrimmedRight (22).toNearestInt(), juce::Justification::bottomRight);
+
+                // curve mode button (BlockView._curvatureModeButton)
+                auto button = getCurveButtonBounds();
+                g.setColour (isCurveMode() ? t.accent : t.panel.withAlpha (0.8f));
+                g.fillRoundedRectangle (button, 3.0f);
+                g.setColour (isCurveMode() ? t.accentText : t.text);
+                juce::Path curve;
+                auto c = button.reduced (4.0f);
+                curve.startNewSubPath (c.getBottomLeft());
+                curve.quadraticTo (c.getBottomRight(), c.getTopRight());
+                g.strokePath (curve, juce::PathStrokeType (1.5f));
             }
         }
     }
@@ -836,7 +935,31 @@ namespace integra
         }
 
         // envelope editing inside the selected block
+        if (getCurveButtonBounds().contains (e.position))
+        {
+            toggleCurveMode();
+            return;
+        }
+
         const model::Block* editedBlock = nullptr;
+        if (auto* env = currentEnvelope (editedBlock); env != nullptr && isCurveMode() && ! e.mods.isPopupMenu())
+        {
+            for (auto& r : rows())
+            {
+                if (r.track->path != parentPath (editedBlock->path) || ! blockBounds (*editedBlock, r.bounds).contains (e.position))
+                    continue;
+                const int tick = juce::roundToInt (mapping.xToTick (e.position.x)) - editedBlock->start;
+                if (auto* cp = segmentStartAt (*env, tick))
+                {
+                    drag = Drag::curve;
+                    dragCurvePoint = cp->path;
+                    dragCurvature = curvatureFromMouse (e.position);
+                    repaint();
+                }
+                return;
+            }
+        }
+
         if (auto* env = currentEnvelope (editedBlock))
         {
             for (auto& r : rows())
@@ -944,6 +1067,13 @@ namespace integra
     void TrackLanes::mouseDrag (const juce::MouseEvent& e)
     {
         const int rate = juce::jmax (1, context.model.get().player.rate);
+
+        if (drag == Drag::curve)
+        {
+            dragCurvature = curvatureFromMouse (e.position);
+            repaint();
+            return;
+        }
 
         if (drag == Drag::controlPoint)
         {
@@ -1137,6 +1267,12 @@ namespace integra
 
     void TrackLanes::mouseUp (const juce::MouseEvent&)
     {
+        if (drag == Drag::curve)
+        {
+            drag = Drag::none;
+            context.controller.setControlPointCurvature (dragCurvePoint, dragCurvature);   // onEndDragCurve
+        }
+
         if (drag == Drag::controlPoint)
         {
             // committed once, as RepositionControlPoint in onEndDragPoint
@@ -1173,6 +1309,19 @@ namespace integra
 
         // add a control point when editing an envelope
         const model::Block* editedBlock = nullptr;
+        if (auto* env = currentEnvelope (editedBlock); env != nullptr && isCurveMode())
+        {
+            // handleCurvatureModeDoubleClick: the segment becomes a straight line again
+            for (auto& r : rows())
+            {
+                if (r.track->path != parentPath (editedBlock->path) || ! blockBounds (*editedBlock, r.bounds).contains (e.position))
+                    continue;
+                if (auto* cp = segmentStartAt (*env, juce::roundToInt (mapping.xToTick (e.position.x)) - editedBlock->start))
+                    context.controller.setControlPointCurvature (cp->path, 0.0f);
+                return;
+            }
+        }
+
         if (auto* env = currentEnvelope (editedBlock))
         {
             for (auto& r : rows())
@@ -1268,6 +1417,11 @@ namespace integra
                                true, editedEnvelope == envPath, [this, envPath] { editedEnvelope = envPath; repaint(); });
         }
         menu.addSubMenu ("Edit envelope", envelopes, ! block.envelopes.empty());
+        menu.addItem ("Curve mode", ! block.envelopes.empty(), block.userData.curvatureMode, [this, path]
+        {
+            context.model.selectedBlock = path;
+            toggleCurveMode();
+        });
 
         menu.addItem ("Export block...", [this, path]
         {

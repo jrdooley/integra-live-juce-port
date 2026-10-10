@@ -172,6 +172,21 @@ namespace integra
         auto midValue = (double) session.getValue (delay + ".delayTime");
         t.check (midValue > 0.1 && midValue < 2.0, "envelope interpolates target while playhead moves (" + juce::String (midValue, 3) + ")");
 
+        // curvature of the first point bends the segment after it (t^(2^-c))
+        if (env != nullptr && ! env->points.empty())
+        {
+            const auto firstPoint = env->points.front().path;
+            controller.setControlPointCurvature (firstPoint, 1.0f);
+            session.setValue (p.player.path + ".tick", 0);
+            session.setValue (p.player.path + ".tick", 200);
+            juce::Thread::sleep (50);
+            const auto curved = (double) session.getValue (delay + ".delayTime");
+            const auto startValue = (double) env->points.front().value;
+            const double expected = startValue + std::sqrt (0.5) * (2.0 - startValue);
+            t.check (std::abs (curved - expected) < 0.02, "curvature 1 gives sqrt interpolation (" + juce::String (curved, 3) + ", expected " + juce::String (expected, 3) + ")");
+            controller.setControlPointCurvature (firstPoint, 0.0f);
+        }
+
         auto scene = controller.addScene (0, 400);
         model.rebuild();
         t.check (p.scenes.size() == 1 && p.scenes[0].userData.keybinding == "1", "scene with key binding '1'");

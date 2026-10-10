@@ -26,11 +26,11 @@ there (the GUI test needs a desktop session).
 1. `libIntegraTests` — the upstream GoogleTest suite (session, commands, load/save, versioning).
 2. `integra_smoke` — instantiates all 63 DSP modules in Pd, pings them, loads all 6 demo blocks.
 3. `integra_host_audio_test` — signal through libpd in host-driven mode (thru, disconnect, generator).
-4. `IntegraLive_self_test` — 55 end-to-end checks of the app core, including audio through the
+4. `IntegraLive_self_test` — 56 end-to-end checks of the app core, including audio through the
    JUCE callback path with non-power-of-two buffers, block activation by the playhead, undo/redo
    (including undoing deletes), rename, routing, MIDI control, envelopes, scenes, Lua, block moves,
    save/reopen, and importing all six Flex-saved demo blocks.
-5. `IntegraLive_gui_test` (under `xvfb-run`) — 41 interaction checks with synthesized mouse and
+5. `IntegraLive_gui_test` (under `xvfb-run`) — 45 interaction checks with synthesized mouse and
    keyboard events across all three views.
 
 Screenshots in `docs/images/` are produced by the app itself (`--screenshot`).

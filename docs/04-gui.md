@@ -39,7 +39,11 @@ automated interaction test.
   with *Edit envelope* to edit it — double-click to add a control point, drag
   to move (a point stays between its neighbours and the first one stays at
   tick 0, as in `EnvelopeView.as`; the move is committed on release),
-  right-click to delete (not the first point).
+  right-click to delete (not the first point). **Curve mode** (the curve button
+  at the bottom right of the selected block, or *Curve mode* in its menu; stored
+  in the block's `curvatureMode` userData as in Flex): drag a segment to bend it,
+  double-click it to make it straight again. Curvature is drawn exactly as
+  libIntegra interpolates it, `t^(2^-curvature)` (`EnvelopeView.drawCurvedTransition`).
 * Zoom with Ctrl+wheel or the +/- buttons, scroll with the scrollbar or
   shift+wheel; zoom/scroll persist in the project (`timelineZoom`,
   `timelineScroll` userData, same units as Flex).
@@ -147,7 +151,7 @@ locked). Clicking the padlock offers *Delete Envelope* / *Delete Routing from
 ## GUI interaction test
 
 `IntegraLive --gui-test` drives the real components with synthesized mouse and
-keyboard events and checks the resulting project state (41 checks, all
+keyboard events and checks the resulting project state (45 checks, all
 passing), including: double-click to add a block, drag to move, edge-drag to
 resize, overlap prevention, add track, drag a block to another track, drag in
 the scene bar to create a scene, click the ruler to move the playhead,

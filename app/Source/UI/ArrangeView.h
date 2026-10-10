@@ -102,6 +102,15 @@ namespace integra
         /** Envelope being edited inside the selected block ("" = none). */
         juce::String editedEnvelope;
 
+        /** Curve mode of the selected block (Flex: BlockView curvature mode button, stored in
+            the block's userData): dragging an envelope segment bends it, double-clicking a
+            segment makes it straight again. */
+        bool isCurveMode() const;
+        void toggleCurveMode();
+
+        /** Where the curve-mode button of the selected block is drawn (empty if none). */
+        juce::Rectangle<float> getCurveButtonBounds() const;
+
     private:
         struct TrackRow
         {
@@ -125,12 +134,16 @@ namespace integra
         AppContext& context;
         TimelineMapping& mapping;
 
-        enum class Drag { none, moveBlock, resizeStart, resizeEnd, controlPoint } drag = Drag::none;
+        enum class Drag { none, moveBlock, resizeStart, resizeEnd, controlPoint, curve } drag = Drag::none;
         juce::String dragBlock, dragPoint;
         int dragStartTick = 0;
         float dragPixelOffset = 0.0f;
         juce::String dragTargetTrack;
         std::map<juce::String, juce::Range<int>> draggedBlocks;   // dragged and nudged blocks
+        juce::String dragCurvePoint;                              // point whose following segment is being bent
+        float dragCurvature = 0.0f;
+        const model::ControlPoint* segmentStartAt (const model::Envelope&, int tick) const;
+        float curvatureFromMouse (juce::Point<float>) const;
         juce::Range<int> dragPointLimits;                         // allowed ticks for the dragged control point
         int dragPointTick = 0;
         float dragPointValue = 0.0f;

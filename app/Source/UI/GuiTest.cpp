@@ -425,6 +425,46 @@ namespace integra
             }
             t.check (context.session.nodeExists (firstPoint) && pointTick (firstPoint) == 0,
                      "the first control point stays at tick 0 and can't be deleted");
+
+            // curve mode (BlockView curvature button, EnvelopeView curve drag)
+            auto curvatureOf = [&] (const juce::String& path)
+            {
+                if (auto* b = p.findBlock (block1))
+                    for (auto& env : b->envelopes)
+                        for (auto& cp : env.points)
+                            if (cp.path == path)
+                                return cp.curvature;
+                return -99.0f;
+            };
+            auto button = lanes.getCurveButtonBounds();
+            t.check (! button.isEmpty(), "the edited block shows a curve mode button");
+            click (lanes, button.getCentre());
+            pump();
+            t.check (lanes.isCurveMode() && p.findBlock (block1)->userData.curvatureMode, "clicking it turns curve mode on (stored in the block)");
+
+            // drag the middle of the segment after pointA (399 -> 400 is too short; use first -> pointA)
+            auto from = lanes.getControlPointPosition (firstPoint), to = lanes.getControlPointPosition (pointA);
+            if (from && to && std::abs (from->y - to->y) < 4.0f)
+            {
+                // make the segment slope so it can bend
+                context.controller.moveControlPoint (pointA, 399, 0.8f);
+                pump();
+                to = lanes.getControlPointPosition (pointA);
+            }
+            if (from && to)
+            {
+                auto middle = (*from + *to) * 0.5f;
+                auto bent = juce::Point<float> (from->x + (to->x - from->x) * 0.25f, middle.y);   // pull towards the start
+                drag (lanes, middle, bent);
+                pump();
+            }
+            t.check (curvatureOf (firstPoint) != 0.0f, "dragging a segment in curve mode bends it (curvature " + juce::String (curvatureOf (firstPoint), 2) + ")");
+            if (from && to)
+                doubleClick (lanes, (*from + *to) * 0.5f);
+            pump();
+            t.check (curvatureOf (firstPoint) == 0.0f, "double-clicking the segment straightens it");
+            lanes.toggleCurveMode();
+            pump();
             juce::ignoreUnused (pointB);
         }
 
