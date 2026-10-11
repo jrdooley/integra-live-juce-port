@@ -1,11 +1,46 @@
 name: build
 
+# Actions minutes are limited on a private repository, and macOS minutes count 10x and
+# Windows 2x. Linux builds and tests on every push and pull request; macOS, Windows and
+# the sanitizer job run when started by hand (Actions > build > Run workflow, with
+# "full" ticked) and once a day if the default branch had new commits in the last day.
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'Also build and test macOS, Windows and the sanitizer job'
+        type: boolean
+        default: true
 
 jobs:
+  full-ci:
+    # Decides whether the expensive jobs run (see the note at the top).
+    runs-on: ubuntu-24.04
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'schedule'
+        with:
+          fetch-depth: 50
+      - id: decide
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=${{ inputs.full }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "schedule" ] && \
+               [ -n "$(git log --since='25 hours ago' --format=%H -1)" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   linux:
+    needs: full-ci
+    if: github.event_name != 'schedule' || needs.full-ci.outputs.run == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +78,8 @@ jobs:
           path: build/integra-live-*.tar.gz
 
   linux-sanitizers:
+    needs: full-ci
+    if: needs.full-ci.outputs.run == 'true'
     # AddressSanitizer + UndefinedBehaviorSanitizer over every test, including the
     # stress test (see docs/09-robustness.md). Leak checking is off: Pd never frees
     # its global state at exit.
@@ -79,6 +116,8 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
   macos:
+    needs: full-ci
+    if: needs.full-ci.outputs.run == 'true'
     # Self-contained universal (Apple Silicon + Intel) app: static vcpkg dependencies,
     # signed and packaged as a DMG. Signing/notarisation use repository secrets when
     # present (see docs/07-macos-packaging.md), otherwise the app is ad-hoc signed.
@@ -168,6 +207,8 @@ jobs:
           path: IntegraLive-macOS.dmg
 
   windows:
+    needs: full-ci
+    if: needs.full-ci.outputs.run == 'true'
     # MSVC + vcpkg (dependencies from vcpkg.json); see docs/06-windows.md
     runs-on: windows-2022
     steps:
