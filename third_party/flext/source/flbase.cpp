@@ -154,15 +154,9 @@ FLEXT_TEMPIMPL(bool FLEXT_CLASSDEF(flext_obj))::GetParamSym(t_atom &dst,const t_
 }
 
 
-#if FLEXT_SYS == FLEXT_SYS_PD
-// this declaration is missing in m_pd.h (0.37-0 and -1)
-// but it is there in 0.37-2 (but how to tell which micro-version?)
-extern "C" 
-#ifdef _MSC_VER
-__declspec(dllimport)
-#endif
-void canvas_getargs(int *argcp, t_atom **argvp);
-#endif
+// Integra Live port: flext declared canvas_getargs itself (missing from m_pd.h in Pd
+// 0.37-0/-1) with __declspec(dllimport) under MSVC, which clashes with Pd 0.56's own
+// declaration in a static build. m_pd.h has declared it since 0.37-2.
 
 
 FLEXT_TEMPIMPL(void FLEXT_CLASSDEF(flext_obj))::GetCanvasArgs(AtomList &args) const
