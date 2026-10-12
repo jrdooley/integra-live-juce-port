@@ -21,8 +21,8 @@ On Linux (Ubuntu 24.04, GCC 13, JUCE 8.0.8) locally and in CI; on macOS 14 (Appl
 Silicon, Apple clang) and Windows Server 2022 (MSVC 2022, x64) in CI, which runs tests 1–4
 there (the GUI test needs a desktop session). A fourth CI job runs every suite under
 AddressSanitizer + UndefinedBehaviorSanitizer ([09-robustness.md](09-robustness.md)).
-Only the Linux job runs on every push; the macOS, Windows and sanitizer jobs run daily
-(when there were new commits) or on demand, to stay within the free Actions minutes.
+CI is paused to stay within the free Actions minutes: it runs only when started by hand
+(Actions → build → Run workflow).
 
 `ctest --test-dir build` — all 6 pass:
 

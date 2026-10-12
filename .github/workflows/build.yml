@@ -1,14 +1,9 @@
-name: build
-
-# Actions minutes are limited on a private repository, and macOS minutes count 10x and
-# Windows 2x. Linux builds and tests on every push and pull request; macOS, Windows and
-# the sanitizer job run when started by hand (Actions > build > Run workflow, with
-# "full" ticked) and once a day if the default branch had new commits in the last day.
+# PAUSED: no automatic runs (push, pull request or schedule). The private repository's
+# free Actions minutes are limited, and macOS minutes count 10x and Windows 2x. Run it
+# by hand: Actions > build > Run workflow (tick "full" for macOS, Windows and the
+# sanitizer job as well as Linux). To resume automatic runs, restore the triggers
+# below from git history (commit daf3263).
 on:
-  push:
-  pull_request:
-  schedule:
-    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       full:

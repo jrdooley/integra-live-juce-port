@@ -82,10 +82,9 @@ ctest --test-dir build -C RelWithDebInfo --output-on-failure
 Details in [docs/06-windows.md](docs/06-windows.md). CI builds and tests all three
 platforms; the Windows job uploads a ready-to-run `integra-live-windows-x64` artifact.
 
-To save Actions minutes (macOS minutes count 10x and Windows 2x on a private repository),
-only the Linux job runs on every push and pull request. macOS, Windows and the sanitizer
-job run once a day when the default branch had new commits, or on demand: Actions →
-build → Run workflow (with "full" ticked).
+CI is currently **paused** to save Actions minutes (macOS minutes count 10x and Windows 2x
+on a private repository): it runs only when started by hand, Actions → build → Run
+workflow (tick "full" for macOS, Windows and the sanitizer job as well as Linux).
 
 ## Tests
 
@@ -100,7 +99,7 @@ build → Run workflow (with "full" ticked).
 | `IntegraLive --fingerprint-modules` | not a pass/fail test: each module's output and reported values for a fixed input, for comparing builds such as two Pd versions ([doc 10](docs/10-pd-upgrade.md)) |
 
 All ctest suites also run in CI under AddressSanitizer + UndefinedBehaviorSanitizer
-(`-DINTEGRA_SANITIZE=ON`, the `linux-sanitizers` job, daily or on demand).
+(`-DINTEGRA_SANITIZE=ON`, the `linux-sanitizers` job, when CI is run with "full").
 
 ## Documentation
 
