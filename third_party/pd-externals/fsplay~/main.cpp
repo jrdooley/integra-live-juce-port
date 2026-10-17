@@ -268,22 +268,22 @@ static WorkersPtr workers(new Workers);
 static void AddWorker(WorkerPtr w)
 {
     // add worker
-    WorkersPtr wp(workers);
+    WorkersPtr wp(boost::atomic_load(&workers));
     Workers *wnew = new Workers;
     for(Workers::const_iterator it = wp->begin(); it != wp->end(); ++it)
         wnew->push_back(*it);
     wnew->push_back(w);
-    workers.reset(wnew);  // swap pointers
+    boost::atomic_store(&workers, WorkersPtr(wnew));  // swap pointers
 }
 
 static void RmvWorker(WorkerPtr w)
 {
     // remove worker
-    WorkersPtr wp(workers);
+    WorkersPtr wp(boost::atomic_load(&workers));
     Workers *wnew = new Workers;
     for(Workers::iterator it = wp->begin(); it != wp->end(); ++it)
         if(it->get() != w.get()) wnew->push_back(*it);
-    workers.reset(wnew);  // swap pointers
+    boost::atomic_store(&workers, WorkersPtr(wnew));  // swap pointers
 }
 
 
@@ -316,7 +316,7 @@ public:
     {
         if(eof) return false; // nothing to do
 
-        RingPtr rbp(ringbuffer);
+        RingPtr rbp(boost::atomic_load(&ringbuffer));
         RingBuffer *rb = rbp.get();
         FLEXT_ASSERT(rb);
 
@@ -324,7 +324,7 @@ public:
         if(want < 0) want += rb->maxbuf;
         if(!want) return false; // nothing to do
 
-        FormatPtr fmt(format);
+        FormatPtr fmt(boost::atomic_load(&format));
         if(UNLIKELY(!fmt)) return false; // format not set
         if(UNLIKELY(!fmt->Channels())) return false; // not an audio file....
 
@@ -438,13 +438,13 @@ public:
         }
 
         filename = fn; 
-        format.reset(fmt);  // set only here - no multiple writer threads
+        boost::atomic_store(&format, FormatPtr(fmt));  // set only here - no multiple writer threads
         Reset();
     }
 
     void Seek(double pos)
     {
-        FormatPtr fmt(format);
+        FormatPtr fmt(boost::atomic_load(&format));
         if(fmt && fmt->Seek(pos))
             Reset(pos);
     }
@@ -452,10 +452,10 @@ public:
     // called from PD thread
     void Fill(int chns,t_sample *const *outsigs,int n,t_sample outrate,const t_sample *speed,int spdstride)
     {
-        FormatPtr fmt(format);
+        FormatPtr fmt(boost::atomic_load(&format));
         
         if(LIKELY(fmt && run)) {
-            RingPtr rb(ringbuffer);    
+            RingPtr rb(boost::atomic_load(&ringbuffer));    
             bool uflow = false;
 
             t_sample ratio = fmt->Samplerate()/outrate;
@@ -553,7 +553,7 @@ public:
         eof = false;
         reported = true;  // underflows need not be displayed at empty ringbuffer
         loops = 0;
-        RingPtr(ringbuffer)->ClearBuf();
+        RingPtr(boost::atomic_load(&ringbuffer))->ClearBuf();
     }
 };
 
@@ -664,13 +664,13 @@ public:
     
     void mg_pos(AtomList &l)
     {
-        FormatPtr fmt(worker->format);
+        FormatPtr fmt(boost::atomic_load(&worker->format));
         SetDouble(l,fmt?worker->ppos:0);
     }
 
     void mg_fpos(AtomList &l)
     {
-        FormatPtr fmt(worker->format);
+        FormatPtr fmt(boost::atomic_load(&worker->format));
         SetDouble(l,fmt?worker->fpos:0);
     }
     
@@ -682,26 +682,26 @@ public:
 
     void mg_maxbuf(int &b) 
     { 
-        b = RingPtr(worker->ringbuffer)->maxbuf; 
+        b = RingPtr(boost::atomic_load(&worker->ringbuffer))->maxbuf; 
     }
     
     // \todo this should probably be a command as the ringbuffer might change in the meantime....
     void ms_maxbuf(int b) 
     { 
-        RingPtr r(worker->ringbuffer);
+        RingPtr r(boost::atomic_load(&worker->ringbuffer));
         if(b != r->maxbuf)
-            worker->ringbuffer.reset(new RingBuffer(CntOutSig(),b));  // set only here - no multiple writer threads
+            boost::atomic_store(&worker->ringbuffer, RingPtr(new RingBuffer(CntOutSig(),b)));  // set only here - no multiple writer threads
     }
 
-    void mg_minbuf(int &b) { b = RingPtr(worker->ringbuffer)->minbuf; }
+    void mg_minbuf(int &b) { b = RingPtr(boost::atomic_load(&worker->ringbuffer))->minbuf; }
 
     // \todo this should probably be a command as the ringbuffer might change in the meantime....
-    void ms_minbuf(int b) { RingPtr(worker->ringbuffer)->minbuf = RndSIMD(b); }
+    void ms_minbuf(int b) { RingPtr(boost::atomic_load(&worker->ringbuffer))->minbuf = RndSIMD(b); }
 
-    void mg_safety(int &b) { b = RingPtr(worker->ringbuffer)->safety; }
+    void mg_safety(int &b) { b = RingPtr(boost::atomic_load(&worker->ringbuffer))->safety; }
 
     // \todo this should probably be a command as the ringbuffer might change in the meantime....
-    void ms_safety(int b) { RingPtr(worker->ringbuffer)->safety = RndSIMD(b); }
+    void ms_safety(int b) { RingPtr(boost::atomic_load(&worker->ringbuffer))->safety = RndSIMD(b); }
 
     void mg_grain(int &b) { b = worker->grain; }
 
@@ -716,14 +716,14 @@ public:
     void mg_frames(AtomList &fr) const 
     { 
         // have to convert int64__ to 2 floats.... 
-        FormatPtr fmt(worker->format);
+        FormatPtr fmt(boost::atomic_load(&worker->format));
         if(fmt)
             SetDouble(fr,double(fmt->Frames()));
     }
 
     void mg_buffer(int &fr) const 
     { 
-        fr = RingPtr(worker->ringbuffer)->Filling(); 
+        fr = RingPtr(boost::atomic_load(&worker->ringbuffer))->Filling(); 
     }
 
     void mg_speed(float &s) const 
@@ -903,7 +903,7 @@ void fsplay::threadfun(thr_params *)
 
             // no command... now work through all the workers
             bool more = false;
-            WorkersPtr w(workers);
+            WorkersPtr w(boost::atomic_load(&workers));
             for(Workers::const_iterator it = w->begin(); it != w->end(); ++it)
                 // protect worker and do the work
                 more |= WorkerPtr(*it)->Work();
