@@ -422,6 +422,25 @@ namespace integra
             juce::StringArray none;
             t.check (controller.installModules ({ folder.getChildFile ("First Song.integra") }, none).failed() && none.isEmpty(),
                      "other files aren't installed as modules");
+
+            // the Module Creator's "Test in Integra Live" sends its module under a fixed name,
+            // loaded as the one in-development module; a newer test replaces it
+            auto countInDevelopment = [&]
+            {
+                int n = 0;
+                for (auto* v : catalogue.getVersions (origin))
+                    n += v->source == IInterfaceDefinition::MODULE_IN_DEVELOPMENT ? 1 : 0;
+                return n;
+            };
+            const auto inDevelopment = folder.getChildFile ("ModuleInDevelopment-4df2725b-f0ba-400a-9899-5f14632dd550.module");
+            for (int attempt = 1; attempt <= 2; ++attempt)
+            {
+                makeAlternativeModuleVersion (session.getLocations().systemModules.getChildFile ("TapDelay.module"), "frequency", inDevelopment);
+                juce::StringArray loaded;
+                auto loadResult = controller.installModules ({ inDevelopment }, loaded);
+                t.check (loadResult.wasOk() && loaded.size() == 1 && countInDevelopment() == 1 && catalogue.getVersions (origin).size() == 2,
+                         "Module Creator test module loads as the in-development module (" + juce::String (attempt) + ") " + loadResult.getErrorMessage());
+            }
             folder.deleteRecursively();
         }
 

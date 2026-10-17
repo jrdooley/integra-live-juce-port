@@ -33,4 +33,6 @@ or modified. This file records exactly what was copied, from where, and why.
 * The Flex GUI (`GUI/`), `integra_server` (`server/`), the old Xcode/MSVC
   projects, the SDK and the module-creator tooling. The GUI is reimplemented
   in JUCE (see later docs); the server is unnecessary with an in-process
-  library. The original repositories remain the reference for those.
+  library. The original repositories remain the reference for those. (The
+  Module Creator and the SDK's module templates were ported later: see
+  [12-module-creator.md](12-module-creator.md).)

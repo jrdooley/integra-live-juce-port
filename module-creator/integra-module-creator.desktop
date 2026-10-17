@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Integra Module Creator
+Comment=Create modules for Integra Live
+Exec=integra-module-creator %f
+Icon=integra-module-creator
+Terminal=false
+Categories=AudioVideo;Audio;Development;

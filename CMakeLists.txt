@@ -17,6 +17,7 @@ endif()
 
 option(INTEGRA_BUILD_TESTS "Build libIntegra unit tests (GoogleTest)" ON)
 option(INTEGRA_BUILD_APP "Build the Integra Live JUCE application" ON)
+option(INTEGRA_BUILD_MODULE_CREATOR "Build the Integra Module Creator (needs INTEGRA_BUILD_APP, which fetches JUCE)" ON)
 option(INTEGRA_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer (GCC/Clang)" OFF)
 
 if(INTEGRA_SANITIZE AND NOT MSVC)
@@ -37,4 +38,7 @@ endif()
 
 if(INTEGRA_BUILD_APP)
     add_subdirectory(app)
+    if(INTEGRA_BUILD_MODULE_CREATOR)
+        add_subdirectory(module-creator)
+    endif()
 endif()

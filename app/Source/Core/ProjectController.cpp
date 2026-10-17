@@ -1092,13 +1092,28 @@ namespace integra
         return result;
     }
 
+    bool ProjectController::isModuleInDevelopment (const juce::File& moduleFile)
+    {
+        return moduleFile.getFileName() == "ModuleInDevelopment-4df2725b-f0ba-400a-9899-5f14632dd550.module";
+    }
+
     juce::Result ProjectController::installModule (const juce::File& moduleFile)
     {
-        CModuleInstallResult result;
         CError error;
         {
             auto server = session.lock();
-            error = server->get_module_manager().install_module (toStd (moduleFile.getFullPathName()), result);
+            if (isModuleInDevelopment (moduleFile))
+            {
+                // replaces the previous in-development module, which stays as an embedded
+                // module while instances of it exist (module.loadmoduleindevelopment)
+                CLoadModuleInDevelopmentResult result;
+                error = server->get_module_manager().load_module_in_development (toStd (moduleFile.getFullPathName()), result);
+            }
+            else
+            {
+                CModuleInstallResult result;
+                error = server->get_module_manager().install_module (toStd (moduleFile.getFullPathName()), result);
+            }
         }
         if (error != CError::SUCCESS)
             return juce::Result::fail (moduleFile.getFileName() + ": " + toString (error.get_text()));
@@ -1125,7 +1140,8 @@ namespace integra
         {
             if (file.hasFileExtension ("module"))
             {
-                install (file, file.getFileNameWithoutExtension());
+                install (file, isModuleInDevelopment (file) ? juce::String ("the in-development module from the Module Creator")
+                                                            : file.getFileNameWithoutExtension());
             }
             else if (file.hasFileExtension ("bundle"))
             {

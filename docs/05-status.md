@@ -9,6 +9,7 @@
 | Module library, demo blocks | Unchanged, all load |
 | Flex GUI → JUCE | Arrange, Module and Live views, 18 widget types, properties (info, routing, scripting, MIDI), transport, settings, menus, undo/redo |
 | integra_server (XML-RPC/OSC) | Removed — libIntegra runs in-process |
+| Module Creator (module developer SDK) | Ported to JUCE as a second application, `module-creator/` — see [12-module-creator.md](12-module-creator.md); Integra Live loads its test modules as "in development" |
 | File compatibility with Integra Live 1.x | Same node conventions and `userData` XML; Flex-saved demo blocks open with their layouts |
 | Audio I/O | JUCE `AudioDeviceManager` (ALSA/JACK/CoreAudio/WASAPI/ASIO) driving libpd |
 | MIDI | libIntegra's PortMidi engine via the `MidiSettings` module |

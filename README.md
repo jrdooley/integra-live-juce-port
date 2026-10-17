@@ -17,6 +17,7 @@ third_party/       libpd 0.16.1 (Pd 0.56-5), Pd externals, flext, minizip, tmpfi
 modules/           the 82 Integra modules (.module = interface definition + Pd patches)
 blocks/            demo blocks
 app/               the JUCE application (replaces the Flex GUI and integra_server)
+module-creator/    the Integra Module Creator, for making new modules (replaces the Flex SDK tool)
 docs/              the record of the port, step by step
 reference/         the 2018 JUCE prototype from the integra2 branch (not built)
 ```
@@ -50,12 +51,13 @@ cmake -S . -B build -G Ninja
 cmake --build build
 ctest --test-dir build --output-on-failure      # GUI test needs xvfb-run (apt install xvfb xauth)
 ./build/app/IntegraLive_artefacts/RelWithDebInfo/integra-live --demo
+./build/module-creator/ModuleCreator_artefacts/RelWithDebInfo/integra-module-creator
 ```
 
 JUCE 8 is fetched automatically. Lua 5.2, PortAudio, PortMidi and GoogleTest
 are fetched if not installed. `cmake --install build` installs to
-`<prefix>/lib/integra-live` with a launcher in `<prefix>/bin`; `cpack` makes a
-tarball.
+`<prefix>/lib/integra-live` with launchers (`integra-live`, `integra-module-creator`)
+in `<prefix>/bin`; `cpack` makes a tarball.
 
 ## Building (macOS)
 
@@ -96,6 +98,9 @@ workflow (tick "full" for macOS, Windows and the sanitizer job as well as Linux)
 | `IntegraLive --self-test` | 76 end-to-end checks of the app core (undo, routing, envelopes, scenes, scripts, save/reload, Flex files, JUCE audio path) |
 | `IntegraLive --gui-test` | 227 GUI interaction checks with synthesized mouse/keyboard events |
 | `IntegraLive --stress-test [seconds] [projects...]` | every demo block opened, played, saved and reimported; every module's controls at extreme values; 600 random edits with undo/redo checks; long playback ([doc 09](docs/09-robustness.md)) |
+| `ModuleCreator --self-test` | every shipped module loads, validates and saves unchanged; templates; a module built from scratch through validation, widgets, dependency scanning, the Pd host patch, save/reopen and bundles ([doc 12](docs/12-module-creator.md)) |
+| `ModuleCreator_saved_modules_load_in_libIntegra` | `integra_smoke` on the modules the Module Creator saved (re-saved library + one module per template) |
+| `ModuleCreator --gui-test` | Module Creator GUI checks with synthesized edits and drags |
 | `IntegraLive --fingerprint-modules` | not a pass/fail test: each module's output and reported values for a fixed input, for comparing builds such as two Pd versions ([doc 10](docs/10-pd-upgrade.md)) |
 
 All ctest suites also run in CI under AddressSanitizer + UndefinedBehaviorSanitizer
@@ -115,6 +120,7 @@ All ctest suites also run in CI under AddressSanitizer + UndefinedBehaviorSaniti
 10. [Robustness pass: stress test, sanitizers, crash fixes](docs/09-robustness.md)
 11. [Upgrade to libpd 0.16.1 / Pd 0.56-5](docs/10-pd-upgrade.md)
 12. [Fixes from testing the macOS build](docs/11-macos-testing-fixes.md)
+13. [The Integra Module Creator](docs/12-module-creator.md)
 
 ## Licences
 
