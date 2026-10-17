@@ -3,6 +3,7 @@
 #include "ModuleManager.h"
 #include "PreferencesPanel.h"
 #include "IntegraLookAndFeel.h"
+#include "MessageBox.h"
 
 namespace integra
 {
@@ -247,7 +248,7 @@ namespace integra
     void MainComponent::showError (const juce::String& title, const juce::Result& r)
     {
         if (r.failed())
-            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, title, r.getErrorMessage());
+            showMessage (juce::MessageBoxIconType::WarningIcon, title, r.getErrorMessage());
     }
 
     //==============================================================================
@@ -360,7 +361,7 @@ namespace integra
         auto r = context.controller.installModules (files, installed);
         modulesChanged();
         if (! installed.isEmpty())
-            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Install modules",
+            showMessage (juce::MessageBoxIconType::InfoIcon, "Install modules",
                                                     "Installed and available in the module library:\n" + installed.joinIntoString ("\n")
                                                         + (r.failed() ? "\n\nNot installed:\n" + r.getErrorMessage() : juce::String()));
         else
@@ -402,10 +403,14 @@ namespace integra
         addAndMakeVisible (*progress);
         progress->setBounds (getLocalBounds());
         progress->repaint();
-        juce::Timer::callAfterDelay (40, [safe = juce::Component::SafePointer<MainComponent> (this), work]
+        // A nested message loop inside work() (a modal dialog) can fire this one-shot timer
+        // again before it has finished; run the work once only.
+        auto started = std::make_shared<bool> (false);
+        juce::Timer::callAfterDelay (40, [safe = juce::Component::SafePointer<MainComponent> (this), work, started]
         {
-            if (safe == nullptr)
+            if (safe == nullptr || *started)
                 return;
+            *started = true;
             work();
             safe->progress.reset();
         });

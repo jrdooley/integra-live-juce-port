@@ -1,5 +1,6 @@
 #include "BlockLibrary.h"
 #include "IntegraLookAndFeel.h"
+#include "MessageBox.h"
 
 namespace integra
 {
@@ -188,7 +189,7 @@ namespace integra
     {
         auto result = importEntry (row);
         if (result.failed())
-            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Import block", result.getErrorMessage());
+            showMessage (juce::MessageBoxIconType::WarningIcon, "Import block", result.getErrorMessage());
     }
 
     void BlockLibrary::listBoxItemClicked (int row, const juce::MouseEvent& e)

@@ -114,6 +114,7 @@ All ctest suites also run in CI under AddressSanitizer + UndefinedBehaviorSaniti
 9. [Feature parity with the Flex GUI](docs/08-flex-parity.md)
 10. [Robustness pass: stress test, sanitizers, crash fixes](docs/09-robustness.md)
 11. [Upgrade to libpd 0.16.1 / Pd 0.56-5](docs/10-pd-upgrade.md)
+12. [Fixes from testing the macOS build](docs/11-macos-testing-fixes.md)
 
 ## Licences
 

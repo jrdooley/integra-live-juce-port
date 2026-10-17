@@ -2,6 +2,7 @@
 #include "TrackColourPicker.h"
 #include "InlineRename.h"
 #include "IntegraLookAndFeel.h"
+#include "MessageBox.h"
 
 namespace integra
 {
@@ -1324,7 +1325,7 @@ namespace integra
         juce::File file (d.description.toString().fromFirstOccurrenceOf (BlockLibrary::dragPrefix, false, false));
         auto result = importBlockAt (file, d.localPosition);
         if (result.failed())
-            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Import block", result.getErrorMessage());
+            showMessage (juce::MessageBoxIconType::WarningIcon, "Import block", result.getErrorMessage());
     }
 
     bool TrackLanes::isInterestedInFileDrag (const juce::StringArray& files)
@@ -1344,7 +1345,7 @@ namespace integra
                 continue;
             auto result = importBlockAt (juce::File (f), { x, y });
             if (result.failed())
-                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Import block", result.getErrorMessage());
+                showMessage (juce::MessageBoxIconType::WarningIcon, "Import block", result.getErrorMessage());
             break;
         }
     }
@@ -2252,7 +2253,7 @@ namespace integra
                 {
                     auto r = context.controller.exportNode (path, fc.getResult());
                     if (r.failed())
-                        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Export", r.getErrorMessage());
+                        showMessage (juce::MessageBoxIconType::WarningIcon, "Export", r.getErrorMessage());
                 }
             });
         });
@@ -2302,7 +2303,7 @@ namespace integra
                         start = juce::jmax (start, b.end);
                 auto r = context.controller.importBlock (fc.getResult(), path, start);
                 if (r.failed())
-                    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Import", r.getErrorMessage());
+                    showMessage (juce::MessageBoxIconType::WarningIcon, "Import", r.getErrorMessage());
             });
         });
         addImportExportItems (menu);
@@ -2355,7 +2356,7 @@ namespace integra
                 return;
             auto r = context.controller.importTrack (fc.getResult());
             if (r.failed())
-                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Import Track", r.getErrorMessage());
+                showMessage (juce::MessageBoxIconType::WarningIcon, "Import Track", r.getErrorMessage());
             else if (onSelectionChanged)
                 onSelectionChanged();
         });
@@ -2374,7 +2375,7 @@ namespace integra
                 return;
             auto r = context.controller.exportNode (trackPath, fc.getResult());
             if (r.failed())
-                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Export Track", r.getErrorMessage());
+                showMessage (juce::MessageBoxIconType::WarningIcon, "Export Track", r.getErrorMessage());
         });
     }
 

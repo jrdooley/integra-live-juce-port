@@ -2113,6 +2113,46 @@ namespace integra
             t.check (main.getDialogFolder().isDirectory(), "file dialogs start in an existing folder");
         }
 
+        // --- Opening a project that fails to load ----------------------------------------
+        {
+            // a .integra whose nodes.ixd isn't a valid Integra document
+            auto bad = juce::File::createTempFile (".integra");
+            {
+                juce::ZipFile::Builder zip;
+                zip.addEntry (new juce::MemoryInputStream (juce::MemoryBlock ("<?xml version=\"1.0\"?><Nonsense/>", 34), true),
+                              9, "integra_data/nodes.ixd", juce::Time::getCurrentTime());
+                juce::FileOutputStream out (bad);
+                zip.writeToStream (out, nullptr);
+            }
+
+            auto alertWindows = []
+            {
+                std::vector<juce::AlertWindow*> found;
+                for (int i = 0; i < juce::TopLevelWindow::getNumTopLevelWindows(); ++i)
+                    if (auto* a = dynamic_cast<juce::AlertWindow*> (juce::TopLevelWindow::getTopLevelWindow (i)))
+                        found.push_back (a);
+                return found;
+            };
+
+            context.controller.newProject();
+            main.openFile (bad);
+            pump (500);
+            int shown = 0;
+            for (int round = 0; round < 5; ++round)
+            {
+                auto alerts = alertWindows();
+                if (alerts.empty())
+                    break;
+                shown += (int) alerts.size();
+                for (auto* a : alerts)
+                    a->exitModalState (0);
+                pump (300);
+            }
+            t.check (shown == 1, "a project that fails to load shows one error (" + juce::String (shown) + ")");
+            t.check (model.get().valid && ! model.get().tracks.empty(), "after a failed load the app carries on with a new project");
+            bad.deleteFile();
+        }
+
         main.showView ("arrange");
         context.controller.newProject();
         pump();

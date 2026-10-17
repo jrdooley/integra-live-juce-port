@@ -31,9 +31,6 @@
 
 namespace integra_internal
 {
-    string schema_path = CFileHelper::get_resources_path() + "CollectionSchema.xsd";
-    const char *CValidator::schema_file = schema_path.c_str();
-
 	static void schemaErrorCallback( void *none, const char *message, ...)
 	{
 		char trace[ CStringHelper::string_buffer_length ];
@@ -64,7 +61,15 @@ namespace integra_internal
 		m_schema = NULL;
 		m_validity_context = NULL;
 
-		m_schema_parser_context = xmlSchemaNewParserCtxt( schema_file );
+		/*
+			Integra Live port: the path used to be a static initialised at program start,
+			before the host sets INTEGRA_RESOURCES_PATH. With libIntegra linked statically
+			that start-up guess was wrong on macOS (and anywhere the build tree is absent),
+			so the schema never loaded and every file failed validation.
+		*/
+		const string schema_file = CFileHelper::get_resources_path() + "CollectionSchema.xsd";
+
+		m_schema_parser_context = xmlSchemaNewParserCtxt( schema_file.c_str() );
 
 		if( m_schema_parser_context )
 		{

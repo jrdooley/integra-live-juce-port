@@ -84,6 +84,12 @@ add_custom_command(TARGET IntegraLive POST_BUILD
 if(INTEGRA_BUILD_TESTS)
     add_test(NAME IntegraLive_self_test COMMAND IntegraLive --self-test)
     set_tests_properties(IntegraLive_self_test PROPERTIES TIMEOUT 300)
+    # The same with libIntegra's start-up guess of its resources folder pointing nowhere,
+    # as in the macOS bundle: files must still validate once the app has set the real
+    # INTEGRA_RESOURCES_PATH (the schema path used to be fixed at start-up).
+    add_test(NAME IntegraLive_self_test_relocated COMMAND IntegraLive --self-test)
+    set_tests_properties(IntegraLive_self_test_relocated PROPERTIES TIMEOUT 300
+        ENVIRONMENT "INTEGRA_RESOURCES_PATH=${CMAKE_CURRENT_BINARY_DIR}/no-such-folder")
     # robustness: every demo block, every module at extreme values, random edits with
     # undo/redo, 20 s of playback (run it for longer, and under INTEGRA_SANITIZE, by hand)
     add_test(NAME IntegraLive_stress_test COMMAND IntegraLive --quiet --stress-test 20)

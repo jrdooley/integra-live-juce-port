@@ -32,7 +32,9 @@ CI is paused to stay within the free Actions minutes: it runs only when started 
 4. `IntegraLive_self_test` — 76 end-to-end checks of the app core, including audio through the
    JUCE callback path with non-power-of-two buffers, block activation by the playhead, undo/redo
    (including undoing deletes), rename, routing, MIDI control, envelopes, scenes, Lua, block moves,
-   save/reopen, and importing all six Flex-saved demo blocks.
+   save/reopen, and importing all six Flex-saved demo blocks. `IntegraLive_self_test_relocated`
+   runs it again with libIntegra's start-up guess of its resources folder pointing nowhere, as in
+   the macOS bundle ([11-macos-testing-fixes.md](11-macos-testing-fixes.md)).
 5. `IntegraLive_stress_test` — every demo block opened, played, saved, reopened and imported;
    every control of all 66 modules at extreme values and odd text; 600 seeded random edits with
    undo/redo round-trip checks; playback with playhead jumps and scene changes. Fails on any

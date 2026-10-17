@@ -1,6 +1,7 @@
 #include "ModuleView.h"
 #include "TrackColourPicker.h"
 #include "IntegraLookAndFeel.h"
+#include "MessageBox.h"
 #include "InlineRename.h"
 #include "Widgets/IntegraWidgets.h"
 
@@ -1045,7 +1046,7 @@ namespace integra
             juce::String module;
             auto r = context.controller.importModule (fc.getResult(), blockPath, position.toFloat() / gridSize, &module);
             if (r.failed())
-                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Import Module", r.getErrorMessage());
+                showMessage (juce::MessageBoxIconType::WarningIcon, "Import Module", r.getErrorMessage());
             else
             {
                 groupSelection = { module };

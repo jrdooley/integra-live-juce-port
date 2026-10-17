@@ -1,5 +1,6 @@
 #include "ModuleManager.h"
 #include "IntegraLookAndFeel.h"
+#include "MessageBox.h"
 #include "PropertiesPanel.h"
 
 namespace integra
@@ -301,7 +302,7 @@ namespace integra
                 }
                 modulesChanged();
                 if (! errors.isEmpty())
-                    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Uninstall", errors.joinIntoString ("\n"));
+                    showMessage (juce::MessageBoxIconType::WarningIcon, "Uninstall", errors.joinIntoString ("\n"));
             };
 
             if (inUse)

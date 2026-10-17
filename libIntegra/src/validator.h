@@ -58,8 +58,6 @@ namespace integra_internal
 			xmlSchemaParserCtxtPtr m_schema_parser_context;
 			xmlSchemaPtr m_schema;
 			xmlSchemaValidCtxtPtr m_validity_context;
-
-			static const char *schema_file;
 	};
 
 
