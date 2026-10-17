@@ -9,7 +9,7 @@ namespace integra
     struct MarkdownLink { juce::Range<int> characters; juce::String url; };
 
     /** Headings, bullets, **bold**, *italic* and [links](url) as an AttributedString
-        (defined in PropertiesPanel.cpp). */
+        (Markdown.cpp; also used by the Module Creator). */
     juce::AttributedString renderMarkdown (const juce::String& markdown, juce::Colour text, juce::Colour accent,
                                            std::vector<MarkdownLink>* links = nullptr);
 

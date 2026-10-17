@@ -116,8 +116,12 @@ namespace integra
         };
         /** Upgrades every module to its best version (UpgradeModules), saving a backup first. */
         UpgradeResult upgradeAll();
-        /** Installs a 3rd party .module file (IModuleManager::install_module). */
+        /** Installs a 3rd party .module file (IModuleManager::install_module), or loads the
+            Module Creator's test module as the in-development module (isModuleInDevelopment). */
         juce::Result installModule (const juce::File& moduleFile);
+        /** The file name the Module Creator gives the module it sends with "Test in Integra Live"
+            (Utilities.moduleInDevelopmentFileName). */
+        static bool isModuleInDevelopment (const juce::File& moduleFile);
         /** Installs .module files and .bundle files (zips of .module files, as
             InstallModules.unpackBundleFile). `installed` gets the names of the modules installed. */
         juce::Result installModules (const juce::Array<juce::File>& files, juce::StringArray& installed);

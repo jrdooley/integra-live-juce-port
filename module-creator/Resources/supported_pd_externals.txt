@@ -1,0 +1,14 @@
+bonk~
+expr
+expr~
+fiddle~
+fexpr~
+lrshift~
+bsaylor/partconv~
+freeverb~/freeverb~
+iemlib/soundfile_info
+fsplay~
+copy
+
+
+

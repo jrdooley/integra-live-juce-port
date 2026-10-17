@@ -1,9 +1,9 @@
-# PAUSED: no automatic runs (push, pull request or schedule). The private repository's
-# free Actions minutes are limited, and macOS minutes count 10x and Windows 2x. Run it
-# by hand: Actions > build > Run workflow (tick "full" for macOS, Windows and the
-# sanitizer job as well as Linux). To resume automatic runs, restore the triggers
-# below from git history (commit daf3263).
+# Automatic runs are limited to save the private repository's free Actions minutes
+# (macOS minutes count 10x and Windows 2x): pull requests run the Linux job only. For
+# macOS, Windows and the sanitizer job run it by hand: Actions > build > Run workflow
+# (tick "full"). The original push and schedule triggers are in git history (commit daf3263).
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       full:
@@ -11,9 +11,14 @@ on:
         type: boolean
         default: true
 
+# a newer push to the same pull request cancels the older run
+concurrency:
+  group: build-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   full-ci:
-    # Decides whether the expensive jobs run (see the note at the top).
+    # Decides whether the expensive jobs run (see the note at the top); false for pull requests.
     runs-on: ubuntu-24.04
     outputs:
       run: ${{ steps.decide.outputs.run }}
@@ -170,14 +175,17 @@ jobs:
 
       - name: Check the app is universal and self-contained
         run: |
-          exe="build/app/IntegraLive_artefacts/Release/Integra Live.app/Contents/MacOS/Integra Live"
-          lipo -info "$exe"
-          lipo "$exe" -verify_arch arm64 x86_64
-          otool -L "$exe"
-          # library lines are indented; the others are per-architecture headers
-          if otool -L "$exe" | grep -E '^\s' | grep -v -E '^\s+(/System/Library/|/usr/lib/)'; then
-            echo "::error::the app links libraries outside the OS"; exit 1
-          fi
+          for exe in "build/app/IntegraLive_artefacts/Release/Integra Live.app/Contents/MacOS/Integra Live" \
+                     "build/module-creator/ModuleCreator_artefacts/Release/Integra Module Creator.app/Contents/MacOS/Integra Module Creator"; do
+            lipo -info "$exe"
+            lipo "$exe" -verify_arch arm64 x86_64
+            otool -L "$exe"
+            # library lines are indented; the others are per-architecture headers
+            if otool -L "$exe" | grep -E '^\s' | grep -v -E '^\s+(/System/Library/|/usr/lib/)'; then
+              echo "::error::$exe links libraries outside the OS"; exit 1
+            fi
+          done
+          test -f "build/module-creator/ModuleCreator_artefacts/Release/Integra Module Creator.app/Contents/Resources/module-creator-resources/ModuleCreator_config.xml"
 
       - name: Import signing certificate
         if: env.MACOS_CERTIFICATE != ''
@@ -194,7 +202,11 @@ jobs:
           rm "$RUNNER_TEMP/certificate.p12"
 
       - name: Sign and package
-        run: packaging/macos/package.sh "build/app/IntegraLive_artefacts/Release/Integra Live.app" IntegraLive-macOS.dmg
+        # one DMG with both apps, to drag into Applications side by side (the Module
+        # Creator finds Integra Live next to it for "Test in Integra Live")
+        run: |
+          packaging/macos/package.sh "build/app/IntegraLive_artefacts/Release/Integra Live.app" IntegraLive-macOS.dmg \
+            "build/module-creator/ModuleCreator_artefacts/Release/Integra Module Creator.app"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -249,6 +261,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path package/IntegraLive | Out-Null
           Copy-Item "$app/Integra Live.exe" package/IntegraLive/
           Copy-Item -Recurse "$app/modules","$app/blocks","$app/resources","$app/viewInfo","$app/assets" package/IntegraLive/
+          # the Module Creator beside Integra Live (each finds the other in the same folder)
+          $creator = "build/module-creator/ModuleCreator_artefacts/RelWithDebInfo"
+          Copy-Item "$creator/Integra Module Creator.exe" package/IntegraLive/
+          Copy-Item -Recurse "$creator/module-creator-resources" package/IntegraLive/
 
       - uses: actions/upload-artifact@v4
         with:
