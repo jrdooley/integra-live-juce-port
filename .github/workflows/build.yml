@@ -1,9 +1,9 @@
-# PAUSED: no automatic runs (push, pull request or schedule). The private repository's
-# free Actions minutes are limited, and macOS minutes count 10x and Windows 2x. Run it
-# by hand: Actions > build > Run workflow (tick "full" for macOS, Windows and the
-# sanitizer job as well as Linux). To resume automatic runs, restore the triggers
-# below from git history (commit daf3263).
+# Automatic runs are limited to save the private repository's free Actions minutes
+# (macOS minutes count 10x and Windows 2x): pull requests run the Linux job only. For
+# macOS, Windows and the sanitizer job run it by hand: Actions > build > Run workflow
+# (tick "full"). The original push and schedule triggers are in git history (commit daf3263).
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       full:
@@ -11,9 +11,14 @@ on:
         type: boolean
         default: true
 
+# a newer push to the same pull request cancels the older run
+concurrency:
+  group: build-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   full-ci:
-    # Decides whether the expensive jobs run (see the note at the top).
+    # Decides whether the expensive jobs run (see the note at the top); false for pull requests.
     runs-on: ubuntu-24.04
     outputs:
       run: ${{ steps.decide.outputs.run }}
