@@ -2119,7 +2119,8 @@ namespace integra
             auto bad = juce::File::createTempFile (".integra");
             {
                 juce::ZipFile::Builder zip;
-                zip.addEntry (new juce::MemoryInputStream (juce::MemoryBlock ("<?xml version=\"1.0\"?><Nonsense/>", 34), true),
+                const juce::String ixd ("<?xml version=\"1.0\"?><Nonsense/>");
+                zip.addEntry (new juce::MemoryInputStream (juce::MemoryBlock (ixd.toRawUTF8(), ixd.getNumBytesAsUTF8()), true),
                               9, "integra_data/nodes.ixd", juce::Time::getCurrentTime());
                 juce::FileOutputStream out (bad);
                 zip.writeToStream (out, nullptr);
