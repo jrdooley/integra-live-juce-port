@@ -267,7 +267,7 @@ namespace modulecreator
         wd.getChildFile ("notes.txt").replaceWithText ("unused");
         t.check (document.pollWorkingDirectory() && document.modified, "new files in the working directory are noticed");
         auto& scan = document.getScan();
-        t.check (d.patchName == "MyGain.pd" && scan.patchNames == juce::StringArray ("MyGain.pd", "helper.pd"), "the patch named after the module becomes the main patch");
+        t.check (d.patchName == "MyGain.pd" && scan.patchNames == juce::StringArray ("helper.pd", "MyGain.pd"), "the patch named after the module becomes the main patch");
         t.check (scan.dependencies.size() == 1 && scan.dependencies[0].label == "helper.pd", "dependency tree (circular reference skipped)");
         t.check (scan.missingObjects.size() == 1 && scan.missingObjects[0].children.size() == 1
                      && scan.missingObjects[0].children[0].label == "nosuchexternal~", "missing objects");

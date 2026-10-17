@@ -20,7 +20,12 @@ namespace modulecreator
             for (const auto& entry : juce::RangedDirectoryIterator (directory, false, "*", juce::File::findFilesAndDirectories))
                 if (! isHiddenFile (entry.getFile()))
                     result.add (entry.getFile());
-            result.sort();
+            // the same order everywhere (juce::File compares case-sensitively on Linux only)
+            std::sort (result.begin(), result.end(), [] (const juce::File& a, const juce::File& b)
+            {
+                const int c = a.getFullPathName().compareIgnoreCase (b.getFullPathName());
+                return c != 0 ? c < 0 : a.getFullPathName() < b.getFullPathName();
+            });
             return result;
         }
 
