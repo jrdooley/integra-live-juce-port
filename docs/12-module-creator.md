@@ -178,8 +178,17 @@ What changed, and why:
   module pass under AddressSanitizer + UndefinedBehaviorSanitizer
   (`-DINTEGRA_SANITIZE=ON`; CI's sanitizer job runs the ctest suite this way).
 
+### Packages
+
+The packages CI makes include the Module Creator next to Integra Live, so each
+finds the other: the Linux tarball (`bin/integra-module-creator`), the macOS
+DMG (both apps, signed the same way, to drag into Applications; the Module
+Creator gets no audio-input entitlement as it needs none) and the Windows
+artifact (`Integra Module Creator.exe` and its `module-creator-resources`
+folder in the Integra Live folder). The macOS job also checks the Module
+Creator is universal and links nothing outside the OS.
+
 Not yet verified: the Module Creator has only been built and run on Linux. It
 uses nothing platform specific beyond JUCE and is built by the same CMake on
-macOS and Windows, but the macOS DMG and Windows zip packaging scripts don't
-include it yet, and *Edit in Pd* / *Test in Integra Live* haven't been tried
-there.
+macOS and Windows, but the macOS and Windows packaging changes haven't been run
+in CI yet, and *Edit in Pd* / *Test in Integra Live* haven't been tried there.
