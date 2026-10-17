@@ -194,10 +194,10 @@ namespace modulecreator
                     }
                     auto* remove = removeButtons.add (new juce::TextButton (juce::String::fromUTF8 ("\xc3\x97")));
                     remove->setTooltip ("Remove");
-                    remove->onClick = [this, r]
+                    remove->onClick = [safe = juce::Component::SafePointer<RowsEditor> (this), r]
                     {
                         // removing deletes this button: notify later
-                        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<RowsEditor> (this), r]
+                        juce::MessageManager::callAsync ([safe, r]
                         {
                             if (safe != nullptr && safe->onRemove)
                                 safe->onRemove ((int) r);
